@@ -8,14 +8,22 @@ module.exports = {
     extend: {
       colors: {
         brand: {
-          50: '#eef2ff',
-          100: '#e0e7ff',
-          500: '#6366f1',
-          600: '#4f46e5'
+          50: '#e6f7f7',
+          100: '#b3e9e8',
+          200: '#80dbd9',
+          300: '#4dcdca',
+          400: '#26bfbb',
+          500: '#1da19e',
+          600: '#178381',
+          700: '#116564',
+          800: '#0b4747',
+          900: '#052929'
         },
         accent: {
-          50: '#fff7ed',
-          500: '#f59e0b'
+          orange: '#FF8C42',
+          yellow: '#FFD166',
+          purple: '#9B6B9E',
+          navy: '#2C5F7C'
         }
       },
       fontFamily: {

@@ -4,27 +4,81 @@ type Props = { onPrimary?: ()=>void; onSecondary?: ()=>void }
 
 export default function Hero({ onPrimary, onSecondary }: Props){
   return (
-    <section id="inicio" className="relative overflow-hidden py-20">
-      <div className="absolute -top-24 -left-24 w-80 h-80 rounded-full bg-indigo-100 opacity-60 blur-3xl pointer-events-none" />
-      <div className="max-w-6xl mx-auto px-6 flex flex-col-reverse lg:flex-row items-center gap-12">
+    <section id="inicio" className="relative overflow-hidden py-20 md:py-28">
+      {/* Elementos decorativos */}
+      <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-brand-100 opacity-50 blur-3xl pointer-events-none" />
+      <div className="absolute top-1/2 -right-32 w-80 h-80 rounded-full bg-brand-200 opacity-30 blur-3xl pointer-events-none" />
+      <div className="max-w-6xl mx-auto px-6 flex flex-col-reverse lg:flex-row items-center gap-12 relative z-10">
         <div className="w-full lg:w-1/2">
-          <div className="inline-flex items-center gap-3 bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-sm font-medium">Nuevo · Lanzamiento</div>
-          <h1 className="mt-6 text-4xl md:text-5xl lg:text-6xl font-display font-extrabold leading-tight text-gray-900">Cátedra de Familia — Aprendizaje en casa, prevención en comunidad</h1>
-          <p className="mt-4 text-lg text-gray-600">Conecta familias y escuelas con herramientas simples para seguimiento, evidencia y acompañamiento.</p>
+          <div className="inline-flex items-center gap-2 bg-teal-600 text-white px-4 py-2 rounded-full text-sm font-semibold shadow-lg">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+            </span>
+            Piloto 2025 · SENA Fábrica de Software
+          </div>
+          <h1 className="mt-6 text-5xl md:text-6xl lg:text-7xl font-display font-extrabold leading-tight text-gray-900">
+            Cátedra de <span className="text-teal-600">Familia</span>
+          </h1>
+          <p className="mt-4 text-xl md:text-2xl text-gray-800 leading-relaxed">
+            Formación familiar, <span className="text-teal-600 font-bold">prevención</span> y acompañamiento en comunidad
+          </p>
+          <p className="mt-3 text-lg text-gray-700">Fortalece vínculos familiares y previene la deserción con tareas semanales, evidencia compartida y calificación en el boletín escolar.</p>
 
-          <div className="mt-8 flex items-center gap-4">
-            <button onClick={onPrimary} className="inline-flex items-center gap-3 bg-gradient-to-r from-indigo-600 to-indigo-500 text-white font-semibold py-3 px-6 rounded-xl shadow-lg transform transition hover:-translate-y-0.5">Comenzar ahora</button>
-            <button onClick={onSecondary} className="inline-flex items-center gap-2 bg-white border border-gray-200 px-5 py-3 rounded-xl">Probar demo</button>
+          <div className="mt-8 flex flex-col sm:flex-row items-center gap-4">
+            <button 
+              onClick={onPrimary} 
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-teal-600 text-white font-bold text-lg py-4 px-8 rounded-xl shadow-lg hover:bg-teal-700 transform transition hover:-translate-y-0.5 hover:shadow-xl"
+            >
+              <span>Comenzar ahora</span>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </button>
+            <button 
+              onClick={onSecondary} 
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-white border-2 border-gray-400 text-gray-900 font-bold px-8 py-4 rounded-xl hover:bg-gray-100 hover:border-brand-500 transition shadow-md"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>Probar demo</span>
+            </button>
           </div>
 
-          <div className="mt-6 flex items-center gap-6 text-sm text-gray-600">
-            <div className="flex items-center gap-2"><strong className="text-indigo-600">3K+</strong><span>tareas en piloto</span></div>
-            <div className="flex items-center gap-2"><strong className="text-indigo-600">+150</strong><span>docentes</span></div>
+          <div className="mt-8 flex flex-wrap items-center gap-6 text-sm">
+            <div className="inline-flex items-center gap-2 bg-teal-50 text-teal-700 px-4 py-2 rounded-full text-xs font-medium border border-teal-200">
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.25 3.762 1 1 0 01-.89.89 8.968 8.968 0 00-5.35 2.524 1 1 0 01-1.4 0zM6 18a1 1 0 001-1v-2.065a8.935 8.935 0 00-2-.712V17a1 1 0 001 1z"/>
+              </svg>
+              Proyecto SENA 2025
+            </div>
+            <div className="inline-flex items-center gap-2 bg-purple-50 text-purple-700 px-4 py-2 rounded-full text-xs font-medium border border-purple-200">
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"/>
+              </svg>
+              Occidente de Popayán
+            </div>
+            <div className="inline-flex items-center gap-2 bg-green-50 text-green-700 px-4 py-2 rounded-full text-xs font-medium border border-green-200">
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              Plataforma segura
+            </div>
           </div>
         </div>
 
         <div className="w-full lg:w-1/2 flex justify-center">
-          <img src="/src/assets/illustration-hero.svg" alt="Ilustración hero" loading="lazy" className="w-full max-w-lg rounded-2xl shadow-2xl" />
+          <div className="relative">
+            <div className="absolute -inset-4 bg-brand-200 rounded-3xl blur-2xl opacity-30" />
+            <img 
+              src="/src/assets/img_familias/Imagen de WhatsApp 2025-11-25 a las 10.29.36_df7a69b4.jpg" 
+              alt="Familias trabajando juntas en actividades educativas" 
+              loading="lazy" 
+              className="relative w-full max-w-lg rounded-2xl shadow-2xl object-cover aspect-square" 
+            />
+          </div>
         </div>
       </div>
     </section>

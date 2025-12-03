@@ -204,7 +204,7 @@ export default function AdminUserForm({ userId, onSuccess }: Props){
 
         <div className="md:col-span-2 flex justify-end gap-3 pt-4 border-t mt-4">
           <button type="button" onClick={()=>{ if(window.confirm('Cancelar cambios?')) window.history.back() }} className="bg-white border text-gray-700 px-4 py-2 rounded-md">Cancelar</button>
-          <button type="submit" disabled={loading} className="bg-indigo-600 text-white px-4 py-2 rounded-md shadow-md inline-flex items-center gap-2">
+          <button type="submit" disabled={loading} className="bg-brand-600 text-white px-4 py-2 rounded-md shadow-md inline-flex items-center gap-2">
             {loading ? <Spinner/> : null}
             <span>{isEdit? 'Guardar cambios' : 'Crear usuario'}</span>
           </button>

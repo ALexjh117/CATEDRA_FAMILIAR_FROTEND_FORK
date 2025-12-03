@@ -35,7 +35,7 @@ export default function ModalRegister({ open, role, onClose }: Props){
           </div>
           <div className="flex justify-end gap-2 mt-4">
             <button type="button" onClick={onClose} className="px-4 py-2 rounded border">Cancelar</button>
-            <button type="submit" className="px-4 py-2 rounded bg-indigo-600 text-white">Crear</button>
+            <button type="submit" className="px-4 py-2 rounded bg-brand-600 text-white">Crear</button>
           </div>
         </form>
       </div>
