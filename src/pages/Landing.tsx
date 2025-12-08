@@ -149,7 +149,7 @@ export default function Landing(){
                     </svg>
                   </div>
                   <h3 className="text-3xl md:text-4xl font-display font-bold mb-4 text-white">¿Listo para comenzar?</h3>
-                  <p className="text-gray-200 mb-8 text-lg max-w-xl mx-auto font-medium">Explora la plataforma con datos de demostración. Navega como padre, docente o administrador sin necesidad de registro.</p>
+                  <p className="text-gray-200 mb-8 text-lg max-w-xl mx-auto font-medium">Explora la plataforma con datos de demostración. Navega como docente, coordinador o administrador.</p>
                   <DemoCTA onDone={(s)=>setToast(`Demo creada: ${s.students} estudiantes`)} />
                 </div>
               </div>

@@ -19,9 +19,11 @@ export default function FloatingRoleSwitch(){
         {open && (
           <div className="mb-2 bg-white p-3 rounded-lg shadow-lg w-44">
             <div className="flex flex-col gap-2">
-              <button onClick={()=>go('parent')} className="px-3 py-2 rounded text-sm text-left hover:bg-gray-50">Padre / Acudiente</button>
-              <button onClick={()=>go('teacher')} className="px-3 py-2 rounded text-sm text-left hover:bg-gray-50">Docente</button>
-              <button onClick={()=>go('admin')} className="px-3 py-2 rounded text-sm text-left hover:bg-gray-50">Administrador</button>
+              <button onClick={()=>go('docente')} className="px-3 py-2 rounded text-sm text-left hover:bg-gray-50">👨‍🏫 Docente</button>
+              <button onClick={()=>go('orientador')} className="px-3 py-2 rounded text-sm text-left hover:bg-gray-50">🎯 Orientador</button>
+              <button onClick={()=>go('coordinador')} className="px-3 py-2 rounded text-sm text-left hover:bg-gray-50">📋 Coordinador</button>
+              <button onClick={()=>go('rector')} className="px-3 py-2 rounded text-sm text-left hover:bg-gray-50">🏛️ Rector</button>
+              <button onClick={()=>go('admin')} className="px-3 py-2 rounded text-sm text-left hover:bg-gray-50">⚙️ Administrador</button>
               <button onClick={()=>setOpen(false)} className="mt-2 text-xs text-gray-500">Cerrar</button>
             </div>
           </div>
