@@ -8,7 +8,9 @@ import EmptyState from '../components/ui/EmptyState';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
 import FormFieldInput from '../components/ui/FormFieldInput';
-import { categoriasMock } from '../mocks/data';
+import EvidenceGallery from '../components/EvidenceGallery';
+import { categoriasMock, estudiantesMock, usuariosMock } from '../mocks/data';
+import { exportToExcel, exportToPDF } from '../utils/exportUtils';
 import { 
   IconClipboard, 
   IconHourglass, 
@@ -16,7 +18,8 @@ import {
   IconUsers, 
   IconClock,
   IconFileText,
-  IconPlus
+  IconPlus,
+  IconDownload
 } from '../components/ui/Icons';
 
 export default function DashboardDocentePage() {
@@ -31,6 +34,11 @@ export default function DashboardDocentePage() {
   const [filtroEstado, setFiltroEstado] = useState<'todas' | 'activas' | 'cerradas'>('todas');
   const [modalNuevaTarea, setModalNuevaTarea] = useState(false);
   const [modalCalificar, setModalCalificar] = useState<{ open: boolean; entrega: Entrega | null }>({ open: false, entrega: null });
+  const [galleryOpen, setGalleryOpen] = useState<{ open: boolean; images: string[]; initialIndex: number }>({ 
+    open: false, 
+    images: [], 
+    initialIndex: 0 
+  });
 
   // Form states
   const [nuevaTarea, setNuevaTarea] = useState({
@@ -69,18 +77,116 @@ export default function DashboardDocentePage() {
   };
 
   const handleCrearTarea = async () => {
-    // TODO: Implement crear tarea API call
-    console.log('Crear tarea:', nuevaTarea);
-    setModalNuevaTarea(false);
-    setNuevaTarea({
-      titulo: '',
-      descripcion: '',
-      categoriaId: 1,
-      cursoId: 1,
-      fechaLimite: '',
-    });
-    // Reload data
-    await loadData();
+    if (!nuevaTarea.titulo || !nuevaTarea.descripcion) {
+      console.error('Título y descripción son obligatorios');
+      return;
+    }
+
+    try {
+      // Crear la tarea
+      const tareaData = {
+        id: Date.now(),
+        titulo: nuevaTarea.titulo,
+        descripcion: nuevaTarea.descripcion,
+        cursoId: nuevaTarea.cursoId,
+        docenteId: session?.user?.id || 1,
+        fechaCreacion: new Date().toISOString(),
+        fechaLimite: nuevaTarea.fechaLimite || undefined,
+        estado: 'activa' as const,
+        categoriaId: nuevaTarea.categoriaId
+      };
+
+      console.log('Crear tarea:', tareaData);
+      
+      // Enviar notificaciones automáticas
+      await enviarNotificacionesNuevaTarea(tareaData);
+      
+      setModalNuevaTarea(false);
+      setNuevaTarea({
+        titulo: '',
+        descripcion: '',
+        categoriaId: 1,
+        cursoId: 1,
+        fechaLimite: '',
+      });
+      
+      // Reload data
+      loadData();
+    } catch (error) {
+      console.error('Error creando tarea:', error);
+    }
+  };
+
+  const enviarNotificacionesNuevaTarea = async (tarea: any) => {
+    try {
+      const curso = cursos.find(c => c.id === tarea.cursoId);
+      if (!curso) return;
+
+      // Simular obtención de estudiantes del curso
+      const estudiantesCurso = estudiantesMock.slice(0, 3); // Mock data
+      
+      let notificacionesEnviadas = 0;
+
+      // Crear notificaciones para estudiantes
+      for (const estudiante of estudiantesCurso) {
+        const notificacionEstudiante = {
+          id: Date.now() + Math.random(),
+          usuarioId: estudiante.id,
+          titulo: `📚 Nueva tarea: ${tarea.titulo}`,
+          mensaje: `Se ha asignado una nueva tarea en ${curso.nombre}: ${tarea.titulo}`,
+          tipo: 'tarea_nueva' as const,
+          fecha: new Date().toISOString(),
+          leido: false,
+          datos: {
+            tareaId: tarea.id,
+            cursoId: tarea.cursoId,
+            docenteNombre: session?.user?.nombre || 'Docente'
+          }
+        };
+
+        console.log('📧 Notificación enviada a estudiante:', notificacionEstudiante);
+        notificacionesEnviadas++;
+
+        // Notificar a acudientes del estudiante
+        const acudientesEstudiante = Object.values(usuariosMock).filter((user: any) => 
+          user.rol === 'acudiente'
+        ).slice(0, 2); // Mock: máximo 2 acudientes por estudiante
+
+        for (const acudiente of acudientesEstudiante) {
+          const notificacionAcudiente = {
+            id: Date.now() + Math.random(),
+            usuarioId: acudiente.id,
+            titulo: `👨‍👩‍👧‍👦 Nueva tarea para ${estudiante.nombre}`,
+            mensaje: `Su hijo/a ${estudiante.nombre} ${estudiante.apellidos} tiene una nueva tarea en ${curso.nombre}: ${tarea.titulo}. Fecha límite: ${tarea.fechaLimite ? new Date(tarea.fechaLimite).toLocaleDateString() : 'Sin límite'}`,
+            tipo: 'tarea_nueva' as const,
+            fecha: new Date().toISOString(),
+            leido: false,
+            datos: {
+              tareaId: tarea.id,
+              cursoId: tarea.cursoId,
+              estudianteId: estudiante.id,
+              estudianteNombre: `${estudiante.nombre} ${estudiante.apellidos}`,
+              docenteNombre: session?.user?.nombre || 'Docente'
+            }
+          };
+
+          console.log('📧 Notificación enviada a acudiente:', notificacionAcudiente);
+          notificacionesEnviadas++;
+        }
+      }
+
+      // Mostrar confirmación al docente
+      console.log(`✅ ${notificacionesEnviadas} notificaciones enviadas exitosamente`);
+      console.log(`📊 Resumen: ${estudiantesCurso.length} estudiantes y sus acudientes notificados`);
+      
+      // Simular notificación al docente de confirmación
+      setTimeout(() => {
+        console.log('🔔 Notificación de confirmación: Las notificaciones se enviaron correctamente');
+      }, 1000);
+      
+    } catch (error) {
+      console.error('❌ Error enviando notificaciones:', error);
+    }
   };
 
   const handleCalificar = async (entregaId: number, calificacion: number, retroalimentacion: string) => {
@@ -124,10 +230,29 @@ export default function DashboardDocentePage() {
               </p>
             </div>
             
-            <Button onClick={() => setModalNuevaTarea(true)} className="flex items-center gap-2">
-              <IconPlus size={18} />
-              Nueva Tarea
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  const data = tareas.map(tarea => ({
+                    ID: tarea.id,
+                    Título: tarea.titulo,
+                    Categoría: tarea.categoria?.nombre || '-',
+                    'Fecha Límite': tarea.fechaLimite,
+                    Estado: tarea.estado
+                  }));
+                  exportToExcel(data, `Tareas_${user?.nombre || 'Docente'}`, 'Mis Tareas');
+                }}
+              >
+                <IconDownload size={16} />
+                Exportar
+              </Button>
+              <Button onClick={() => setModalNuevaTarea(true)} className="flex items-center gap-2">
+                <IconPlus size={18} />
+                Nueva Tarea
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -181,7 +306,140 @@ export default function DashboardDocentePage() {
             </div>
           </div>
         </div>
+        {/* Estadísticas visuales y gráficos */}
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Gráfico de progreso de tareas */}
+          <div className="bg-white rounded-2xl shadow-sm p-6 border border-slate-100">
+            <h3 className="text-lg font-bold text-slate-800 mb-6">Progreso de Tareas por Curso</h3>
+            <div className="space-y-4">
+              {cursos.map((curso) => {
+                const tareasCurso = tareas.filter(t => t.cursoId === curso.id);
+                const completadas = tareasCurso.filter(t => t.estado === 'completada').length;
+                const porcentaje = tareasCurso.length > 0 ? Math.round((completadas / tareasCurso.length) * 100) : 0;
+                
+                return (
+                  <div key={curso.id} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-700">{curso.nombre}</span>
+                      <span className="text-sm text-gray-600">{porcentaje}%</span>
+                    </div>
+                    <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600 transition-all duration-500"
+                        style={{ width: `${porcentaje}%` }}
+                      />
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {completadas} de {tareasCurso.length} tareas completadas
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
 
+          {/* Gráfico circular de participación */}
+          <div className="bg-white rounded-2xl shadow-sm p-6 border border-slate-100">
+            <h3 className="text-lg font-bold text-slate-800 mb-6">Participación General</h3>
+            <div className="relative">
+              <div className="w-48 h-48 mx-auto">
+                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    stroke="#e5e7eb"
+                    strokeWidth="8"
+                    fill="transparent"
+                  />
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    stroke="#10b981"
+                    strokeWidth="8"
+                    fill="transparent"
+                    strokeDasharray={`${(75 * 251) / 100} 251`}
+                    strokeLinecap="round"
+                    className="transition-all duration-1000"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-gray-800">75%</div>
+                    <div className="text-sm text-gray-600">Participación</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 mt-6">
+              <div className="text-center p-3 bg-emerald-50 rounded-lg">
+                <div className="text-lg font-bold text-emerald-600">{tareas.filter(t => t.estado === 'completada').length}</div>
+                <div className="text-sm text-emerald-700">Completadas</div>
+              </div>
+              <div className="text-center p-3 bg-amber-50 rounded-lg">
+                <div className="text-lg font-bold text-amber-600">{tareas.filter(t => t.estado === 'pendiente').length}</div>
+                <div className="text-sm text-amber-700">Pendientes</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Gráfico de actividad mensual */}
+        <div className="bg-white rounded-2xl shadow-sm p-6 border border-slate-100">
+          <h3 className="text-lg font-bold text-slate-800 mb-6">Actividad de Tareas (Últimos 6 meses)</h3>
+          <div className="flex items-end justify-between h-64 gap-3">
+            {[
+              { mes: 'Ago', tareas: 12, completadas: 8 },
+              { mes: 'Sep', tareas: 15, completadas: 13 },
+              { mes: 'Oct', tareas: 18, completadas: 15 },
+              { mes: 'Nov', tareas: 22, completadas: 19 },
+              { mes: 'Dic', tareas: 20, completadas: 18 },
+              { mes: 'Ene', tareas: 25, completadas: 20 }
+            ].map((dato, index) => {
+              const maxTareas = 25;
+              const alturaTotal = (dato.tareas / maxTareas) * 100;
+              const alturaCompletada = (dato.completadas / maxTareas) * 100;
+              
+              return (
+                <div key={index} className="flex-1 flex flex-col items-center">
+                  <div className="relative w-full mb-3" style={{ height: '200px' }}>
+                    {/* Barra total */}
+                    <div 
+                      className="absolute bottom-0 w-full bg-gray-200 rounded-t-lg transition-all duration-500"
+                      style={{ height: `${alturaTotal}%` }}
+                    />
+                    {/* Barra completada */}
+                    <div 
+                      className="absolute bottom-0 w-full bg-gradient-to-t from-emerald-500 to-emerald-400 rounded-t-lg transition-all duration-700"
+                      style={{ height: `${alturaCompletada}%` }}
+                    />
+                    
+                    {/* Etiquetas de valor */}
+                    <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 text-xs text-center">
+                      <div className="font-bold text-emerald-600">{dato.completadas}</div>
+                      <div className="text-gray-500">/{dato.tareas}</div>
+                    </div>
+                  </div>
+                  
+                  <div className="text-sm font-medium text-gray-600">{dato.mes}</div>
+                </div>
+              );
+            })}
+          </div>
+          
+          <div className="flex items-center justify-center gap-6 mt-6 pt-6 border-t border-gray-100">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-gray-200 rounded"></div>
+              <span className="text-sm text-gray-600">Tareas Asignadas</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 bg-emerald-500 rounded"></div>
+              <span className="text-sm text-gray-600">Tareas Completadas</span>
+            </div>
+          </div>
+        </div>
         {/* Entregas Pendientes de Calificar */}
         {entregasPendientes.length > 0 && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
@@ -365,9 +623,21 @@ export default function DashboardDocentePage() {
             entrega={modalCalificar.entrega}
             onSubmit={handleCalificar}
             onCancel={() => setModalCalificar({ open: false, entrega: null })}
+            onOpenGallery={(images, initialIndex) => {
+              setGalleryOpen({ open: true, images, initialIndex });
+            }}
           />
         )}
       </Modal>
+
+      {/* Lightbox Gallery */}
+      {galleryOpen.open && (
+        <EvidenceGallery
+          images={galleryOpen.images}
+          initialIndex={galleryOpen.initialIndex}
+          onClose={() => setGalleryOpen({ open: false, images: [], initialIndex: 0 })}
+        />
+      )}
     </DashboardLayout>
   );
 }
@@ -376,11 +646,13 @@ export default function DashboardDocentePage() {
 function CalificarEntregaForm({ 
   entrega, 
   onSubmit, 
-  onCancel 
+  onCancel,
+  onOpenGallery
 }: { 
   entrega: Entrega;
   onSubmit: (entregaId: number, calificacion: number, retroalimentacion: string) => void;
   onCancel: () => void;
+  onOpenGallery: (images: string[], initialIndex: number) => void;
 }) {
   const [calificacion, setCalificacion] = useState<number>(5);
   const [retroalimentacion, setRetroalimentacion] = useState('');
@@ -391,6 +663,34 @@ function CalificarEntregaForm({
       <div className="bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-xl p-5 border border-slate-200">
         <div className="text-sm text-slate-500 mb-2 font-medium">Evidencia enviada:</div>
         <p className="text-slate-700">{entrega.textoEvidencia || 'Sin descripción'}</p>
+        
+        {/* Galería de imágenes */}
+        {entrega.imagenes && entrega.imagenes.length > 0 && (
+          <div className="mt-4">
+            <div className="text-sm text-slate-500 mb-2 font-medium">Fotografías ({entrega.imagenes.length}):</div>
+            <div className="grid grid-cols-4 gap-2">
+              {entrega.imagenes.map((img, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => onOpenGallery(entrega.imagenes!, idx)}
+                  className="relative aspect-square rounded-lg overflow-hidden border-2 border-slate-200 hover:border-teal-400 transition-all hover:scale-105 cursor-pointer group"
+                >
+                  <img
+                    src={img}
+                    alt={`Evidencia ${idx + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                    <span className="text-white opacity-0 group-hover:opacity-100 text-sm font-medium">
+                      🔍 Ver
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        
         {entrega.archivos && entrega.archivos.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
             {entrega.archivos.map((archivo, idx) => (

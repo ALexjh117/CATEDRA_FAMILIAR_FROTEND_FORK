@@ -1,8 +1,8 @@
 import React, { useEffect } from 'react'
 
-type Props = { message: string; onClose?: ()=>void }
+type Props = { message: string; type?: string; onClose?: ()=>void }
 
-export default function Toast({ message, onClose }: Props){
+export default function Toast({ message, type, onClose }: Props){
   useEffect(()=>{
     const t = setTimeout(()=> onClose && onClose(), 3000)
     return ()=>clearTimeout(t)

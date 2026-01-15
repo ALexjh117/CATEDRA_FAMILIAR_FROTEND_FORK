@@ -3,6 +3,8 @@ import { useNavigate, Link } from 'react-router-dom';
 import { login } from '../api/endpoints';
 import FormFieldInput from '../components/ui/FormFieldInput';
 import Button from '../components/ui/Button';
+import ForgotPasswordModal from '../components/ForgotPasswordModal';
+import ForceChangePasswordModal from '../components/ForceChangePasswordModal';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -13,6 +15,9 @@ export default function LoginPage() {
     password: '',
     recordar: false,
   });
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [showForceChange, setShowForceChange] = useState(false);
+  const [userToChange, setUserToChange] = useState<{id: number; nombre: string} | null>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const target = e.target;
@@ -35,6 +40,17 @@ export default function LoginPage() {
       const result = await login(formData.correo, formData.password);
       
       if (result.success && result.user) {
+        // Verificar si debe cambiar contraseña
+        if (result.user.debe_cambiar_contrasena) {
+          setUserToChange({
+            id: result.user.id,
+            nombre: result.user.nombre
+          });
+          setShowForceChange(true);
+          setLoading(false);
+          return;
+        }
+        
         // Redirigir según el rol
         const rol = result.user.rol;
         switch (rol) {
@@ -122,7 +138,14 @@ export default function LoginPage() {
                 />
                 <span className="text-sm text-gray-600">Recordarme</span>
               </label>
-              <a href="#" className="text-sm text-teal-600 hover:text-teal-700 font-medium">
+              <a 
+                href="#" 
+                onClick={(e) => {
+                  e.preventDefault();
+                  setShowForgotPassword(true);
+                }}
+                className="text-sm text-teal-600 hover:text-teal-700 font-medium"
+              >
                 ¿Olvidaste tu contraseña?
               </a>
             </div>
@@ -205,6 +228,26 @@ export default function LoginPage() {
           </Link>
         </div>
       </div>
+      
+      {/* Modal Recuperar Contraseña */}
+      <ForgotPasswordModal
+        isOpen={showForgotPassword}
+        onClose={() => setShowForgotPassword(false)}
+      />
+      
+      {/* Modal Cambio Forzado de Contraseña */}
+      {userToChange && (
+        <ForceChangePasswordModal
+          isOpen={showForceChange}
+          userId={userToChange.id}
+          userName={userToChange.nombre}
+          onSuccess={() => {
+            setShowForceChange(false);
+            // Recargar la sesión actualizada
+            window.location.href = '/dashboard';
+          }}
+        />
+      )}
     </div>
   );
 }

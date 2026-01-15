@@ -134,6 +134,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       coordinador: 'Coordinador',
       rector: 'Rector',
       admin: 'Administrador',
+      admin_sistema: 'Admin Sistema',
     };
     return labels[rol] || rol;
   };
@@ -173,7 +174,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               <img src="/src/assets/logo.jpg" alt="Logo" className="w-10 h-10 rounded-xl object-cover shadow-sm" />
               <div className="hidden sm:block">
                 <div className="font-display font-bold text-slate-800">Cátedra de Familia</div>
-                <div className="text-xs text-slate-500">{user?.institucion || 'Parchando Juntos'}</div>
+                <div className="text-xs text-slate-500">{user?.institucion || user?.institucionId || 'Parchando Juntos'}</div>
               </div>
             </Link>
           </div>

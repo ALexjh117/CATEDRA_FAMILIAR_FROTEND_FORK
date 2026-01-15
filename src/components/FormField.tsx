@@ -2,13 +2,18 @@ import React from 'react'
 
 type Props = {
   id: string
+  name?: string
   label: string
   helper?: string
   error?: string | null
   children: React.ReactNode
+  value?: string
+  onChange?: (value: any) => void
+  required?: boolean
+  placeholder?: string
 }
 
-export default function FormField({ id, label, helper, error, children }: Props){
+export default function FormField({ id, name, label, helper, error, children, value, onChange, required, placeholder }: Props){
   return (
     <div className="flex flex-col">
       <label htmlFor={id} className="text-sm font-medium text-gray-700">{label}</label>

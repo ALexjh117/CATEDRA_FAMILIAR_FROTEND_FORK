@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ToastProvider } from './components/ui/ToastGlobal'
+import SessionTimeoutProvider from './components/SessionTimeoutProvider'
 import { getSession } from './api/endpoints'
 
 // Pages - Solo roles web (Admin, Rector, Coordinador, Orientador, Docente)
@@ -8,6 +9,7 @@ import LoginPage from './pages/LoginPage'
 import DashboardDocentePage from './pages/DashboardDocentePage'
 import DashboardSupervisorPage from './pages/DashboardSupervisorPage'
 import DashboardAdminPage from './pages/DashboardAdminPage'
+import DashboardCoordinadorPage from './pages/DashboardCoordinadorPage'
 
 // Legacy
 import DashboardPage from './pages/DashboardPage'
@@ -107,7 +109,8 @@ export default function App(){
   return (
     <ToastProvider>
       <BrowserRouter>
-        <Routes>
+        <SessionTimeoutProvider>
+          <Routes>
           {/* Public Routes */}
           <Route path="/" element={<Landing/>} />
           <Route path="/login" element={<LoginPage/>} />
@@ -131,7 +134,7 @@ export default function App(){
           
           <Route path="/dashboard/coordinador" element={
             <ProtectedRoute allowedRoles={['coordinador', 'rector', 'admin']}>
-              <DashboardSupervisorPage />
+              <DashboardCoordinadorPage />
             </ProtectedRoute>
           } />
           
@@ -153,6 +156,7 @@ export default function App(){
           {/* 404 fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </SessionTimeoutProvider>
         <FloatingRoleSwitch />
       </BrowserRouter>
     </ToastProvider>
