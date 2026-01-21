@@ -8,7 +8,12 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cy:open": "cypress open",
+    "cy:run": "cypress run",
+    "cy:component": "cypress open --component",
+    "cy:component:run": "cypress run --component",
+    "test:component": "cypress run --component"
   },
   "dependencies": {
     "jspdf": "^4.0.0",
@@ -19,12 +24,14 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@cypress/vite-dev-server": "^7.1.0",
     "@eslint/js": "^9.39.1",
     "@types/node": "^24.10.8",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.4.22",
+    "cypress": "^15.9.0",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",

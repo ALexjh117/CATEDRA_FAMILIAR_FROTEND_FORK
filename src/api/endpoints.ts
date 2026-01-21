@@ -63,8 +63,10 @@ export const login = async (correo: string, _password: string): Promise<{ succes
   
   // Mock: determinar rol basado en correo
   let user: Usuario | undefined;
-  
-  if (correo.includes('@admin')) {
+  const correoLower = correo.toLowerCase();
+
+  // Tratar dominios institucionales de Secretaría como admin
+  if (correoLower.endsWith('@educacionpopayan.gov.co') || correoLower.endsWith('@secretariaed.gov.co') || correo.includes('@admin')) {
     user = usuariosMock.admin;
   } else if (correo.includes('@docente')) {
     // Verificar tipo de docente

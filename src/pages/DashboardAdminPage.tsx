@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { 
   getSession, 
   getInstituciones, 
@@ -49,6 +50,7 @@ import {
   IconPlus,
   IconDownload
 } from '../components/ui/Icons';
+import { isBypassValidationsEnabled } from '../utils/dev';
 
 export default function DashboardAdminPage() {
   getSession(); // Verificar sesión activa
@@ -105,6 +107,21 @@ export default function DashboardAdminPage() {
   
   // Estados de error
   const [error, setError] = useState<string | null>(null);
+  const bypassValidations = isBypassValidationsEnabled();
+  const location = useLocation();
+
+  // Leer query param ?tab= para seleccionar pestaña desde la URL
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(location.search);
+      const tab = params.get('tab');
+      if (tab === 'instituciones' || tab === 'usuarios' || tab === 'categorias' || tab === 'reportes' || tab === 'configuracion') {
+        setActiveTab(tab as any);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [location.search]);
 
   useEffect(() => {
     loadData();
@@ -1682,10 +1699,27 @@ export default function DashboardAdminPage() {
                 value={formUsuario.institucionId}
                 onChange={(e) => setFormUsuario({ ...formUsuario, institucionId: parseInt(e.target.value) })}
               >
-                {instituciones.map(inst => (
+                {/* HU-03 Criterio #2: Filtrar instituciones sin rector activo cuando el rol es rector */}
+                {(bypassValidations ? instituciones : (formUsuario.rol === 'rector' 
+                  ? instituciones.filter(inst => {
+                      // Buscar si hay un rector activo para esta institución
+                      const tieneRectorActivo = usuarios.some(
+                        u => u.rol === 'rector' && u.institucionId === inst.id && u.activo
+                      );
+                      // Mostrar si no tiene rector, o si estamos editando el mismo rector
+                      return !tieneRectorActivo || (editingUsuario?.id && editingUsuario?.institucionId === inst.id);
+                    })
+                  : instituciones
+                )).map(inst => (
                   <option key={inst.id} value={inst.id}>{inst.nombre}</option>
                 ))}
               </select>
+              {/* Mensaje informativo cuando el rol es rector */}
+              {formUsuario.rol === 'rector' && (
+                <p className="text-xs text-amber-600 mt-1">
+                  ⚠️ Solo se muestran instituciones sin rector activo asignado
+                </p>
+              )}
             </div>
           </div>
           

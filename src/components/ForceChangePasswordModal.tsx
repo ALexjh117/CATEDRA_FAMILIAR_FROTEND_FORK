@@ -1,9 +1,39 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Modal from './ui/Modal';
 import Button from './ui/Button';
 import FormFieldInput from './ui/FormFieldInput';
 import { IconLock, IconAlertTriangle } from './ui/Icons';
 import { cambiarContrasena } from '../api/endpoints';
+import { isBypassValidationsEnabled } from '../utils/dev';
+
+// Requisitos de contraseña según HU-06
+const PASSWORD_REQUIREMENTS = {
+  minLength: 8,
+  requireUppercase: true,
+  requireNumber: true,
+  requireSpecial: true,
+  specialChars: '!@#$%^&*()_+-=[]{}|;:,.<>?'
+};
+
+// Componente de check individual
+const RequirementCheck = ({ met, label }: { met: boolean; label: string }) => (
+  <div className={`flex items-center gap-2 text-sm ${met ? 'text-green-600' : 'text-gray-500'}`}>
+    <div className={`w-5 h-5 rounded-full flex items-center justify-center ${
+      met ? 'bg-green-100' : 'bg-gray-100'
+    }`}>
+      {met ? (
+        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+        </svg>
+      ) : (
+        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clipRule="evenodd" />
+        </svg>
+      )}
+    </div>
+    <span>{label}</span>
+  </div>
+);
 
 export default function ForceChangePasswordModal({
   isOpen,
@@ -22,17 +52,33 @@ export default function ForceChangePasswordModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Validación de requisitos en tiempo real
+  const passwordChecks = useMemo(() => {
+    return {
+      hasMinLength: newPassword.length >= PASSWORD_REQUIREMENTS.minLength,
+      hasUppercase: /[A-Z]/.test(newPassword),
+      hasNumber: /[0-9]/.test(newPassword),
+      hasSpecial: /[!@#$%^&*()_+\-=\[\]{}|;:,.<>?]/.test(newPassword),
+    };
+  }, [newPassword]);
+
+  const allRequirementsMet = Object.values(passwordChecks).every(Boolean);
+  const passwordsMatch = newPassword === confirmPassword && confirmPassword.length > 0;
+  const bypassValidations = isBypassValidationsEnabled();
+  const effectiveAllRequirements = bypassValidations ? true : allRequirementsMet;
+  const effectivePasswordsMatch = bypassValidations ? true : passwordsMatch;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    // Validaciones
-    if (newPassword.length < 6) {
-      setError('La nueva contraseña debe tener al menos 6 caracteres');
+    // Validaciones según HU-06 (se pueden bypassear en modo dev)
+    if (!bypassValidations && !allRequirementsMet) {
+      setError('La contraseña no cumple con todos los requisitos de seguridad');
       return;
     }
 
-    if (newPassword !== confirmPassword) {
+    if (!bypassValidations && !passwordsMatch) {
       setError('Las contraseñas no coinciden');
       return;
     }
@@ -99,11 +145,34 @@ export default function ForceChangePasswordModal({
           name="newPassword"
           label="Nueva Contraseña"
           type="password"
-          placeholder="Mínimo 6 caracteres"
+          placeholder="Mínimo 8 caracteres"
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
           required
         />
+
+        {/* Checklist de requisitos - HU-06 Criterio #3 */}
+        {newPassword.length > 0 && (
+          <div className="p-4 bg-slate-50 rounded-xl space-y-2">
+            <p className="text-xs font-semibold text-slate-600 mb-3">Requisitos de contraseña:</p>
+            <RequirementCheck 
+              met={passwordChecks.hasMinLength} 
+              label="Mínimo 8 caracteres" 
+            />
+            <RequirementCheck 
+              met={passwordChecks.hasUppercase} 
+              label="Al menos 1 letra mayúscula" 
+            />
+            <RequirementCheck 
+              met={passwordChecks.hasNumber} 
+              label="Al menos 1 número" 
+            />
+            <RequirementCheck 
+              met={passwordChecks.hasSpecial} 
+              label="Al menos 1 carácter especial (@#$%&*)" 
+            />
+          </div>
+        )}
 
         <FormFieldInput
           name="confirmPassword"
@@ -115,29 +184,57 @@ export default function ForceChangePasswordModal({
           required
         />
 
-        {/* Indicador de fortaleza */}
+        {/* Indicador de coincidencia */}
+        {confirmPassword.length > 0 && (
+          <div className={`flex items-center gap-2 text-sm ${
+            passwordsMatch ? 'text-green-600' : 'text-red-600'
+          }`}>
+            {passwordsMatch ? (
+              <>
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                Las contraseñas coinciden
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+                Las contraseñas no coinciden
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Barra de fortaleza */}
         {newPassword && (
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs">
               <span className="text-slate-600">Fortaleza:</span>
               <span className={`font-semibold ${
-                newPassword.length < 6 ? 'text-red-600' :
-                newPassword.length < 8 ? 'text-amber-600' :
+                !allRequirementsMet ? 'text-red-600' :
+                newPassword.length < 12 ? 'text-amber-600' :
                 'text-green-600'
               }`}>
-                {newPassword.length < 6 ? 'Débil' :
-                 newPassword.length < 8 ? 'Media' :
-                 'Fuerte'}
+                {!allRequirementsMet ? 'No cumple requisitos' :
+                 newPassword.length < 12 ? 'Aceptable' :
+                 'Muy fuerte'}
               </span>
             </div>
-            <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
-              <div 
-                className={`h-full transition-all ${
-                  newPassword.length < 6 ? 'bg-red-500 w-1/3' :
-                  newPassword.length < 8 ? 'bg-amber-500 w-2/3' :
-                  'bg-green-500 w-full'
-                }`}
-              />
+            <div className="h-2 bg-slate-200 rounded-full overflow-hidden flex gap-0.5">
+              <div className={`h-full transition-all ${
+                passwordChecks.hasMinLength ? 'bg-green-500 w-1/4' : 'bg-gray-300 w-1/4'
+              }`} />
+              <div className={`h-full transition-all ${
+                passwordChecks.hasUppercase ? 'bg-green-500 w-1/4' : 'bg-gray-300 w-1/4'
+              }`} />
+              <div className={`h-full transition-all ${
+                passwordChecks.hasNumber ? 'bg-green-500 w-1/4' : 'bg-gray-300 w-1/4'
+              }`} />
+              <div className={`h-full transition-all ${
+                passwordChecks.hasSpecial ? 'bg-green-500 w-1/4' : 'bg-gray-300 w-1/4'
+              }`} />
             </div>
           </div>
         )}
@@ -154,7 +251,7 @@ export default function ForceChangePasswordModal({
         <div className="pt-4">
           <Button
             type="submit"
-            disabled={loading || !currentPassword || !newPassword || !confirmPassword}
+            disabled={loading || !currentPassword || !effectiveAllRequirements || !effectivePasswordsMatch}
             className="w-full"
           >
             {loading ? 'Cambiando contraseña...' : 'Cambiar Contraseña'}

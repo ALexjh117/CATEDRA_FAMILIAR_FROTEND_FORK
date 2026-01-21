@@ -117,9 +117,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         return [
           ...commonItems,
           { path: '/dashboard/admin', label: 'Mi Panel', icon: 'dashboard' },
-          { path: '/instituciones', label: 'Instituciones', icon: 'institutions' },
-          { path: '/usuarios', label: 'Usuarios', icon: 'users' },
-          { path: '/configuracion', label: 'Sistema', icon: 'settings' },
+          { path: '/dashboard/admin/manage?tab=instituciones', label: 'Instituciones', icon: 'institutions' },
+          { path: '/dashboard/admin/manage?tab=usuarios', label: 'Usuarios', icon: 'users' },
+          { path: '/dashboard/admin/manage?tab=configuracion', label: 'Sistema', icon: 'settings' },
         ];
       default:
         return commonItems;
@@ -229,18 +229,20 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           <nav className="p-3 space-y-1">
             {navItems.map((item) => {
               const Icon = iconMap[item.icon] || IconHome;
+              const full = location.pathname + (location.search || '');
+              const isActive = full === item.path || location.pathname === item.path;
               return (
                 <Link
                   key={item.path}
                   to={item.path}
                   onClick={() => setSidebarOpen(false)}
                   className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                    location.pathname === item.path
+                    isActive
                       ? 'bg-gradient-to-r from-teal-500 to-teal-600 text-white shadow-md shadow-teal-200/50'
                       : 'text-slate-600 hover:bg-slate-100 hover:text-slate-800'
                   }`}
                 >
-                  <Icon size={20} className={location.pathname === item.path ? 'text-white' : 'text-slate-400'} />
+                  <Icon size={20} className={isActive ? 'text-white' : 'text-slate-400'} />
                   <span className="font-medium">{item.label}</span>
                 </Link>
               );

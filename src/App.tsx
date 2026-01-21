@@ -9,11 +9,13 @@ import LoginPage from './pages/LoginPage'
 import DashboardDocentePage from './pages/DashboardDocentePage'
 import DashboardSupervisorPage from './pages/DashboardSupervisorPage'
 import DashboardAdminPage from './pages/DashboardAdminPage'
+import DashboardAdminHome from './pages/DashboardAdminHome'
 import DashboardCoordinadorPage from './pages/DashboardCoordinadorPage'
 
 // Legacy
 import DashboardPage from './pages/DashboardPage'
 import FloatingRoleSwitch from './components/FloatingRoleSwitch'
+import PagePlaceholder from './components/PagePlaceholder'
 
 // Protected Route wrapper
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactElement, allowedRoles?: string[] }) {
@@ -146,9 +148,27 @@ export default function App(){
           
           <Route path="/dashboard/admin" element={
             <ProtectedRoute allowedRoles={['admin']}>
+              <DashboardAdminHome />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/dashboard/admin/manage" element={
+            <ProtectedRoute allowedRoles={['admin']}>
               <DashboardAdminPage />
             </ProtectedRoute>
           } />
+
+          {/* Placeholder routes for sidebar items to avoid redirect to / when missing */}
+          <Route path="/tareas" element={<ProtectedRoute allowedRoles={['docente','docente_aula','orientador','coordinador','rector','admin']}><PagePlaceholder title="Tareas" description="Gestión de tareas."/></ProtectedRoute>} />
+          <Route path="/tareas/crear" element={<ProtectedRoute allowedRoles={['docente','docente_aula']}><PagePlaceholder title="Crear Tarea" description="Formulario temporal para crear tareas."/></ProtectedRoute>} />
+          <Route path="/entregas" element={<ProtectedRoute allowedRoles={['docente','docente_aula']}><PagePlaceholder title="Entregas" description="Listado de entregas pendientes."/></ProtectedRoute>} />
+          <Route path="/estudiantes" element={<ProtectedRoute allowedRoles={['docente','orientador','coordinador','rector','admin']}><PagePlaceholder title="Estudiantes" description="Listado y seguimiento de estudiantes."/></ProtectedRoute>} />
+          <Route path="/docentes" element={<ProtectedRoute allowedRoles={['coordinador','rector','admin']}><PagePlaceholder title="Docentes" description="Gestión de docentes."/></ProtectedRoute>} />
+          <Route path="/cursos" element={<ProtectedRoute allowedRoles={['coordinador','rector','admin']}><PagePlaceholder title="Cursos" description="Gestión de cursos."/></ProtectedRoute>} />
+          <Route path="/reportes" element={<ProtectedRoute allowedRoles={['orientador','coordinador','rector','admin']}><PagePlaceholder title="Reportes" description="Generación de reportes."/></ProtectedRoute>} />
+          <Route path="/configuracion" element={<ProtectedRoute allowedRoles={['rector','admin']}><PagePlaceholder title="Configuración" description="Ajustes del sistema."/></ProtectedRoute>} />
+          <Route path="/instituciones" element={<ProtectedRoute allowedRoles={['admin']}><PagePlaceholder title="Instituciones" description="Gestión de instituciones."/></ProtectedRoute>} />
+          <Route path="/usuarios" element={<ProtectedRoute allowedRoles={['admin']}><PagePlaceholder title="Usuarios" description="Gestión de usuarios."/></ProtectedRoute>} />
           
           {/* Legacy route */}
           <Route path="/dashboard-old" element={<DashboardPage/>} />
