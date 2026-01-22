@@ -42,11 +42,11 @@ export default function ReportesAcademicosCoordinador() {
         getEntregas()
       ]);
 
-      setCursos(cursosData);
-      setTareas(tareasData);
-      setUsuarios(usuariosData);
-      setEstudiantes(estudiantesData);
-      setEntregas(entregasData);
+      setCursos(Array.isArray(cursosData) ? cursosData : []);
+      setTareas(Array.isArray(tareasData) ? tareasData : []);
+      setUsuarios(Array.isArray(usuariosData) ? usuariosData : []);
+      setEstudiantes(Array.isArray(estudiantesData) ? estudiantesData : []);
+      setEntregas(Array.isArray(entregasData) ? entregasData : []);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {

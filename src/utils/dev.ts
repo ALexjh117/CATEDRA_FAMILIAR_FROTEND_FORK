@@ -1,22 +1,11 @@
 // Util para modo de desarrollo: permitir desactivar validaciones localmente.
-// Prioridad: localStorage 'bypassValidations' -> env VITE_BYPASS_VALIDATIONS
+// DESHABILITADO: Ahora siempre se usa el backend real, sin datos mock
 export function isBypassValidationsEnabled(): boolean {
-  try {
-    const ls = window?.localStorage?.getItem('bypassValidations');
-    if (ls === 'true') return true;
-    if (ls === 'false') return false;
-  } catch (e) {
-    // ignore
-  }
-
-  // Vite env vars están accesibles en import.meta.env
-  // @ts-ignore
-  const env = typeof import.meta !== 'undefined' ? (import.meta as any).env : undefined;
-  if (env && env.VITE_BYPASS_VALIDATIONS === 'true') return true;
-
+  // Siempre retorna false - usar backend real
   return false;
 }
 
 export function enableBypassValidationsForSession(enable = true) {
-  try { window.localStorage.setItem('bypassValidations', enable ? 'true' : 'false'); } catch (e) {}
+  // Deshabilitado - no se permite activar bypass
+  console.warn('Bypass de validaciones está deshabilitado. Solo se usan datos del backend.');
 }

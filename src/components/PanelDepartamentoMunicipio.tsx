@@ -62,8 +62,8 @@ export default function PanelDepartamentoMunicipio() {
         getDepartamentos(),
         getMunicipios()
       ]);
-      setDepartamentos(deptosData);
-      setMunicipios(municData);
+      setDepartamentos(Array.isArray(deptosData) ? deptosData : []);
+      setMunicipios(Array.isArray(municData) ? municData : []);
     } catch (error) {
       console.error('Error loading data:', error);
       setToast({ message: 'Error al cargar datos', type: 'error' });

@@ -12,6 +12,8 @@ import {
   createUsuario,
   updateUsuario,
   deleteUsuario,
+  crearRector,
+  crearCoordinador,
   getPeriodos,
   createPeriodo,
   updatePeriodo,
@@ -23,14 +25,10 @@ import {
   createCurso,
   updateCurso,
   deleteCurso,
-  getCategorias,
-  createCategoria,
-  updateCategoria,
-  deleteCategoria,
   getDepartamentos,
   getMunicipios
 } from '../api/endpoints';
-import { type Institucion, type Curso, type Tarea, type Usuario, type Periodo, type Grado, type Categoria, type Departamento, type Municipio } from '../mocks/data';
+import { type Institucion, type Curso, type Tarea, type Usuario, type Periodo, type Grado, type Departamento, type Municipio } from '../mocks/data';
 import { departamentosMock, municipiosMock } from '../mocks/data';
 import DashboardLayout from '../components/DashboardLayout';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -62,8 +60,15 @@ export default function DashboardAdminPage() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [periodos, setPeriodos] = useState<Periodo[]>([]);
   const [grados, setGrados] = useState<Grado[]>([]);
-  const [categorias, setCategorias] = useState<Categoria[]>([]);
-  const [activeTab, setActiveTab] = useState<'instituciones' | 'usuarios' | 'categorias' | 'reportes' | 'configuracion'>('instituciones');
+  const [activeTab, setActiveTab] = useState<'instituciones' | 'usuarios' | 'reportes' | 'configuracion'>('instituciones');
+  
+  // Estado para institución expandida (ver usuarios)
+  const [expandedInstitucion, setExpandedInstitucion] = useState<number | null>(null);
+  
+  // Estados de filtros por departamento
+  const [filtroDepartamentoInst, setFiltroDepartamentoInst] = useState<number | 'todos'>('todos');
+  const [filtroDepartamentoUsers, setFiltroDepartamentoUsers] = useState<number | 'todos'>('todos');
+  const [filtroRolUsers, setFiltroRolUsers] = useState<string>('todos');
   
   // Estados para reportes globales
   const [tipoReporte, setTipoReporte] = useState<'general' | 'instituciones' | 'usuarios' | 'actividad'>('general');
@@ -75,7 +80,6 @@ export default function DashboardAdminPage() {
   const [modalPeriodo, setModalPeriodo] = useState(false);
   const [modalGrado, setModalGrado] = useState(false);
   const [modalCurso, setModalCurso] = useState(false);
-  const [modalCategoria, setModalCategoria] = useState(false);
   
   // Estados de formularios
   const [formInstitucion, setFormInstitucion] = useState({ 
@@ -91,11 +95,10 @@ export default function DashboardAdminPage() {
     rector_documento: '',
     rector_telefono: ''
   });
-  const [formUsuario, setFormUsuario] = useState<{ nombre: string; apellidos: string; correo: string; telefono: string; documento: string; tipoDocumento: string; rol: 'admin' | 'rector' | 'coordinador' | 'orientador' | 'docente_aula' | 'acudiente'; institucionId: number }>({ nombre: '', apellidos: '', correo: '', telefono: '', documento: '', tipoDocumento: 'cc', rol: 'docente_aula', institucionId: 1 });
+  const [formUsuario, setFormUsuario] = useState<{ nombre: string; apellidos: string; correo: string; telefono: string; documento: string; tipoDocumento: string; contrasena: string; rol: 'admin' | 'rector' | 'coordinador' | 'orientador' | 'docente_aula' | 'acudiente'; institucionId: number }>({ nombre: '', apellidos: '', correo: '', telefono: '', documento: '', tipoDocumento: 'cc', contrasena: '', rol: 'docente_aula', institucionId: 1 });
   const [formPeriodo, setFormPeriodo] = useState<{ nombre: string; fechaInicio: string; fechaFin: string; institucionId: number; anio: number; estado: 'planificado' | 'activo' | 'cerrado' }>({ nombre: '', fechaInicio: '', fechaFin: '', institucionId: 1, anio: new Date().getFullYear(), estado: 'planificado' });
   const [formGrado, setFormGrado] = useState({ nombre: '', orden: 0, institucionId: 1 });
   const [formCurso, setFormCurso] = useState<{ nombre: string; gradoId: number; jornada: 'mañana' | 'tarde' | 'completa'; institucionId: number; docenteDirectorId: number | undefined }>({ nombre: '', gradoId: 1, jornada: 'mañana', institucionId: 1, docenteDirectorId: undefined });
-  const [formCategoria, setFormCategoria] = useState({ nombre: '', color: '#3B82F6', icono: '📚' });
   
   // Estados de edición
   const [editingInstitucion, setEditingInstitucion] = useState<Institucion | null>(null);
@@ -103,7 +106,6 @@ export default function DashboardAdminPage() {
   const [editingPeriodo, setEditingPeriodo] = useState<Periodo | null>(null);
   const [editingGrado, setEditingGrado] = useState<Grado | null>(null);
   const [editingCurso, setEditingCurso] = useState<Curso | null>(null);
-  const [editingCategoria, setEditingCategoria] = useState<Categoria | null>(null);
   
   // Estados de error
   const [error, setError] = useState<string | null>(null);
@@ -115,7 +117,7 @@ export default function DashboardAdminPage() {
     try {
       const params = new URLSearchParams(location.search);
       const tab = params.get('tab');
-      if (tab === 'instituciones' || tab === 'usuarios' || tab === 'categorias' || tab === 'reportes' || tab === 'configuracion') {
+      if (tab === 'instituciones' || tab === 'usuarios' || tab === 'reportes' || tab === 'configuracion') {
         setActiveTab(tab as any);
       }
     } catch (e) {
@@ -130,23 +132,28 @@ export default function DashboardAdminPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [institucionesData, cursosData, tareasData, usuariosData, periodosData, gradosData, categoriasData] = await Promise.all([
+      // Solo cargar instituciones que es lo que el backend soporta actualmente
+      // Los demás endpoints retornan arrays vacíos porque aún no existen en el backend
+      const [institucionesData, cursosData, tareasData, usuariosData, periodosData, gradosData] = await Promise.all([
         getInstituciones(),
         getCursos(),
         getTareas(),
         getUsuarios(),
         getPeriodos(),
-        getGrados(),
-        getCategorias()
+        getGrados()
       ]);
 
-      setInstituciones(institucionesData);
-      setCursos(cursosData);
-      setTareas(tareasData);
-      setUsuarios(usuariosData);
-      setPeriodos(periodosData);
-      setGrados(gradosData);
-      setCategorias(categoriasData);
+      setInstituciones(Array.isArray(institucionesData) ? institucionesData : []);
+      setCursos(Array.isArray(cursosData) ? cursosData : []);
+      setTareas(Array.isArray(tareasData) ? tareasData : []);
+      setUsuarios(Array.isArray(usuariosData) ? usuariosData : []);
+      setPeriodos(Array.isArray(periodosData) ? periodosData : []);
+      setGrados(Array.isArray(gradosData) ? gradosData : []);
+      
+      // Si no hay instituciones, mostrar mensaje
+      if (!Array.isArray(institucionesData) || institucionesData.length === 0) {
+        console.log('No hay instituciones registradas en el sistema');
+      }
     } catch (error) {
       console.error('Error loading data:', error);
       setError('Error al cargar los datos');
@@ -306,12 +313,135 @@ export default function DashboardAdminPage() {
   
   const handleCreateUsuario = async () => {
     setError(null);
+    
+    // Si es rector o coordinador, usar los endpoints específicos del backend
+    if (formUsuario.rol === 'rector') {
+      // Validar campos requeridos para rector
+      if (!formUsuario.nombre || !formUsuario.apellidos || !formUsuario.correo || !formUsuario.telefono || !formUsuario.contrasena || !formUsuario.institucionId) {
+        setError('Todos los campos son requeridos para crear un rector');
+        return;
+      }
+      
+      // Validar teléfono (10 dígitos)
+      const telefonoLimpio = formUsuario.telefono.replace(/\D/g, '');
+      if (telefonoLimpio.length !== 10) {
+        setError('El teléfono debe tener exactamente 10 dígitos');
+        return;
+      }
+      
+      // Validar email
+      if (!formUsuario.correo.includes('@') || !formUsuario.correo.includes('.')) {
+        setError('El correo electrónico no es válido');
+        return;
+      }
+      
+      // Validar contraseña
+      if (formUsuario.contrasena.length < 8) {
+        setError('La contraseña debe tener al menos 8 caracteres');
+        return;
+      }
+      if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])/.test(formUsuario.contrasena)) {
+        setError('La contraseña debe tener al menos: 1 minúscula, 1 mayúscula, 1 número y 1 carácter especial (!@#$%^&*)');
+        return;
+      }
+      
+      console.log('Creando rector con datos:', {
+        correo: formUsuario.correo,
+        nombre: formUsuario.nombre,
+        apellido: formUsuario.apellidos,
+        telefono: telefonoLimpio,
+        institucionId: formUsuario.institucionId
+      });
+      
+      const result = await crearRector({
+        correo: formUsuario.correo,
+        contrasena: formUsuario.contrasena,
+        nombre: formUsuario.nombre,
+        apellido: formUsuario.apellidos,
+        telefono: telefonoLimpio,
+        institucionId: formUsuario.institucionId
+      });
+      
+      console.log('Resultado crear rector:', result);
+      
+      if (result.success) {
+        await loadData();
+        setModalUsuario(false);
+        setFormUsuario({ nombre: '', apellidos: '', correo: '', telefono: '', documento: '', tipoDocumento: 'cc', contrasena: '', rol: 'docente_aula', institucionId: 1 });
+        alert(`Rector creado exitosamente. Contraseña asignada: ${formUsuario.contrasena} (debe cambiarla en el primer inicio de sesión)`);
+      } else {
+        setError(result.error || 'Error al crear rector');
+      }
+      return;
+    }
+    
+    if (formUsuario.rol === 'coordinador') {
+      // Validar campos requeridos para coordinador
+      if (!formUsuario.nombre || !formUsuario.apellidos || !formUsuario.correo || !formUsuario.telefono || !formUsuario.contrasena || !formUsuario.institucionId) {
+        setError('Todos los campos son requeridos para crear un coordinador');
+        return;
+      }
+      
+      // Validar teléfono (10 dígitos)
+      const telefonoLimpio = formUsuario.telefono.replace(/\D/g, '');
+      if (telefonoLimpio.length !== 10) {
+        setError('El teléfono debe tener exactamente 10 dígitos');
+        return;
+      }
+      
+      // Validar email
+      if (!formUsuario.correo.includes('@') || !formUsuario.correo.includes('.')) {
+        setError('El correo electrónico no es válido');
+        return;
+      }
+      
+      // Validar contraseña
+      if (formUsuario.contrasena.length < 8) {
+        setError('La contraseña debe tener al menos 8 caracteres');
+        return;
+      }
+      if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])/.test(formUsuario.contrasena)) {
+        setError('La contraseña debe tener al menos: 1 minúscula, 1 mayúscula, 1 número y 1 carácter especial (!@#$%^&*)');
+        return;
+      }
+      
+      console.log('Creando coordinador con datos:', {
+        correo: formUsuario.correo,
+        nombre: formUsuario.nombre,
+        apellido: formUsuario.apellidos,
+        telefono: telefonoLimpio,
+        institucionId: formUsuario.institucionId
+      });
+      
+      const result = await crearCoordinador({
+        correo: formUsuario.correo,
+        contrasena: formUsuario.contrasena,
+        nombre: formUsuario.nombre,
+        apellido: formUsuario.apellidos,
+        telefono: telefonoLimpio,
+        institucionId: formUsuario.institucionId
+      });
+      
+      console.log('Resultado crear coordinador:', result);
+      
+      if (result.success) {
+        await loadData();
+        setModalUsuario(false);
+        setFormUsuario({ nombre: '', apellidos: '', correo: '', telefono: '', documento: '', tipoDocumento: 'cc', contrasena: '', rol: 'docente_aula', institucionId: 1 });
+        alert(`Coordinador creado exitosamente. Contraseña asignada: ${formUsuario.contrasena} (debe cambiarla en el primer inicio de sesión)`);
+      } else {
+        setError(result.error || 'Error al crear coordinador');
+      }
+      return;
+    }
+    
+    // Para otros roles, usar createUsuario genérico (solo funcionará con mock por ahora)
     const result = await createUsuario(formUsuario);
     
     if (result.success) {
       await loadData();
       setModalUsuario(false);
-      setFormUsuario({ nombre: '', apellidos: '', correo: '', telefono: '', documento: '', tipoDocumento: 'cc', rol: 'docente_aula', institucionId: 1 });
+      setFormUsuario({ nombre: '', apellidos: '', correo: '', telefono: '', documento: '', tipoDocumento: 'cc', contrasena: '', rol: 'docente_aula', institucionId: 1 });
     } else {
       setError(result.error || 'Error al crear usuario');
     }
@@ -327,7 +457,7 @@ export default function DashboardAdminPage() {
       await loadData();
       setModalUsuario(false);
       setEditingUsuario(null);
-      setFormUsuario({ nombre: '', apellidos: '', correo: '', telefono: '', documento: '', tipoDocumento: 'cc', rol: 'docente_aula', institucionId: 1 });
+      setFormUsuario({ nombre: '', apellidos: '', correo: '', telefono: '', documento: '', tipoDocumento: 'cc', contrasena: '', rol: 'docente_aula', institucionId: 1 });
     } else {
       setError(result.error || 'Error al actualizar usuario');
     }
@@ -527,167 +657,212 @@ export default function DashboardAdminPage() {
     setModalCurso(true);
   };
 
-  // ============================================
-  // HANDLERS CATEGORÍAS
-  // ============================================
-  
-  const handleCreateCategoria = async () => {
-    const result = await createCategoria(formCategoria);
-    if (result.success) {
-      await loadData();
-      setModalCategoria(false);
-      resetFormCategoria();
-    } else {
-      setError(result.error || 'Error al crear categoría');
-    }
+  // Helper para obtener usuarios de una institución
+  const getUsuariosInstitucion = (institucionId: number) => {
+    return usuarios.filter(u => u.institucionId === institucionId);
   };
 
-  const handleUpdateCategoria = async () => {
-    if (!editingCategoria) return;
+  // Helper para obtener el rector de una institución
+  const getRectorInstitucion = (institucionId: number) => {
+    return usuarios.find(u => u.institucionId === institucionId && u.rol === 'rector');
+  };
+
+  // Helper para obtener coordinadores de una institución
+  const getCoordinadoresInstitucion = (institucionId: number) => {
+    return usuarios.filter(u => u.institucionId === institucionId && u.rol === 'coordinador');
+  };
+
+  // Helper para obtener orientadores de una institución
+  const getOrientadoresInstitucion = (institucionId: number) => {
+    return usuarios.filter(u => u.institucionId === institucionId && u.rol === 'orientador');
+  };
+
+  // Helper para obtener docentes de una institución
+  const getDocentesInstitucion = (institucionId: number) => {
+    return usuarios.filter(u => u.institucionId === institucionId && u.rol === 'docente_aula');
+  };
+
+  // Helper para obtener departamento de una institución
+  const getDepartamentoInstitucion = (inst: Institucion) => {
+    const municipio = municipiosMock.find(m => m.id === inst.municipio_id);
+    return municipio ? departamentosMock.find(d => d.id === municipio.departamento_id) : null;
+  };
+
+  // Filtrar instituciones por departamento
+  const institucionesFiltradas = filtroDepartamentoInst === 'todos' 
+    ? instituciones 
+    : instituciones.filter(inst => {
+        const depto = getDepartamentoInstitucion(inst);
+        return depto?.id === filtroDepartamentoInst;
+      });
+
+  // Filtrar usuarios por departamento y rol
+  const usuariosFiltrados = usuarios.filter(user => {
+    // Filtro por rol
+    if (filtroRolUsers !== 'todos' && user.rol !== filtroRolUsers) return false;
     
-    const result = await updateCategoria(editingCategoria.id, formCategoria);
-    if (result.success) {
-      await loadData();
-      setModalCategoria(false);
-      setEditingCategoria(null);
-      resetFormCategoria();
-    } else {
-      setError(result.error || 'Error al actualizar categoría');
+    // Filtro por departamento
+    if (filtroDepartamentoUsers !== 'todos') {
+      const inst = instituciones.find(i => i.id === user.institucionId);
+      if (!inst) return false;
+      const depto = getDepartamentoInstitucion(inst);
+      if (!depto || depto.id !== filtroDepartamentoUsers) return false;
     }
-  };
-
-  const handleDeleteCategoria = async (id: number) => {
-    if (!confirm('¿Está seguro de eliminar esta categoría?')) return;
     
-    const result = await deleteCategoria(id);
-    if (result.success) {
-      await loadData();
-    } else {
-      setError(result.error || 'Error al eliminar categoría');
-    }
-  };
+    return true;
+  });
 
-  const openEditCategoria = (categoria: Categoria) => {
-    setEditingCategoria(categoria);
-    setFormCategoria({
-      nombre: categoria.nombre,
-      color: categoria.color,
-      icono: categoria.icono
-    });
-    setModalCategoria(true);
-  };
-
-  const resetFormCategoria = () => {
-    setFormCategoria({ nombre: '', color: '#3B82F6', icono: '📚' });
-  };
+  // Obtener departamentos únicos que tienen instituciones
+  const departamentosConInstituciones = [...new Set(
+    instituciones
+      .map(inst => getDepartamentoInstitucion(inst))
+      .filter(Boolean)
+      .map(d => d!.id)
+  )].map(id => departamentosMock.find(d => d.id === id)!).filter(Boolean);
 
   if (loading) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center h-64">
-          <LoadingSpinner size="lg" text="Cargando panel administrativo..." />
+        <div className="flex flex-col items-center justify-center h-64 gap-4">
+          <LoadingSpinner size="lg" />
+          <p className="text-slate-500 animate-pulse">Cargando panel administrativo...</p>
         </div>
       </DashboardLayout>
     );
   }
 
+  // Calcular estadísticas reales
+  const totalUsuarios = usuarios.length;
+  const usuariosActivos = usuarios.filter(u => u.activo).length;
+  const totalDocentes = usuarios.filter(u => u.rol === 'docente_aula').length;
+  const totalRectores = usuarios.filter(u => u.rol === 'rector').length;
+
   return (
     <DashboardLayout>
-      <div className="max-w-7xl mx-auto space-y-8">
+      <div className="max-w-7xl mx-auto space-y-6">
         {/* Header con diseño distintivo */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-slate-800 via-slate-700 to-zinc-800 rounded-2xl p-6 text-white">
-          <div className="absolute top-0 right-0 w-72 h-72 bg-gradient-to-bl from-teal-500/10 to-transparent rounded-full -translate-y-1/2 translate-x-1/2" />
-          <div className="absolute bottom-0 left-0 w-48 h-48 bg-gradient-to-tr from-violet-500/10 to-transparent rounded-full translate-y-1/2 -translate-x-1/2" />
-          <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center shadow-lg shadow-teal-500/30">
-                <IconGear className="text-white" size={28} />
+        <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-8 text-white shadow-xl">
+          {/* Decorative elements */}
+          <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-teal-500/20 to-transparent rounded-full -translate-y-1/2 translate-x-1/3" />
+          <div className="absolute bottom-0 left-0 w-64 h-64 bg-gradient-to-tr from-violet-500/15 to-transparent rounded-full translate-y-1/2 -translate-x-1/3" />
+          <div className="absolute top-1/2 left-1/2 w-32 h-32 bg-gradient-to-tr from-emerald-500/10 to-transparent rounded-full -translate-x-1/2 -translate-y-1/2" />
+          
+          <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+            <div className="flex items-center gap-5">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-400 to-emerald-500 flex items-center justify-center shadow-lg shadow-teal-500/40 ring-4 ring-white/10">
+                <IconGear className="text-white" size={32} />
               </div>
               <div>
+                <p className="text-teal-400 text-sm font-semibold uppercase tracking-wider mb-1">
+                  Sistema Cátedra de Familia
+                </p>
                 <h1 className="text-2xl md:text-3xl font-display font-bold">
                   Panel de Administración
                 </h1>
-                <p className="text-slate-300 mt-0.5">
-                  Gestión de instituciones, usuarios y configuración del sistema
+                <p className="text-slate-400 mt-1">
+                  Gestión integral de instituciones, usuarios y configuración
                 </p>
               </div>
+            </div>
+            
+            {/* Quick actions */}
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setModalInstitucion(true)}
+                className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-medium transition-all flex items-center gap-2 backdrop-blur-sm border border-white/10"
+              >
+                <IconPlus size={18} />
+                Nueva Institución
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Stats globales */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="group bg-white rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 p-5 border border-slate-100 hover:border-teal-200">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center shadow-lg shadow-teal-200/50 group-hover:scale-105 transition-transform">
+        {/* Stats globales mejorados */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="group bg-white rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300 p-6 border border-slate-100 hover:border-teal-300 cursor-pointer" onClick={() => setActiveTab('instituciones')}>
+            <div className="flex items-start justify-between mb-4">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center shadow-lg shadow-teal-200/50 group-hover:scale-110 transition-transform">
                 <IconInstitution className="text-white" size={22} />
               </div>
-              <div>
-                <div className="text-2xl font-bold text-slate-800">{instituciones.length}</div>
-                <div className="text-sm text-slate-500 font-medium">Instituciones</div>
-              </div>
+              <span className="text-xs font-semibold text-teal-600 bg-teal-50 px-2 py-1 rounded-full">
+                {instituciones.filter(i => i.activo).length} activas
+              </span>
             </div>
+            <div className="text-3xl font-bold text-slate-800 mb-1">{instituciones.length}</div>
+            <div className="text-sm text-slate-500 font-medium">Instituciones Educativas</div>
           </div>
           
-          <div className="group bg-white rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 p-5 border border-slate-100 hover:border-blue-200">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-400 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-200/50 group-hover:scale-105 transition-transform">
-                <IconBook className="text-white" size={22} />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-slate-800">{cursos.length}</div>
-                <div className="text-sm text-slate-500 font-medium">Cursos</div>
-              </div>
-            </div>
-          </div>
-          
-          <div className="group bg-white rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 p-5 border border-slate-100 hover:border-emerald-200">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-400 to-green-600 flex items-center justify-center shadow-lg shadow-emerald-200/50 group-hover:scale-105 transition-transform">
+          <div className="group bg-white rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300 p-6 border border-slate-100 hover:border-blue-300 cursor-pointer" onClick={() => setActiveTab('usuarios')}>
+            <div className="flex items-start justify-between mb-4">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-400 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-200/50 group-hover:scale-110 transition-transform">
                 <IconUsers className="text-white" size={22} />
               </div>
-              <div>
-                <div className="text-2xl font-bold text-slate-800">156</div>
-                <div className="text-sm text-slate-500 font-medium">Usuarios</div>
-              </div>
+              <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
+                {usuariosActivos} activos
+              </span>
             </div>
+            <div className="text-3xl font-bold text-slate-800 mb-1">{totalUsuarios}</div>
+            <div className="text-sm text-slate-500 font-medium">Usuarios Registrados</div>
           </div>
           
-          <div className="group bg-white rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 p-5 border border-slate-100 hover:border-violet-200">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-400 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-200/50 group-hover:scale-105 transition-transform">
+          <div className="group bg-white rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300 p-6 border border-slate-100 hover:border-emerald-300">
+            <div className="flex items-start justify-between mb-4">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-400 to-green-600 flex items-center justify-center shadow-lg shadow-emerald-200/50 group-hover:scale-110 transition-transform">
+                <IconBook className="text-white" size={22} />
+              </div>
+              <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full">
+                {totalDocentes} docentes
+              </span>
+            </div>
+            <div className="text-3xl font-bold text-slate-800 mb-1">{cursos.length}</div>
+            <div className="text-sm text-slate-500 font-medium">Cursos Activos</div>
+          </div>
+          
+          <div className="group bg-white rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300 p-6 border border-slate-100 hover:border-violet-300">
+            <div className="flex items-start justify-between mb-4">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-400 to-purple-600 flex items-center justify-center shadow-lg shadow-violet-200/50 group-hover:scale-110 transition-transform">
                 <IconClipboard className="text-white" size={22} />
               </div>
-              <div>
-                <div className="text-2xl font-bold text-slate-800">{tareas.length}</div>
-                <div className="text-sm text-slate-500 font-medium">Tareas Creadas</div>
-              </div>
+              <span className="text-xs font-semibold text-violet-600 bg-violet-50 px-2 py-1 rounded-full">
+                {totalRectores} rectores
+              </span>
             </div>
+            <div className="text-3xl font-bold text-slate-800 mb-1">{tareas.length}</div>
+            <div className="text-sm text-slate-500 font-medium">Tareas del Sistema</div>
           </div>
         </div>
 
         {/* Tabs */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-          <div className="border-b border-slate-100 bg-slate-50/50">
-            <nav className="flex gap-1 p-1.5">
+          <div className="border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white">
+            <nav className="flex gap-1 p-2 overflow-x-auto">
               {[
-                { id: 'instituciones', label: 'Instituciones', Icon: IconInstitution },
-                { id: 'usuarios', label: 'Usuarios', Icon: IconUsers },
-                { id: 'categorias', label: 'Categorías', Icon: IconClipboard },
+                { id: 'instituciones', label: 'Instituciones', Icon: IconInstitution, count: instituciones.length },
+                { id: 'usuarios', label: 'Usuarios', Icon: IconUsers, count: usuarios.length },
                 { id: 'reportes', label: 'Reportes', Icon: IconDownload },
                 { id: 'configuracion', label: 'Configuración', Icon: IconGear },
               ].map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                  className={`flex items-center gap-2 px-5 py-3 rounded-xl font-medium transition-all duration-200 ${
+                  className={`flex items-center gap-2.5 px-5 py-3 rounded-xl font-medium transition-all duration-200 whitespace-nowrap ${
                     activeTab === tab.id
-                      ? 'bg-white text-teal-700 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-800 hover:bg-white/50'
+                      ? 'bg-teal-600 text-white shadow-md shadow-teal-200'
+                      : 'text-slate-600 hover:text-slate-800 hover:bg-slate-100'
                   }`}
                 >
                   <tab.Icon size={18} />
                   {tab.label}
+                  {tab.count !== undefined && (
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      activeTab === tab.id 
+                        ? 'bg-white/20 text-white' 
+                        : 'bg-slate-200 text-slate-600'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  )}
                 </button>
               ))}
             </nav>
@@ -696,7 +871,7 @@ export default function DashboardAdminPage() {
           <div className="p-6">
             {/* Mensaje de error global */}
             {error && (
-              <div className="mb-5 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
+              <div className="mb-5 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3 animate-shake">
                 <div className="flex-shrink-0 mt-0.5">
                   <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
@@ -716,115 +891,474 @@ export default function DashboardAdminPage() {
             {/* Tab: Instituciones */}
             {activeTab === 'instituciones' && (
               <div className="space-y-5">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-slate-800">Instituciones Registradas</h3>
-                  <Button onClick={() => setModalInstitucion(true)} className="flex items-center gap-2">
-                    <IconPlus size={16} />
-                    Nueva Institución
-                  </Button>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-800">Instituciones Registradas</h3>
+                    <p className="text-sm text-slate-500 mt-1">Gestiona las instituciones educativas del sistema</p>
+                  </div>
+                  <div className="flex gap-3 flex-wrap">
+                    <select 
+                      value={filtroDepartamentoInst === 'todos' ? 'todos' : filtroDepartamentoInst}
+                      onChange={(e) => setFiltroDepartamentoInst(e.target.value === 'todos' ? 'todos' : Number(e.target.value))}
+                      className="px-4 py-2.5 border border-slate-200 rounded-xl bg-white text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 transition-all shadow-sm min-w-[180px]"
+                    >
+                      <option value="todos">Todos los departamentos</option>
+                      {departamentosMock.map(depto => (
+                        <option key={depto.id} value={depto.id}>{depto.nombre}</option>
+                      ))}
+                    </select>
+                    <Button onClick={() => setModalInstitucion(true)} className="flex items-center gap-2 shadow-md">
+                      <IconPlus size={16} />
+                      Nueva Institución
+                    </Button>
+                  </div>
                 </div>
                 
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-slate-100 bg-slate-50/80">
-                        <th className="text-left py-3.5 px-5 font-semibold text-slate-600 text-sm">Institución</th>
-                        <th className="text-center py-3.5 px-4 font-semibold text-slate-600 text-sm">Cursos</th>
-                        <th className="text-center py-3.5 px-4 font-semibold text-slate-600 text-sm">Familias</th>
-                        <th className="text-center py-3.5 px-4 font-semibold text-slate-600 text-sm">Estado</th>
-                        <th className="text-center py-3.5 px-4 font-semibold text-slate-600 text-sm">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {instituciones.map(inst => (
-                        <tr key={inst.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                          <td className="py-4 px-5">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center shadow-md">
-                                <IconInstitution className="text-white" size={18} />
+                {/* Indicador de filtro activo */}
+                {filtroDepartamentoInst !== 'todos' && (
+                  <div className="flex items-center gap-2 px-4 py-2 bg-teal-50 border border-teal-200 rounded-xl">
+                    <svg className="w-4 h-4 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                    </svg>
+                    <span className="text-sm text-teal-700 font-medium">
+                      Mostrando {institucionesFiltradas.length} {institucionesFiltradas.length === 1 ? 'institución' : 'instituciones'} de {departamentosMock.find(d => d.id === filtroDepartamentoInst)?.nombre}
+                    </span>
+                    <button 
+                      onClick={() => setFiltroDepartamentoInst('todos')}
+                      className="ml-auto text-teal-600 hover:text-teal-800 text-sm font-medium flex items-center gap-1"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      Quitar filtro
+                    </button>
+                  </div>
+                )}
+                
+                {institucionesFiltradas.length === 0 ? (
+                  <div className="text-center py-16 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
+                    <IconInstitution className="mx-auto text-slate-300 mb-4" size={48} />
+                    <h4 className="font-semibold text-slate-600 mb-2">
+                      {filtroDepartamentoInst !== 'todos' 
+                        ? `No hay instituciones en ${departamentosMock.find(d => d.id === filtroDepartamentoInst)?.nombre}`
+                        : 'No hay instituciones registradas'
+                      }
+                    </h4>
+                    <p className="text-sm text-slate-500 mb-4">
+                      {filtroDepartamentoInst !== 'todos'
+                        ? 'Prueba con otro departamento o quita el filtro'
+                        : 'Comienza agregando la primera institución educativa'
+                      }
+                    </p>
+                    {filtroDepartamentoInst === 'todos' && (
+                      <Button onClick={() => setModalInstitucion(true)} className="flex items-center gap-2 mx-auto">
+                        <IconPlus size={16} />
+                        Agregar Institución
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                <div className="space-y-4">
+                  {institucionesFiltradas.map((inst) => {
+                    const rector = getRectorInstitucion(inst.id);
+                    const coordinadores = getCoordinadoresInstitucion(inst.id);
+                    const orientadores = getOrientadoresInstitucion(inst.id);
+                    const docentes = getDocentesInstitucion(inst.id);
+                    const totalUsuariosInst = getUsuariosInstitucion(inst.id).length;
+                    const isExpanded = expandedInstitucion === inst.id;
+                    
+                    return (
+                      <div 
+                        key={inst.id} 
+                        className={`rounded-xl border-2 overflow-hidden transition-all duration-300 ${
+                          isExpanded 
+                            ? 'border-teal-300 shadow-lg shadow-teal-100' 
+                            : 'border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        {/* Card Header - Institución */}
+                        <div 
+                          className={`p-5 cursor-pointer transition-colors ${
+                            isExpanded 
+                              ? 'bg-gradient-to-r from-teal-50 to-emerald-50' 
+                              : 'bg-white hover:bg-slate-50'
+                          }`}
+                          onClick={() => setExpandedInstitucion(isExpanded ? null : inst.id)}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-teal-400 to-emerald-500 flex items-center justify-center shadow-lg flex-shrink-0">
+                                <IconInstitution className="text-white" size={26} />
                               </div>
-                              <div>
-                                <div className="font-medium text-slate-800">{inst.nombre}</div>
-                                <div className="text-sm text-slate-500">{inst.direccion}</div>
+                              <div className="min-w-0">
+                                <div className="font-bold text-lg text-slate-800">{inst.nombre}</div>
+                                <div className="text-sm text-slate-500">{inst.direccion_completa || inst.direccion || 'Sin dirección'}</div>
+                                <div className="flex items-center gap-3 mt-1.5">
+                                  {inst.codigo_dane && (
+                                    <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded">DANE: {inst.codigo_dane}</span>
+                                  )}
+                                  <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                                    inst.naturaleza === 'publica' ? 'bg-emerald-100 text-emerald-700' :
+                                    inst.naturaleza === 'privada' ? 'bg-violet-100 text-violet-700' :
+                                    'bg-amber-100 text-amber-700'
+                                  }`}>
+                                    {inst.naturaleza === 'publica' ? 'Pública' : inst.naturaleza === 'privada' ? 'Privada' : 'Mixta'}
+                                  </span>
+                                  <span className={`px-2 py-0.5 rounded text-xs font-semibold inline-flex items-center gap-1 ${
+                                    inst.activo ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                                  }`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full ${inst.activo ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
+                                    {inst.activo ? 'Activa' : 'Inactiva'}
+                                  </span>
+                                </div>
                               </div>
                             </div>
-                          </td>
-                          <td className="text-center py-4 px-4 font-medium text-slate-700">
-                            {cursos.filter(c => c.institucionId === inst.id).length}
-                          </td>
-                          <td className="text-center py-4 px-4 font-medium text-slate-700">
-                            {Math.floor(50 + Math.random() * 200)}
-                          </td>
-                          <td className="text-center py-4 px-4">
-                            <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-semibold">
-                              Activa
-                            </span>
-                          </td>
-                          <td className="text-center py-4 px-4">
-                            <div className="flex justify-center gap-1">
-                              <button 
-                                onClick={() => openEditInstitucion(inst)}
-                                className="p-2 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
-                              >
-                                <IconEdit size={18} />
-                              </button>
-                              <button 
-                                onClick={() => handleDeleteInstitucion(inst.id)}
-                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              >
-                                <IconTrash size={18} />
-                              </button>
+                            
+                            <div className="flex items-center gap-4">
+                              {/* Badges de conteo */}
+                              <div className="hidden sm:flex items-center gap-2">
+                                <div className="text-center px-3 py-1.5 bg-blue-50 rounded-lg">
+                                  <div className="text-lg font-bold text-blue-700">{cursos.filter(c => c.institucionId === inst.id).length}</div>
+                                  <div className="text-xs text-blue-600">Cursos</div>
+                                </div>
+                                <div className="text-center px-3 py-1.5 bg-violet-50 rounded-lg">
+                                  <div className="text-lg font-bold text-violet-700">{totalUsuariosInst}</div>
+                                  <div className="text-xs text-violet-600">Usuarios</div>
+                                </div>
+                              </div>
+                              
+                              {/* Acciones */}
+                              <div className="flex items-center gap-1">
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); openEditInstitucion(inst); }}
+                                  className="p-2.5 text-slate-400 hover:text-teal-600 hover:bg-teal-100 rounded-lg transition-all"
+                                  title="Editar institución"
+                                >
+                                  <IconEdit size={18} />
+                                </button>
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); handleDeleteInstitucion(inst.id); }}
+                                  className="p-2.5 text-slate-400 hover:text-red-600 hover:bg-red-100 rounded-lg transition-all"
+                                  title="Eliminar institución"
+                                >
+                                  <IconTrash size={18} />
+                                </button>
+                                <button 
+                                  className={`p-2.5 rounded-lg transition-all ${
+                                    isExpanded 
+                                      ? 'text-teal-600 bg-teal-100' 
+                                      : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+                                  }`}
+                                  title={isExpanded ? 'Cerrar' : 'Ver usuarios'}
+                                >
+                                  <svg className={`w-5 h-5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                </button>
+                              </div>
                             </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                          </div>
+                        </div>
+                        
+                        {/* Expanded Panel - Usuarios de la institución */}
+                        {isExpanded && (
+                          <div className="border-t border-teal-200 bg-gradient-to-b from-slate-50 to-white p-5 animate-in slide-in-from-top-2 duration-300">
+                            <h4 className="font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                              <IconUsers size={18} className="text-slate-500" />
+                              Personal de la Institución
+                            </h4>
+                            
+                            {totalUsuariosInst === 0 ? (
+                              <div className="text-center py-8 bg-white rounded-xl border-2 border-dashed border-slate-200">
+                                <IconUsers className="mx-auto text-slate-300 mb-2" size={36} />
+                                <p className="text-slate-500 text-sm">No hay usuarios registrados en esta institución</p>
+                                <Button 
+                                  size="sm" 
+                                  className="mt-3"
+                                  onClick={() => {
+                                    setFormUsuario({ ...formUsuario, institucionId: inst.id });
+                                    setModalUsuario(true);
+                                  }}
+                                >
+                                  <IconPlus size={14} />
+                                  Agregar Usuario
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="grid gap-4">
+                                {/* Rector */}
+                                <div className="bg-white rounded-xl border border-rose-200 p-4">
+                                  <div className="flex items-center gap-2 mb-3">
+                                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-rose-400 to-red-600 flex items-center justify-center">
+                                      <span className="text-white text-xs font-bold">R</span>
+                                    </div>
+                                    <h5 className="font-semibold text-slate-700">Rector</h5>
+                                    <span className="text-xs bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full ml-auto">
+                                      {rector ? '1 asignado' : 'Sin asignar'}
+                                    </span>
+                                  </div>
+                                  {rector ? (
+                                    <div className="flex items-center gap-3 p-3 bg-rose-50 rounded-lg">
+                                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-rose-400 to-red-600 flex items-center justify-center text-white font-bold">
+                                        {rector.nombre[0]}{rector.apellidos?.[0] || ''}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="font-medium text-slate-800">{rector.nombre} {rector.apellidos}</div>
+                                        <div className="text-sm text-slate-500 truncate">{rector.correo || rector.email}</div>
+                                      </div>
+                                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                        rector.activo ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                                      }`}>
+                                        {rector.activo ? 'Activo' : 'Inactivo'}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <div className="text-center py-4 text-slate-400 text-sm">
+                                      No hay rector asignado
+                                    </div>
+                                  )}
+                                </div>
+                                
+                                {/* Coordinadores */}
+                                <div className="bg-white rounded-xl border border-amber-200 p-4">
+                                  <div className="flex items-center gap-2 mb-3">
+                                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-orange-600 flex items-center justify-center">
+                                      <span className="text-white text-xs font-bold">C</span>
+                                    </div>
+                                    <h5 className="font-semibold text-slate-700">Coordinadores</h5>
+                                    <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full ml-auto">
+                                      {coordinadores.length} {coordinadores.length === 1 ? 'registrado' : 'registrados'}
+                                    </span>
+                                  </div>
+                                  {coordinadores.length > 0 ? (
+                                    <div className="space-y-2">
+                                      {coordinadores.map(coord => (
+                                        <div key={coord.id} className="flex items-center gap-3 p-3 bg-amber-50 rounded-lg">
+                                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-orange-600 flex items-center justify-center text-white font-bold text-sm">
+                                            {coord.nombre[0]}{coord.apellidos?.[0] || ''}
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <div className="font-medium text-slate-800">{coord.nombre} {coord.apellidos}</div>
+                                            <div className="text-sm text-slate-500 truncate">{coord.correo || coord.email}</div>
+                                          </div>
+                                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                            coord.activo ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                                          }`}>
+                                            {coord.activo ? 'Activo' : 'Inactivo'}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="text-center py-4 text-slate-400 text-sm">
+                                      No hay coordinadores registrados
+                                    </div>
+                                  )}
+                                </div>
+                                
+                                {/* Orientadores */}
+                                <div className="bg-white rounded-xl border border-violet-200 p-4">
+                                  <div className="flex items-center gap-2 mb-3">
+                                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-400 to-purple-600 flex items-center justify-center">
+                                      <span className="text-white text-xs font-bold">O</span>
+                                    </div>
+                                    <h5 className="font-semibold text-slate-700">Orientadores</h5>
+                                    <span className="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full ml-auto">
+                                      {orientadores.length} {orientadores.length === 1 ? 'registrado' : 'registrados'}
+                                    </span>
+                                  </div>
+                                  {orientadores.length > 0 ? (
+                                    <div className="space-y-2">
+                                      {orientadores.map(orient => (
+                                        <div key={orient.id} className="flex items-center gap-3 p-3 bg-violet-50 rounded-lg">
+                                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-400 to-purple-600 flex items-center justify-center text-white font-bold text-sm">
+                                            {orient.nombre[0]}{orient.apellidos?.[0] || ''}
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <div className="font-medium text-slate-800">{orient.nombre} {orient.apellidos}</div>
+                                            <div className="text-sm text-slate-500 truncate">{orient.correo || orient.email}</div>
+                                          </div>
+                                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                            orient.activo ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                                          }`}>
+                                            {orient.activo ? 'Activo' : 'Inactivo'}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="text-center py-4 text-slate-400 text-sm">
+                                      No hay orientadores registrados
+                                    </div>
+                                  )}
+                                </div>
+                                
+                                {/* Docentes */}
+                                <div className="bg-white rounded-xl border border-blue-200 p-4">
+                                  <div className="flex items-center gap-2 mb-3">
+                                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-400 to-indigo-600 flex items-center justify-center">
+                                      <span className="text-white text-xs font-bold">D</span>
+                                    </div>
+                                    <h5 className="font-semibold text-slate-700">Docentes</h5>
+                                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full ml-auto">
+                                      {docentes.length} {docentes.length === 1 ? 'registrado' : 'registrados'}
+                                    </span>
+                                  </div>
+                                  {docentes.length > 0 ? (
+                                    <div className="grid sm:grid-cols-2 gap-2">
+                                      {docentes.slice(0, 6).map(doc => (
+                                        <div key={doc.id} className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
+                                          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-400 to-indigo-600 flex items-center justify-center text-white font-bold text-xs">
+                                            {doc.nombre[0]}{doc.apellidos?.[0] || ''}
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <div className="font-medium text-slate-800 text-sm">{doc.nombre} {doc.apellidos}</div>
+                                            <div className="text-xs text-slate-500 truncate">{doc.correo || doc.email}</div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="text-center py-4 text-slate-400 text-sm">
+                                      No hay docentes registrados
+                                    </div>
+                                  )}
+                                  {docentes.length > 6 && (
+                                    <div className="mt-3 text-center">
+                                      <span className="text-sm text-blue-600 font-medium">
+                                        +{docentes.length - 6} docentes más
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
+                )}
               </div>
             )}
 
             {/* Tab: Usuarios */}
             {activeTab === 'usuarios' && (
               <div className="space-y-5">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-slate-800">Gestión de Usuarios</h3>
-                  <div className="flex gap-3">
-                    <select className="px-4 py-2.5 border border-slate-200 rounded-xl bg-white text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 transition-all">
-                      <option>Todos los roles</option>
-                      <option>Docentes</option>
-                      <option>Orientadores</option>
-                      <option>Coordinadores</option>
-                      <option>Rectores</option>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-800">Gestión de Usuarios</h3>
+                    <p className="text-sm text-slate-500 mt-1">Administra los usuarios del sistema</p>
+                  </div>
+                  <div className="flex gap-3 flex-wrap">
+                    <select 
+                      value={filtroDepartamentoUsers === 'todos' ? 'todos' : filtroDepartamentoUsers}
+                      onChange={(e) => setFiltroDepartamentoUsers(e.target.value === 'todos' ? 'todos' : Number(e.target.value))}
+                      className="px-4 py-2.5 border border-slate-200 rounded-xl bg-white text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 transition-all shadow-sm min-w-[180px]"
+                    >
+                      <option value="todos">Todos los departamentos</option>
+                      {departamentosMock.map(depto => (
+                        <option key={depto.id} value={depto.id}>{depto.nombre}</option>
+                      ))}
+                    </select>
+                    <select 
+                      value={filtroRolUsers}
+                      onChange={(e) => setFiltroRolUsers(e.target.value)}
+                      className="px-4 py-2.5 border border-slate-200 rounded-xl bg-white text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 transition-all shadow-sm"
+                    >
+                      <option value="todos">Todos los roles</option>
+                      <option value="rector">Rectores</option>
+                      <option value="coordinador">Coordinadores</option>
+                      <option value="orientador">Orientadores</option>
+                      <option value="docente_aula">Docentes</option>
+                      <option value="acudiente">Acudientes</option>
                     </select>
                     <Button onClick={() => {
                       setEditingUsuario(null);
-                      setFormUsuario({ nombre: '', apellidos: '', correo: '', telefono: '', documento: '', tipoDocumento: 'cc', rol: 'docente_aula', institucionId: 1 });
+                      // Inicializar con la primera institución disponible
+                      const primeraInstitucion = instituciones.length > 0 ? instituciones[0].id : 1;
+                      setFormUsuario({ nombre: '', apellidos: '', correo: '', telefono: '', documento: '', tipoDocumento: 'cc', contrasena: '', rol: 'docente_aula', institucionId: primeraInstitucion });
                       setModalUsuario(true);
-                    }} className="flex items-center gap-2">
+                    }} className="flex items-center gap-2 shadow-md">
                       <IconPlus size={16} />
                       Nuevo Usuario
                     </Button>
                   </div>
                 </div>
                 
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                {/* Indicador de filtros activos */}
+                {(filtroDepartamentoUsers !== 'todos' || filtroRolUsers !== 'todos') && (
+                  <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-xl flex-wrap">
+                    <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                    </svg>
+                    <span className="text-sm text-blue-700 font-medium">
+                      Mostrando {usuariosFiltrados.length} {usuariosFiltrados.length === 1 ? 'usuario' : 'usuarios'}
+                      {filtroDepartamentoUsers !== 'todos' && ` de ${departamentosMock.find(d => d.id === filtroDepartamentoUsers)?.nombre}`}
+                      {filtroRolUsers !== 'todos' && ` - ${filtroRolUsers === 'docente_aula' ? 'Docentes' : filtroRolUsers.charAt(0).toUpperCase() + filtroRolUsers.slice(1)}${filtroRolUsers !== 'acudiente' ? 'es' : 's'}`}
+                    </span>
+                    <button 
+                      onClick={() => { setFiltroDepartamentoUsers('todos'); setFiltroRolUsers('todos'); }}
+                      className="ml-auto text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      Quitar filtros
+                    </button>
+                  </div>
+                )}
+                
+                {usuariosFiltrados.length === 0 ? (
+                  <div className="text-center py-16 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
+                    <IconUsers className="mx-auto text-slate-300 mb-4" size={48} />
+                    <h4 className="font-semibold text-slate-600 mb-2">
+                      {(filtroDepartamentoUsers !== 'todos' || filtroRolUsers !== 'todos')
+                        ? 'No se encontraron usuarios con los filtros seleccionados'
+                        : 'No hay usuarios registrados'
+                      }
+                    </h4>
+                    <p className="text-sm text-slate-500 mb-4">
+                      {(filtroDepartamentoUsers !== 'todos' || filtroRolUsers !== 'todos')
+                        ? 'Prueba con otros filtros o quítalos para ver todos'
+                        : 'Comienza agregando el primer usuario'
+                      }
+                    </p>
+                    {filtroDepartamentoUsers === 'todos' && filtroRolUsers === 'todos' && (
+                      <Button onClick={() => {
+                        const primeraInstitucion = instituciones.length > 0 ? instituciones[0].id : 1;
+                        setFormUsuario({ nombre: '', apellidos: '', correo: '', telefono: '', documento: '', tipoDocumento: 'cc', contrasena: '', rol: 'docente_aula', institucionId: primeraInstitucion });
+                        setModalUsuario(true);
+                      }} className="flex items-center gap-2 mx-auto">
+                        <IconPlus size={16} />
+                        Agregar Usuario
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm">
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b border-slate-100 bg-slate-50/80">
-                        <th className="text-left py-3.5 px-5 font-semibold text-slate-600 text-sm">Usuario</th>
-                        <th className="text-center py-3.5 px-4 font-semibold text-slate-600 text-sm">Rol</th>
-                        <th className="text-center py-3.5 px-4 font-semibold text-slate-600 text-sm">Documento</th>
-                        <th className="text-center py-3.5 px-4 font-semibold text-slate-600 text-sm">Estado</th>
-                        <th className="text-center py-3.5 px-4 font-semibold text-slate-600 text-sm">Acciones</th>
+                      <tr className="border-b border-slate-200 bg-gradient-to-r from-slate-50 to-slate-100/50">
+                        <th className="text-left py-4 px-5 font-semibold text-slate-700 text-sm uppercase tracking-wider">Usuario</th>
+                        <th className="text-center py-4 px-4 font-semibold text-slate-700 text-sm uppercase tracking-wider">Rol</th>
+                        <th className="text-center py-4 px-4 font-semibold text-slate-700 text-sm uppercase tracking-wider">Institución</th>
+                        <th className="text-center py-4 px-4 font-semibold text-slate-700 text-sm uppercase tracking-wider">Departamento</th>
+                        <th className="text-center py-4 px-4 font-semibold text-slate-700 text-sm uppercase tracking-wider">Estado</th>
+                        <th className="text-center py-4 px-4 font-semibold text-slate-700 text-sm uppercase tracking-wider">Acciones</th>
                       </tr>
                     </thead>
-                    <tbody>
-                      {usuarios.map(usuario => (
-                        <tr key={usuario.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                    <tbody className="divide-y divide-slate-100">
+                      {usuariosFiltrados.map((usuario, index) => {
+                        const instUsuario = instituciones.find(i => i.id === usuario.institucionId);
+                        const deptoUsuario = instUsuario ? getDepartamentoInstitucion(instUsuario) : null;
+                        
+                        return (
+                        <tr key={usuario.id} className={`hover:bg-blue-50/30 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
                           <td className="py-4 px-5">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md ${
+                            <div className="flex items-center gap-4">
+                              <div className={`w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md ring-2 ring-white ${
                                 usuario.rol === 'docente_aula' ? 'bg-gradient-to-br from-blue-400 to-indigo-600' :
                                 usuario.rol === 'orientador' ? 'bg-gradient-to-br from-violet-400 to-purple-600' :
                                 usuario.rol === 'coordinador' ? 'bg-gradient-to-br from-amber-400 to-orange-600' :
@@ -833,33 +1367,48 @@ export default function DashboardAdminPage() {
                               }`}>
                                 {usuario.nombre[0]}{usuario.apellidos?.[0] || ''}
                               </div>
-                              <div>
-                                <div className="font-medium text-slate-800">{usuario.nombre} {usuario.apellidos}</div>
-                                <div className="text-sm text-slate-500">{usuario.correo}</div>
+                              <div className="min-w-0">
+                                <div className="font-semibold text-slate-800">{usuario.nombre} {usuario.apellidos}</div>
+                                <div className="text-sm text-slate-500 truncate">{usuario.correo || usuario.email}</div>
                               </div>
                             </div>
                           </td>
                           <td className="text-center py-4 px-4">
-                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                            <span className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${
                               usuario.rol === 'docente_aula' ? 'bg-blue-100 text-blue-700' :
                               usuario.rol === 'orientador' ? 'bg-violet-100 text-violet-700' :
                               usuario.rol === 'coordinador' ? 'bg-amber-100 text-amber-700' :
                               usuario.rol === 'rector' ? 'bg-rose-100 text-rose-700' :
+                              usuario.rol === 'acudiente' ? 'bg-cyan-100 text-cyan-700' :
                               'bg-slate-100 text-slate-700'
                             }`}>
                               {usuario.rol === 'docente_aula' ? 'Docente' : 
                                usuario.rol === 'orientador' ? 'Orientador' :
                                usuario.rol === 'coordinador' ? 'Coordinador' :
-                               usuario.rol === 'rector' ? 'Rector' : usuario.rol}
+                               usuario.rol === 'rector' ? 'Rector' : 
+                               usuario.rol === 'acudiente' ? 'Acudiente' : usuario.rol}
                             </span>
                           </td>
-                          <td className="text-center py-4 px-4 text-slate-600 font-medium">
-                            {usuario.documento || 'N/A'}
+                          <td className="text-center py-4 px-4 text-slate-600">
+                            <span className="text-sm font-medium">
+                              {instUsuario?.nombre?.slice(0, 20) || 'Sin asignar'}
+                              {(instUsuario?.nombre?.length || 0) > 20 ? '...' : ''}
+                            </span>
                           </td>
                           <td className="text-center py-4 px-4">
-                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                            {deptoUsuario ? (
+                              <span className="text-sm font-medium text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg">
+                                {deptoUsuario.nombre}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-slate-400">-</span>
+                            )}
+                          </td>
+                          <td className="text-center py-4 px-4">
+                            <span className={`px-3 py-1.5 rounded-full text-xs font-semibold inline-flex items-center gap-1.5 ${
                               usuario.activo ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
                             }`}>
+                              <span className={`w-2 h-2 rounded-full ${usuario.activo ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
                               {usuario.activo ? 'Activo' : 'Inactivo'}
                             </span>
                           </td>
@@ -867,97 +1416,37 @@ export default function DashboardAdminPage() {
                             <div className="flex justify-center gap-1">
                               <button 
                                 onClick={() => openEditUsuario(usuario)}
-                                className="p-2 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
+                                className="p-2.5 text-slate-400 hover:text-teal-600 hover:bg-teal-100 rounded-lg transition-all hover:scale-105"
+                                title="Editar usuario"
                               >
                                 <IconEdit size={18} />
                               </button>
                               <button 
                                 onClick={() => handleDeleteUsuario(usuario.id)}
-                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                className="p-2.5 text-slate-400 hover:text-red-600 hover:bg-red-100 rounded-lg transition-all hover:scale-105"
+                                title="Eliminar usuario"
                               >
                                 <IconTrash size={18} />
                               </button>
                             </div>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
-              </div>
-            )}
-
-            {/* Tab: Categorías */}
-            {activeTab === 'categorias' && (
-              <div className="space-y-5">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-slate-800">Categorías de Tareas</h3>
-                  <Button
-                    onClick={() => {
-                      setEditingCategoria(null);
-                      resetFormCategoria();
-                      setModalCategoria(true);
-                    }}
-                    className="flex items-center gap-2"
-                  >
-                    <IconPlus size={16} />
-                    Nueva Categoría
-                  </Button>
-                </div>
-
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {categorias.map(cat => (
-                    <div 
-                      key={cat.id} 
-                      className="group bg-white border-2 rounded-xl p-5 hover:shadow-lg transition-all duration-300"
-                      style={{ borderColor: cat.color + '40' }}
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          <div 
-                            className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl shadow-md"
-                            style={{ backgroundColor: cat.color + '20' }}
-                          >
-                            {cat.icono}
-                          </div>
-                          <div>
-                            <div className="font-bold text-slate-800">{cat.nombre}</div>
-                            <div 
-                              className="text-xs font-medium px-2 py-0.5 rounded-full mt-1 inline-block"
-                              style={{ 
-                                backgroundColor: cat.color + '20',
-                                color: cat.color
-                              }}
-                            >
-                              {cat.color}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => openEditCategoria(cat)}
-                            className="p-2 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
-                          >
-                            <IconEdit size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteCategoria(cat.id)}
-                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          >
-                            <IconTrash size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                )}
               </div>
             )}
 
             {/* Tab: Reportes */}
             {activeTab === 'reportes' && (
               <div className="space-y-6">
-                <h3 className="text-lg font-bold text-slate-800">Exportar Reportes</h3>
+                <div>
+                  <h3 className="text-xl font-bold text-slate-800">Exportar Reportes</h3>
+                  <p className="text-sm text-slate-500 mt-1">Descarga reportes en formato Excel o PDF</p>
+                </div>
                 
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {/* Reporte de Instituciones */}
@@ -1210,44 +1699,12 @@ export default function DashboardAdminPage() {
             {/* Tab: Configuración */}
             {activeTab === 'configuracion' && (
               <div className="space-y-6">
-                <h3 className="text-lg font-bold text-slate-800">Configuración del Sistema</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-slate-800">Configuración del Sistema</h3>
+                </div>
                 
+                {/* Período académico y Grados en la primera fila */}
                 <div className="grid md:grid-cols-2 gap-6">
-                  {/* Categorías */}
-                  <div className="border border-slate-200 rounded-xl overflow-hidden">
-                    <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50">
-                      <h4 className="font-semibold text-slate-800 flex items-center gap-2">
-                        <IconClipboard className="text-slate-500" size={18} />
-                        Categorías de Tareas
-                      </h4>
-                    </div>
-                    <div className="p-4 space-y-2">
-                      {[
-                        { nombre: 'Comunicación', color: '#3B82F6' },
-                        { nombre: 'Tiempo en Familia', color: '#10B981' },
-                        { nombre: 'Valores', color: '#F59E0B' },
-                        { nombre: 'Responsabilidades', color: '#8B5CF6' },
-                        { nombre: 'Bienestar', color: '#EC4899' },
-                      ].map(cat => (
-                        <div key={cat.nombre} className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition-colors">
-                          <div className="flex items-center gap-3">
-                            <div className="w-4 h-4 rounded-full shadow-inner" style={{ backgroundColor: cat.color }} />
-                            <span className="font-medium text-slate-700">{cat.nombre}</span>
-                          </div>
-                          <button className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors">
-                            <IconEdit size={16} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="px-4 pb-4">
-                      <Button variant="ghost" size="sm" className="flex items-center gap-1.5">
-                        <IconPlus size={14} />
-                        Agregar categoría
-                      </Button>
-                    </div>
-                  </div>
-                  
                   {/* Período académico */}
                   <div className="border border-slate-200 rounded-xl overflow-hidden">
                     <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
@@ -1609,7 +2066,7 @@ export default function DashboardAdminPage() {
         onClose={() => {
           setModalUsuario(false);
           setEditingUsuario(null);
-          setFormUsuario({ nombre: '', apellidos: '', correo: '', telefono: '', documento: '', tipoDocumento: 'cc', rol: 'docente_aula', institucionId: 1 });
+          setFormUsuario({ nombre: '', apellidos: '', correo: '', telefono: '', documento: '', tipoDocumento: 'cc', contrasena: '', rol: 'docente_aula', institucionId: 1 });
           setError(null);
         }}
         title={editingUsuario ? 'Editar Usuario' : 'Nuevo Usuario'}
@@ -1659,6 +2116,18 @@ export default function DashboardAdminPage() {
             />
           </div>
 
+          {(formUsuario.rol === 'rector' || formUsuario.rol === 'coordinador') && (
+            <FormFieldInput
+              name="contrasena"
+              label="Contraseña"
+              type="password"
+              placeholder="Mínimo 8 caracteres, mayúscula, minúscula, número y símbolo"
+              value={formUsuario.contrasena}
+              onChange={(e) => setFormUsuario({ ...formUsuario, contrasena: e.target.value })}
+              required
+            />
+          )}
+
           <FormFieldInput
             name="correo"
             label="Correo electrónico"
@@ -1671,11 +2140,47 @@ export default function DashboardAdminPage() {
           
           <FormFieldInput
             name="telefono"
-            label="Teléfono"
+            label={`Teléfono${(formUsuario.rol === 'rector' || formUsuario.rol === 'coordinador') ? ' (requerido, 10 dígitos)' : ''}`}
             placeholder="3001234567"
             value={formUsuario.telefono}
             onChange={(e) => setFormUsuario({ ...formUsuario, telefono: e.target.value })}
+            required={formUsuario.rol === 'rector' || formUsuario.rol === 'coordinador'}
           />
+          
+          {/* Campo de contraseña - solo visible para rector y coordinador */}
+          {(formUsuario.rol === 'rector' || formUsuario.rol === 'coordinador') && (
+            <FormFieldInput
+              name="contrasena"
+              label="Contraseña inicial"
+              type="password"
+              placeholder="Mínimo 8 caracteres, incluir mayúscula, minúscula, número y símbolo"
+              value={formUsuario.contrasena}
+              onChange={(e) => setFormUsuario({ ...formUsuario, contrasena: e.target.value })}
+              required
+            />
+          )}
+          
+          {/* Mensaje informativo sobre contraseña */}
+          {(formUsuario.rol === 'rector' || formUsuario.rol === 'coordinador') && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+              <div className="flex items-start gap-2">
+                <svg className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                <div>
+                  <p className="text-sm font-medium text-amber-800">Requisitos de contraseña:</p>
+                  <ul className="text-xs text-amber-700 mt-1 space-y-0.5">
+                    <li>• Mínimo 8 caracteres</li>
+                    <li>• Al menos 1 letra minúscula</li>
+                    <li>• Al menos 1 letra mayúscula</li>
+                    <li>• Al menos 1 número</li>
+                    <li>• Al menos 1 carácter especial (!@#$%^&*)</li>
+                  </ul>
+                  <p className="text-xs text-amber-600 mt-2 font-medium">El usuario deberá cambiar esta contraseña en su primer inicio de sesión.</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -1699,25 +2204,18 @@ export default function DashboardAdminPage() {
                 value={formUsuario.institucionId}
                 onChange={(e) => setFormUsuario({ ...formUsuario, institucionId: parseInt(e.target.value) })}
               >
-                {/* HU-03 Criterio #2: Filtrar instituciones sin rector activo cuando el rol es rector */}
-                {(bypassValidations ? instituciones : (formUsuario.rol === 'rector' 
-                  ? instituciones.filter(inst => {
-                      // Buscar si hay un rector activo para esta institución
-                      const tieneRectorActivo = usuarios.some(
-                        u => u.rol === 'rector' && u.institucionId === inst.id && u.activo
-                      );
-                      // Mostrar si no tiene rector, o si estamos editando el mismo rector
-                      return !tieneRectorActivo || (editingUsuario?.id && editingUsuario?.institucionId === inst.id);
-                    })
-                  : instituciones
-                )).map(inst => (
-                  <option key={inst.id} value={inst.id}>{inst.nombre}</option>
-                ))}
+                {/* Mostrar todas las instituciones - el filtro de rectores se habilitará cuando el backend tenga /usuarios */}
+                {instituciones.length === 0 ? (
+                  <option value="">No hay instituciones disponibles</option>
+                ) : (
+                  instituciones.map(inst => (
+                    <option key={inst.id} value={inst.id}>{inst.nombre}</option>
+                  ))
+                )}
               </select>
-              {/* Mensaje informativo cuando el rol es rector */}
-              {formUsuario.rol === 'rector' && (
-                <p className="text-xs text-amber-600 mt-1">
-                  ⚠️ Solo se muestran instituciones sin rector activo asignado
+              {(formUsuario.rol === 'rector' || formUsuario.rol === 'coordinador') && (
+                <p className="text-xs text-teal-600 mt-1">
+                  ℹ️ Se creará con contraseña temporal que deberá cambiar en su primer inicio de sesión
                 </p>
               )}
             </div>
@@ -1727,7 +2225,7 @@ export default function DashboardAdminPage() {
             <Button variant="ghost" onClick={() => {
               setModalUsuario(false);
               setEditingUsuario(null);
-              setFormUsuario({ nombre: '', apellidos: '', correo: '', telefono: '', documento: '', tipoDocumento: 'cc', rol: 'docente_aula', institucionId: 1 });
+              setFormUsuario({ nombre: '', apellidos: '', correo: '', telefono: '', documento: '', tipoDocumento: 'cc', contrasena: '', rol: 'docente_aula', institucionId: 1 });
               setError(null);
             }}>
               Cancelar
@@ -1979,61 +2477,6 @@ export default function DashboardAdminPage() {
             </Button>
             <Button onClick={editingCurso ? handleUpdateCurso : handleCreateCurso}>
               {editingCurso ? 'Actualizar' : 'Crear'} Curso
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Modal Nuevo/Editar Categoría */}
-      <Modal isOpen={modalCategoria} onClose={() => { setModalCategoria(false); resetFormCategoria(); }}>
-        <div className="space-y-6">
-          <h2 className="text-2xl font-bold text-gray-900">
-            {editingCategoria ? 'Editar Categoría' : 'Nueva Categoría'}
-          </h2>
-          <FormFieldInput
-            label="Nombre de la Categoría"
-            name="nombre"
-            value={formCategoria.nombre}
-            onChange={(e) => setFormCategoria({ ...formCategoria, nombre: e.target.value })}
-            placeholder="Ej: Evaluaciones, Tareas, Proyectos"
-          />
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700">Color</label>
-            <div className="flex items-center gap-3">
-              <input
-                type="color"
-                value={formCategoria.color}
-                onChange={(e) => setFormCategoria({ ...formCategoria, color: e.target.value })}
-                className="w-16 h-10 rounded border border-gray-300 cursor-pointer"
-              />
-              <span className="text-sm text-gray-600 font-mono">{formCategoria.color}</span>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700">Icono</label>
-            <div className="grid grid-cols-8 gap-2">
-              {['📚', '✏️', '📝', '📊', '🎯', '💡', '🔬', '🎨', '📖', '🏆', '⭐', '✅', '📌', '🔔', '📅', '🎓'].map((icon) => (
-                <button
-                  key={icon}
-                  type="button"
-                  onClick={() => setFormCategoria({ ...formCategoria, icono: icon })}
-                  className={`text-2xl p-3 rounded-lg border-2 transition-all hover:scale-110 ${
-                    formCategoria.icono === icon
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  {icon}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="flex justify-end gap-3 mt-6">
-            <Button variant="ghost" onClick={() => { setModalCategoria(false); resetFormCategoria(); }}>
-              Cancelar
-            </Button>
-            <Button onClick={editingCategoria ? handleUpdateCategoria : handleCreateCategoria}>
-              {editingCategoria ? 'Actualizar' : 'Crear'} Categoría
             </Button>
           </div>
         </div>

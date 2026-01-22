@@ -51,10 +51,10 @@ export default function DashboardSupervisorPage() {
         getEstadisticasInstitucion(1),
       ]);
 
-      setCursos(cursosData);
-      setTareas(tareasData);
-      setEntregas(entregasData);
-      setEstadisticas(statsData);
+      setCursos(Array.isArray(cursosData) ? cursosData : []);
+      setTareas(Array.isArray(tareasData) ? tareasData : []);
+      setEntregas(Array.isArray(entregasData) ? entregasData : []);
+      setEstadisticas(statsData || null);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {

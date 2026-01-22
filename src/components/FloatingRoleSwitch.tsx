@@ -1,11 +1,22 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useToast } from './ToastProvider'
+import { getSession } from '../api/endpoints'
 
 export default function FloatingRoleSwitch(){
   const [open, setOpen] = useState(false)
   const navigate = useNavigate()
   const toast = useToast()
+  
+  // Obtener sesión para verificar si es admin
+  const session = getSession()
+  const userRol = session?.user?.rol
+  const isAdmin = userRol === 'admin' || userRol === 'admin_sistema'
+  
+  // No mostrar el botón flotante si es admin
+  if (isAdmin) {
+    return null
+  }
 
   function go(role:string){
     localStorage.setItem('previewRole', role)

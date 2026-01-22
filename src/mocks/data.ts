@@ -149,16 +149,19 @@ export interface Institucion {
   correo?: string;
   direccion?: string;
   naturaleza: 'publica' | 'privada' | 'mixta';
-  municipio_id: number;
+  municipio_id?: number;
+  // Campos extendidos para mostrar info completa
+  municipio?: string; // Nombre del municipio
+  departamento?: string; // Nombre del departamento
   codigo_dane?: string;
   nit?: string;
   resolucion_aprobacion?: string;
-  niveles_educativos: string[];
-  modalidad: string;
-  jornadas: string[];
-  telefono_principal: string;
+  niveles_educativos?: string[];
+  modalidad?: string;
+  jornadas?: string[];
+  telefono_principal?: string;
   telefono_secretaria?: string;
-  correo_institucional: string;
+  correo_institucional?: string;
   correo_rectoria?: string;
   sitio_web?: string;
   direccion_completa?: string;
@@ -168,7 +171,7 @@ export interface Institucion {
   capacidad_estudiantes?: number;
   ano_fundacion?: number;
   enfoque_pedagogico?: string;
-  confesional: boolean;
+  confesional?: boolean;
   religion?: string;
   rector_nombre?: string;
   rector_documento?: string;
@@ -178,6 +181,7 @@ export interface Institucion {
   creado_en?: string;
   actualizado_en?: string;
   eliminado_en?: string;
+  createdAt?: string; // Alias
 }
 
 export interface Notificacion {
@@ -276,8 +280,8 @@ export const usuariosMock: Record<string, Usuario> = {
     id: 6, 
     nombre: "Admin", 
     apellidos: "Sistema",
-    correo: "admin@admin.com", 
-    rol: "admin",
+    correo: "admin@educacionpopayan.gov.co", 
+    rol: "admin_sistema",
     telefono: "3100000000",
     documento: "0000000000",
     tipoDocumento: "cedula",

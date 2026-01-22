@@ -1,32 +1,32 @@
 import { useState, useEffect } from 'react';
-import { getSession, getEstadisticasRector, getInstituciones, getUsuarios, getCursos, getTareas } from '../api/endpoints';
+import { useNavigate } from 'react-router-dom';
+import { getSession, getEstadisticasRector, getInstituciones, getUsuarios, getMiInstitucion, getInstitucionById } from '../api/endpoints';
 import { type Usuario, type Institucion } from '../mocks/data';
 import DashboardLayout from '../components/DashboardLayout';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { exportToExcel, exportToPDF, exportEstadisticasToPDF } from '../utils/exportUtils';
 import {
   IconUsers,
-  IconClipboard,
-  IconBook,
-  IconCheckCircle,
-  IconClock,
   IconTrendingUp,
   IconDownload,
-  IconEye,
-  IconInstitution
+  IconInstitution,
+  IconShield,
+  IconBarChart,
+  IconArrowRight,
+  IconBook,
+  IconGraduationCap
 } from '../components/ui/Icons';
 
 export default function DashboardRectorPage() {
   const session = getSession();
   const user = session?.user;
+  const navigate = useNavigate();
   
   const [loading, setLoading] = useState(true);
   const [estadisticas, setEstadisticas] = useState<any>(null);
   const [instituciones, setInstituciones] = useState<Institucion[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
-  const [cursos, setCursos] = useState<any[]>([]);
-  const [tareas, setTareas] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'instituciones' | 'usuarios' | 'reportes'>('overview');
+  const [miInstitucion, setMiInstitucion] = useState<Institucion | null>(null);
 
   useEffect(() => {
     loadData();
@@ -35,19 +35,36 @@ export default function DashboardRectorPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [estadisticasData, institucionesData, usuariosData, cursosData, tareasData] = await Promise.all([
+      // Cargar la institución del rector primero
+      let institucionRector: Institucion | null = null;
+      
+      if (user?.institucionId) {
+        institucionRector = await getMiInstitucion();
+        if (!institucionRector) {
+          institucionRector = await getInstitucionById(user.institucionId);
+        }
+        setMiInstitucion(institucionRector);
+      }
+
+      const [estadisticasData, institucionesData, usuariosData] = await Promise.all([
         getEstadisticasRector(),
         getInstituciones(),
-        getUsuarios(),
-        getCursos(),
-        getTareas()
+        getUsuarios()
       ]);
 
-      setEstadisticas(estadisticasData);
-      setInstituciones(institucionesData);
-      setUsuarios(usuariosData);
-      setCursos(cursosData);
-      setTareas(tareasData);
+      setEstadisticas(estadisticasData || null);
+      
+      // Si el rector tiene institución asignada, filtrar solo esa
+      if (institucionRector) {
+        setInstituciones([institucionRector]);
+        // Filtrar usuarios solo de la institución del rector
+        const usuariosFiltrados = (Array.isArray(usuariosData) ? usuariosData : []).filter((u: Usuario) => u.institucionId === institucionRector!.id);
+        setUsuarios(usuariosFiltrados);
+      } else {
+        // Si no tiene institución (admin viendo como rector), mostrar todas
+        setInstituciones(Array.isArray(institucionesData) ? institucionesData : []);
+        setUsuarios(Array.isArray(usuariosData) ? usuariosData : []);
+      }
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -58,537 +75,354 @@ export default function DashboardRectorPage() {
   if (loading) {
     return (
       <DashboardLayout>
-        <div className="flex justify-center items-center min-h-96">
-          <LoadingSpinner />
+        <div className="flex flex-col items-center justify-center h-64 gap-4">
+          <LoadingSpinner size="lg" />
+          <p className="text-slate-500 animate-pulse">Cargando panel de rectoría...</p>
         </div>
       </DashboardLayout>
     );
   }
 
+  // Estadísticas - Ahora usando datos del backend
   const stats = {
     totalInstituciones: instituciones.length,
-    totalUsuarios: usuarios.length,
-    totalDocentes: usuarios.filter(u => u.rol === 'docente_aula').length,
-    totalAcudientes: usuarios.filter(u => u.rol === 'acudiente').length,
-    totalCursos: cursos.length,
-    totalTareas: tareas.length,
-    tareasCompletadas: tareas.filter(t => t.estado === 'completada').length,
-    participacionPromedio: Math.round((tareas.filter(t => t.estado === 'completada').length / Math.max(tareas.length, 1)) * 100)
+    institucionesActivas: instituciones.filter(i => i.activo).length,
+    
+    // Personal directivo (datos del backend)
+    totalCoordinadores: estadisticas?.totalCoordinadores ?? usuarios.filter(u => u.rol === 'coordinador').length,
+    coordinadoresActivos: estadisticas?.coordinadoresActivos ?? usuarios.filter(u => u.rol === 'coordinador' && u.activo).length,
+    totalOrientadores: estadisticas?.totalOrientadores ?? usuarios.filter(u => u.rol === 'orientador').length,
+    orientadoresActivos: estadisticas?.orientadoresActivos ?? usuarios.filter(u => u.rol === 'orientador' && u.activo).length,
+    totalDocentes: estadisticas?.totalDocentes ?? usuarios.filter(u => u.rol === 'docente_aula').length,
+    docentesActivos: estadisticas?.docentesActivos ?? usuarios.filter(u => u.rol === 'docente_aula' && u.activo).length,
+    
+    // Académicos (nuevos del backend)
+    totalCursos: estadisticas?.totalCursos ?? 0,
+    totalEstudiantes: estadisticas?.totalEstudiantes ?? 0,
+    
+    // Totales calculados
+    totalDirectivos: (estadisticas?.totalCoordinadores ?? 0) + (estadisticas?.totalOrientadores ?? 0) || 
+                     usuarios.filter(u => ['coordinador', 'orientador'].includes(u.rol)).length,
+    directivosActivos: (estadisticas?.coordinadoresActivos ?? 0) + (estadisticas?.orientadoresActivos ?? 0) ||
+                       usuarios.filter(u => ['coordinador', 'orientador'].includes(u.rol) && u.activo).length,
+    
+    tasaActivacion: estadisticas?.tasaActivacion ?? (
+      usuarios.filter(u => ['coordinador', 'orientador'].includes(u.rol)).length > 0 
+        ? Math.round((usuarios.filter(u => ['coordinador', 'orientador'].includes(u.rol) && u.activo).length / 
+                     usuarios.filter(u => ['coordinador', 'orientador'].includes(u.rol)).length) * 100) 
+        : 0
+    ),
   };
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-8 text-white">
-          <div className="flex flex-col md:flex-row md:items-center justify-between">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-display font-bold">
-                Bienvenido, <span className="text-indigo-200">Rector {user?.nombre}</span>
-              </h1>
-              <p className="text-indigo-100 mt-1">
-                Panel de control global del sistema educativo
-              </p>
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header con diseño distintivo de Rectoría */}
+        <div className="relative overflow-hidden bg-gradient-to-br from-indigo-900 via-purple-800 to-indigo-900 rounded-2xl p-8 text-white shadow-xl">
+          {/* Decorative elements */}
+          <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-purple-500/20 to-transparent rounded-full -translate-y-1/2 translate-x-1/3" />
+          <div className="absolute bottom-0 left-0 w-64 h-64 bg-gradient-to-tr from-indigo-500/15 to-transparent rounded-full translate-y-1/2 -translate-x-1/3" />
+          <div className="absolute top-1/2 left-1/2 w-32 h-32 bg-gradient-to-tr from-pink-500/10 to-transparent rounded-full -translate-x-1/2 -translate-y-1/2" />
+          
+          <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+            <div className="flex items-center gap-5">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-400 to-indigo-500 flex items-center justify-center shadow-lg shadow-purple-500/40 ring-4 ring-white/10">
+                <IconShield className="text-white" size={32} />
+              </div>
+              <div>
+                <p className="text-purple-300 text-sm font-semibold uppercase tracking-wider mb-1">
+                  Panel de Rectoría
+                </p>
+                <h1 className="text-2xl md:text-3xl font-display font-bold">
+                  Bienvenido, {user?.nombre}
+                </h1>
+                <p className="text-indigo-200 mt-1">
+                  {miInstitucion ? (
+                    <>
+                      <span className="font-semibold">{miInstitucion.nombre}</span>
+                      {miInstitucion.municipio && <span className="text-indigo-300"> • {miInstitucion.municipio}</span>}
+                    </>
+                  ) : (
+                    'Gestión estratégica de directivos e instituciones'
+                  )}
+                </p>
+              </div>
             </div>
             
-            <div className="flex gap-2 mt-4 md:mt-0">
-              <button
+            {/* Quick actions */}
+            <div className="flex gap-3">
+              <button 
+                onClick={() => navigate('/directivos')}
+                className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-medium transition-all flex items-center gap-2 backdrop-blur-sm border border-white/10"
+              >
+                <IconUsers size={18} />
+                Ver Directivos
+              </button>
+              <button 
                 onClick={() => exportEstadisticasToPDF(
                   stats,
-                  `Estadisticas_Sistema_${new Date().toISOString().split('T')[0]}`,
-                  'Estadísticas Globales del Sistema'
+                  `Reporte_Rectoria_${new Date().toISOString().split('T')[0]}`,
+                  'Reporte Ejecutivo - Rectoría'
                 )}
-                className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors flex items-center gap-2"
+                className="px-4 py-2.5 bg-purple-500/50 hover:bg-purple-500/70 text-white rounded-xl font-medium transition-all flex items-center gap-2 backdrop-blur-sm border border-purple-400/30"
               >
-                <IconDownload size={16} />
-                Exportar PDF
+                <IconDownload size={18} />
+                Reporte Ejecutivo
               </button>
             </div>
           </div>
         </div>
 
-        {/* Estadísticas principales */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-2xl shadow-sm p-5 border border-slate-100">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
+        {/* Stats principales - Solo directivos */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="group bg-white rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300 p-6 border border-slate-100 hover:border-indigo-300">
+            <div className="flex items-start justify-between mb-4">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-200/50 group-hover:scale-110 transition-transform">
                 <IconInstitution className="text-white" size={22} />
               </div>
-              <div>
-                <div className="text-2xl font-bold text-slate-800">{stats.totalInstituciones}</div>
-                <div className="text-sm text-slate-500 font-medium">Instituciones</div>
+              <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-full">
+                {stats.institucionesActivas} activas
+              </span>
+            </div>
+            <div className="text-3xl font-bold text-slate-800 mb-1">{stats.totalInstituciones}</div>
+            <div className="text-sm text-slate-500 font-medium">Instituciones</div>
+          </div>
+          
+          <div className="group bg-white rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300 p-6 border border-slate-100 hover:border-purple-300 cursor-pointer" onClick={() => navigate('/directivos')}>
+            <div className="flex items-start justify-between mb-4">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center shadow-lg shadow-purple-200/50 group-hover:scale-110 transition-transform">
+                <IconShield className="text-white" size={22} />
+              </div>
+              <span className="text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-1 rounded-full">
+                {stats.totalCoordinadores} coord.
+              </span>
+            </div>
+            <div className="text-3xl font-bold text-slate-800 mb-1">{stats.totalDirectivos}</div>
+            <div className="text-sm text-slate-500 font-medium">Directivos Totales</div>
+          </div>
+          
+          <div className="group bg-white rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300 p-6 border border-slate-100 hover:border-teal-300">
+            <div className="flex items-start justify-between mb-4">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center shadow-lg shadow-teal-200/50 group-hover:scale-110 transition-transform">
+                <IconUsers className="text-white" size={22} />
+              </div>
+              <span className="text-xs font-semibold text-teal-600 bg-teal-50 px-2 py-1 rounded-full">
+                {stats.totalOrientadores} orient.
+              </span>
+            </div>
+            <div className="text-3xl font-bold text-slate-800 mb-1">{stats.directivosActivos}</div>
+            <div className="text-sm text-slate-500 font-medium">Directivos Activos</div>
+          </div>
+          
+          <div className="group bg-white rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300 p-6 border border-slate-100 hover:border-emerald-300">
+            <div className="flex items-start justify-between mb-4">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-200/50 group-hover:scale-110 transition-transform">
+                <IconTrendingUp className="text-white" size={22} />
               </div>
             </div>
+            <div className="text-3xl font-bold text-slate-800 mb-1">{stats.tasaActivacion}%</div>
+            <div className="text-sm text-slate-500 font-medium">Tasa Activación</div>
           </div>
+        </div>
 
-          <div className="bg-white rounded-2xl shadow-sm p-5 border border-slate-100">
+        {/* Stats secundarios - Docentes, Cursos y Estudiantes */}
+        <div className="grid grid-cols-3 gap-4">
+          <div className="group bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-2xl p-5 border border-orange-200 hover:shadow-lg transition-all">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center shadow-lg shadow-orange-200/50">
                 <IconUsers className="text-white" size={22} />
               </div>
               <div>
-                <div className="text-2xl font-bold text-slate-800">{stats.totalUsuarios}</div>
-                <div className="text-sm text-slate-500 font-medium">Usuarios Total</div>
+                <div className="text-2xl font-bold text-slate-800">{stats.totalDocentes}</div>
+                <div className="text-sm text-slate-500 font-medium">Docentes</div>
+              </div>
+              <div className="ml-auto text-xs font-semibold text-orange-600 bg-white/60 px-2 py-1 rounded-full">
+                {stats.docentesActivos} activos
               </div>
             </div>
           </div>
-
-          <div className="bg-white rounded-2xl shadow-sm p-5 border border-slate-100">
+          
+          <div className="group bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-2xl p-5 border border-blue-200 hover:shadow-lg transition-all">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-200/50">
                 <IconBook className="text-white" size={22} />
               </div>
               <div>
                 <div className="text-2xl font-bold text-slate-800">{stats.totalCursos}</div>
-                <div className="text-sm text-slate-500 font-medium">Cursos Activos</div>
+                <div className="text-sm text-slate-500 font-medium">Cursos</div>
               </div>
             </div>
           </div>
-
-          <div className="bg-white rounded-2xl shadow-sm p-5 border border-slate-100">
+          
+          <div className="group bg-gradient-to-br from-pink-50 to-pink-100/50 rounded-2xl p-5 border border-pink-200 hover:shadow-lg transition-all">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center">
-                <IconTrendingUp className="text-white" size={22} />
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-pink-400 to-pink-600 flex items-center justify-center shadow-lg shadow-pink-200/50">
+                <IconGraduationCap className="text-white" size={22} />
               </div>
               <div>
-                <div className="text-2xl font-bold text-slate-800">{stats.participacionPromedio}%</div>
-                <div className="text-sm text-slate-500 font-medium">Participación</div>
+                <div className="text-2xl font-bold text-slate-800">{stats.totalEstudiantes}</div>
+                <div className="text-sm text-slate-500 font-medium">Estudiantes</div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-          <div className="border-b border-slate-100 bg-slate-50/50">
-            <nav className="flex gap-1 p-1.5">
-              {[
-                { id: 'overview', label: 'Resumen', Icon: IconTrendingUp },
-                { id: 'instituciones', label: 'Instituciones', Icon: IconInstitution },
-                { id: 'usuarios', label: 'Usuarios', Icon: IconUsers },
-                { id: 'reportes', label: 'Reportes', Icon: IconDownload },
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                  className={`flex items-center gap-2 px-5 py-3 rounded-xl font-medium transition-all duration-200 ${
-                    activeTab === tab.id
-                      ? 'bg-white text-indigo-700 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-800 hover:bg-white/50'
-                  }`}
-                >
-                  <tab.Icon size={18} />
-                  {tab.label}
-                </button>
-              ))}
-            </nav>
+        {/* Accesos rápidos */}
+        <div className="grid md:grid-cols-3 gap-6">
+          {/* Panel de Directivos */}
+          <div 
+            onClick={() => navigate('/directivos')}
+            className="bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-2xl p-6 border border-purple-200 hover:shadow-lg transition-all cursor-pointer group"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 bg-purple-500 rounded-xl">
+                <IconShield className="text-white" size={24} />
+              </div>
+              <IconArrowRight className="text-purple-400 group-hover:translate-x-1 transition-transform" size={20} />
+            </div>
+            <h3 className="font-bold text-gray-800 text-lg mb-2">Gestión de Directivos</h3>
+            <p className="text-sm text-gray-600 mb-4">Administra coordinadores y orientadores de tu institución</p>
+            <div className="flex gap-4 text-sm">
+              <div className="bg-white/60 rounded-lg px-3 py-2">
+                <span className="font-bold text-purple-600">{stats.totalCoordinadores}</span>
+                <span className="text-gray-500 ml-1">Coordinadores</span>
+              </div>
+              <div className="bg-white/60 rounded-lg px-3 py-2">
+                <span className="font-bold text-teal-600">{stats.totalOrientadores}</span>
+                <span className="text-gray-500 ml-1">Orientadores</span>
+              </div>
+            </div>
           </div>
 
-          <div className="p-6">
-            {/* Tab: Overview */}
-            {activeTab === 'overview' && (
-              <div className="space-y-6">
-                <h3 className="text-lg font-bold text-slate-800">Resumen del Sistema</h3>
-                
-                <div className="grid md:grid-cols-2 gap-6">
-                  {/* Distribución por rol */}
-                  <div className="bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-xl p-6 border border-slate-200">
-                    <h4 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                      <IconUsers size={18} />
-                      Distribución de Usuarios
-                    </h4>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600">Docentes</span>
-                        <div className="flex items-center gap-2">
-                          <div className="w-24 h-2 bg-gray-200 rounded-full">
-                            <div 
-                              className="h-2 bg-blue-500 rounded-full" 
-                              style={{ width: `${(stats.totalDocentes / stats.totalUsuarios) * 100}%` }}
-                            />
-                          </div>
-                          <span className="text-sm font-medium w-8">{stats.totalDocentes}</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600">Acudientes</span>
-                        <div className="flex items-center gap-2">
-                          <div className="w-24 h-2 bg-gray-200 rounded-full">
-                            <div 
-                              className="h-2 bg-green-500 rounded-full" 
-                              style={{ width: `${(stats.totalAcudientes / stats.totalUsuarios) * 100}%` }}
-                            />
-                          </div>
-                          <span className="text-sm font-medium w-8">{stats.totalAcudientes}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Estado de tareas */}
-                  <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 rounded-xl p-6 border border-emerald-200">
-                    <h4 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                      <IconClipboard size={18} />
-                      Estado de Tareas
-                    </h4>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600">Completadas</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg font-bold text-emerald-600">{stats.tareasCompletadas}</span>
-                          <IconCheckCircle className="text-emerald-500" size={16} />
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600">Pendientes</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg font-bold text-amber-600">{stats.totalTareas - stats.tareasCompletadas}</span>
-                          <IconClock className="text-amber-500" size={16} />
-                        </div>
-                      </div>
-                      <div className="pt-2 border-t border-emerald-200">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium text-gray-700">Total</span>
-                          <span className="text-xl font-bold text-gray-800">{stats.totalTareas}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+          {/* Panel de Reportes */}
+          <div 
+            className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-2xl p-6 border border-blue-200 hover:shadow-lg transition-all cursor-pointer group"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 bg-blue-500 rounded-xl">
+                <IconBarChart className="text-white" size={24} />
               </div>
-            )}
+            </div>
+            <h3 className="font-bold text-gray-800 text-lg mb-2">Reportes Ejecutivos</h3>
+            <p className="text-sm text-gray-600 mb-4">Genera informes de gestión institucional</p>
+            <div className="flex gap-2">
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  exportEstadisticasToPDF(stats, 'Reporte_Ejecutivo', 'Reporte Ejecutivo de Rectoría');
+                }}
+                className="bg-blue-500 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-600 transition-colors flex items-center gap-1"
+              >
+                <IconDownload size={14} />
+                PDF
+              </button>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const data = instituciones.map(inst => ({
+                    'Institución': inst.nombre,
+                    'Código DANE': inst.codigo_dane || '-',
+                    'Coordinadores': usuarios.filter(u => u.institucionId === inst.id && u.rol === 'coordinador').length,
+                    'Orientadores': usuarios.filter(u => u.institucionId === inst.id && u.rol === 'orientador').length,
+                    'Estado': inst.activo ? 'Activa' : 'Inactiva'
+                  }));
+                  exportToExcel(data, 'Reporte_Instituciones', 'Instituciones');
+                }}
+                className="bg-emerald-500 text-white px-3 py-2 rounded-lg text-sm hover:bg-emerald-600 transition-colors flex items-center gap-1"
+              >
+                <IconDownload size={14} />
+                Excel
+              </button>
+            </div>
+          </div>
 
-            {/* Tab: Instituciones */}
-            {activeTab === 'instituciones' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-slate-800">Instituciones Registradas</h3>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        const data = instituciones.map(inst => ({
-                          ID: inst.id,
-                          Nombre: inst.nombre,
-                          'Código DANE': inst.codigo_dane || '-',
-                          Naturaleza: inst.naturaleza,
-                          'Teléfono Principal': inst.telefono_principal,
-                          Estado: inst.activo ? 'Activa' : 'Inactiva'
-                        }));
-                        exportToExcel(data, 'Instituciones_Sistema', 'Instituciones');
-                      }}
-                      className="px-3 py-2 text-sm bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors flex items-center gap-2"
-                    >
-                      <IconDownload size={14} />
-                      Excel
-                    </button>
-                  </div>
-                </div>
+          {/* Panel de Instituciones */}
+          <div 
+            className="bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-2xl p-6 border border-slate-200 hover:shadow-lg transition-all cursor-pointer group"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 bg-slate-600 rounded-xl">
+                <IconInstitution className="text-white" size={24} />
+              </div>
+            </div>
+            <h3 className="font-bold text-gray-800 text-lg mb-2">Instituciones</h3>
+            <p className="text-sm text-gray-600 mb-4">Vista general de instituciones bajo supervisión</p>
+            <div className="bg-white/60 rounded-lg px-3 py-2 text-sm">
+              <span className="font-bold text-slate-600">{stats.institucionesActivas}</span>
+              <span className="text-gray-500 ml-1">de {stats.totalInstituciones} activas</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Listado de Instituciones */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-slate-800 text-lg">Instituciones Bajo Supervisión</h3>
+              <p className="text-sm text-slate-500 mt-1">Vista general de directivos por institución</p>
+            </div>
+            <button
+              onClick={() => {
+                const data = instituciones.map(inst => ({
+                  'Código DANE': inst.codigo_dane || '-',
+                  'Institución': inst.nombre,
+                  'Naturaleza': inst.naturaleza,
+                  'Coordinadores': usuarios.filter(u => u.institucionId === inst.id && u.rol === 'coordinador').length,
+                  'Orientadores': usuarios.filter(u => u.institucionId === inst.id && u.rol === 'orientador').length,
+                  'Estado': inst.activo ? 'Activa' : 'Inactiva'
+                }));
+                exportToExcel(data, 'Instituciones_Rectoria', 'Instituciones');
+              }}
+              className="px-3 py-2 text-sm bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors flex items-center gap-2"
+            >
+              <IconDownload size={14} />
+              Exportar
+            </button>
+          </div>
+          
+          <div className="divide-y divide-slate-100">
+            {instituciones.length === 0 ? (
+              <div className="p-8 text-center text-slate-500">
+                <IconInstitution className="mx-auto mb-3 text-slate-300" size={48} />
+                <p>No hay instituciones registradas</p>
+              </div>
+            ) : (
+              instituciones.map(inst => {
+                const coordinadores = usuarios.filter(u => u.institucionId === inst.id && u.rol === 'coordinador');
+                const orientadores = usuarios.filter(u => u.institucionId === inst.id && u.rol === 'orientador');
                 
-                <div className="grid gap-4">
-                  {instituciones.map(inst => (
-                    <div key={inst.id} className="bg-white border border-slate-200 rounded-xl p-4 hover:shadow-md transition-shadow">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
+                return (
+                  <div key={inst.id} className="p-4 hover:bg-slate-50 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3">
                           <h4 className="font-semibold text-gray-800">{inst.nombre}</h4>
-                          <div className="text-sm text-gray-600 mt-1">
-                            <p>Código DANE: {inst.codigo_dane || 'N/A'}</p>
-                            <p>NIT: {inst.nit || 'N/A'}</p>
-                            <p>Teléfono: {inst.telefono_principal}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className={`px-2 py-1 text-xs rounded-full font-medium ${
-                            inst.naturaleza === 'publica' ? 'bg-blue-100 text-blue-700' :
-                            inst.naturaleza === 'privada' ? 'bg-purple-100 text-purple-700' :
-                            'bg-green-100 text-green-700'
-                          }`}>
-                            {inst.naturaleza}
-                          </span>
-                          <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                          <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
                             inst.activo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                           }`}>
                             {inst.activo ? 'Activa' : 'Inactiva'}
                           </span>
                         </div>
+                        <p className="text-sm text-gray-500 mt-1">Código DANE: {inst.codigo_dane || 'N/A'}</p>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Tab: Usuarios */}
-            {activeTab === 'usuarios' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-slate-800">Gestión de Usuarios</h3>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        const data = usuarios.map(user => ({
-                          ID: user.id,
-                          Nombre: `${user.nombre} ${user.apellidos}`,
-                          Rol: user.rol,
-                          Teléfono: user.telefono || '-',
-                          Estado: user.activo ? 'Activo' : 'Inactivo'
-                        }));
-                        exportToExcel(data, 'Usuarios_Sistema', 'Usuarios');
-                      }}
-                      className="px-3 py-2 text-sm bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors flex items-center gap-2"
-                    >
-                      <IconDownload size={14} />
-                      Exportar
-                    </button>
-                  </div>
-                </div>
-                
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {['admin_sistema', 'docente_aula', 'acudiente', 'coordinador'].map(rol => {
-                    const usuariosRol = usuarios.filter(u => u.rol === rol);
-                    const activos = usuariosRol.filter(u => u.activo).length;
-                    
-                    return (
-                      <div key={rol} className="bg-gradient-to-br from-white to-slate-50 rounded-xl p-5 border border-slate-200">
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="font-semibold text-gray-800 capitalize">{rol.replace('_', ' ')}</h4>
-                          <IconEye size={18} className="text-gray-400" />
+                      <div className="flex items-center gap-6 text-sm">
+                        <div className="text-center">
+                          <div className="font-bold text-purple-600">{coordinadores.length}</div>
+                          <div className="text-gray-500 text-xs">Coordinadores</div>
                         </div>
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-gray-600">Total</span>
-                            <span className="text-xl font-bold text-gray-800">{usuariosRol.length}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm text-gray-600">Activos</span>
-                            <span className="text-lg font-semibold text-green-600">{activos}</span>
-                          </div>
-                          <div className="w-full h-2 bg-gray-200 rounded-full">
-                            <div 
-                              className="h-2 bg-green-500 rounded-full transition-all duration-300" 
-                              style={{ width: `${usuariosRol.length ? (activos / usuariosRol.length) * 100 : 0}%` }}
-                            />
-                          </div>
+                        <div className="text-center">
+                          <div className="font-bold text-teal-600">{orientadores.length}</div>
+                          <div className="text-gray-500 text-xs">Orientadores</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="font-bold text-slate-700">{coordinadores.length + orientadores.length}</div>
+                          <div className="text-gray-500 text-xs">Total</div>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Tab: Reportes */}
-            {activeTab === 'reportes' && (
-              <div className="space-y-6">
-                <h3 className="text-lg font-bold text-slate-800">Centro de Reportes</h3>
-                
-                <div className="grid md:grid-cols-2 gap-6">
-                  {/* Reporte de Participación Detallado */}
-                  <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl p-6 border border-blue-200">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="p-2 bg-blue-500 rounded-lg">
-                        <IconTrendingUp className="text-white" size={20} />
-                      </div>
-                      <h4 className="font-bold text-gray-800">Estadísticas de Participación</h4>
-                    </div>
-                    <p className="text-sm text-gray-600 mb-4">Análisis completo de participación con métricas avanzadas</p>
-                    
-                    {/* Métricas de participación */}
-                    <div className="space-y-3 mb-4">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">Promedio Global</span>
-                        <span className="text-lg font-bold text-blue-600">{stats.participacionPromedio}%</span>
-                      </div>
-                      <div className="w-full h-2 bg-gray-200 rounded-full">
-                        <div 
-                          className="h-2 bg-blue-500 rounded-full transition-all duration-500"
-                          style={{ width: `${stats.participacionPromedio}%` }}
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-3 text-xs">
-                        <div className="bg-white/50 rounded-lg p-2 text-center">
-                          <div className="font-bold text-green-600">{stats.tareasCompletadas}</div>
-                          <div className="text-gray-600">Completadas</div>
-                        </div>
-                        <div className="bg-white/50 rounded-lg p-2 text-center">
-                          <div className="font-bold text-amber-600">{stats.totalTareas - stats.tareasCompletadas}</div>
-                          <div className="text-gray-600">Pendientes</div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => exportEstadisticasToPDF(
-                          {
-                            'Participación Global': {
-                              'Promedio General': `${stats.participacionPromedio}%`,
-                              'Tareas Completadas': stats.tareasCompletadas,
-                              'Tareas Pendientes': stats.totalTareas - stats.tareasCompletadas,
-                              'Total Tareas': stats.totalTareas
-                            },
-                            'Distribución Institucional': {
-                              'Total Instituciones': stats.totalInstituciones,
-                              'Usuarios Activos': usuarios.filter(u => u.activo).length,
-                              'Cursos Activos': stats.totalCursos
-                            },
-                            'Análisis por Rol': {
-                              'Docentes Activos': stats.totalDocentes,
-                              'Acudientes Registrados': stats.totalAcudientes,
-                              'Coordinadores': usuarios.filter(u => u.rol === 'coordinador').length,
-                              'Administradores': usuarios.filter(u => u.rol === 'admin_sistema').length
-                            },
-                            'Métricas de Calidad': {
-                              'Tasa de Completitud': `${stats.participacionPromedio}%`,
-                              'Instituciones con Alta Participación': instituciones.filter(i => i.activo).length,
-                              'Tendencia': stats.participacionPromedio > 70 ? 'Positiva' : 'Requiere Atención',
-                              'Recomendación': stats.participacionPromedio > 80 ? 'Mantener estrategias actuales' : 'Implementar incentivos adicionales'
-                            }
-                          },
-                          'Estadisticas_Participacion_Rector_Detallado',
-                          'Estadísticas Avanzadas de Participación - Sistema Cátedra de Familia'
-                        )}
-                        className="flex-1 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 text-sm"
-                      >
-                        <IconDownload size={14} />
-                        PDF Avanzado
-                      </button>
-                      <button
-                        onClick={() => {
-                          const participacionDetallada = instituciones.map(inst => {
-                            const usuariosInst = usuarios.filter(u => u.institucionId === inst.id);
-                            const tareasInst = tareas.filter(t => usuariosInst.some(u => u.id === t.docenteId));
-                            const completadasInst = tareasInst.filter(t => t.estado === 'completada').length;
-                            const participacionInst = tareasInst.length > 0 ? Math.round((completadasInst / tareasInst.length) * 100) : 0;
-                            
-                            return {
-                              'Institución': inst.nombre,
-                              'Código DANE': inst.codigo_dane || 'N/A',
-                              'Naturaleza': inst.naturaleza,
-                              'Total Usuarios': usuariosInst.length,
-                              'Docentes': usuariosInst.filter(u => u.rol === 'docente_aula').length,
-                              'Acudientes': usuariosInst.filter(u => u.rol === 'acudiente').length,
-                              'Tareas Totales': tareasInst.length,
-                              'Tareas Completadas': completadasInst,
-                              'Participación %': `${participacionInst}%`,
-                              'Estado': participacionInst > 80 ? 'Excelente' : participacionInst > 60 ? 'Bueno' : 'Requiere Atención'
-                            };
-                          });
-                          exportToExcel(participacionDetallada, 'Participacion_Por_Institucion', 'Participación');
-                        }}
-                        className="flex-1 px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center justify-center gap-2 text-sm"
-                      >
-                        <IconDownload size={14} />
-                        Excel Detallado
-                      </button>
                     </div>
                   </div>
-
-                  {/* Reporte de Instituciones Avanzado */}
-                  <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-xl p-6 border border-purple-200">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="p-2 bg-purple-500 rounded-lg">
-                        <IconInstitution className="text-white" size={20} />
-                      </div>
-                      <h4 className="font-bold text-gray-800">Análisis Institucional</h4>
-                    </div>
-                    <p className="text-sm text-gray-600 mb-4">Reporte completo del desempeño institucional</p>
-                    
-                    {/* Distribución por naturaleza */}
-                    <div className="space-y-2 mb-4">
-                      {['publica', 'privada', 'mixta'].map(naturaleza => {
-                        const count = instituciones.filter(i => i.naturaleza === naturaleza).length;
-                        const percentage = instituciones.length > 0 ? (count / instituciones.length) * 100 : 0;
-                        
-                        return (
-                          <div key={naturaleza} className="flex items-center justify-between">
-                            <span className="text-sm font-medium text-gray-700 capitalize">{naturaleza}</span>
-                            <div className="flex items-center gap-3">
-                              <div className="w-16 h-2 bg-gray-200 rounded-full">
-                                <div 
-                                  className={`h-2 rounded-full ${
-                                    naturaleza === 'publica' ? 'bg-blue-500' :
-                                    naturaleza === 'privada' ? 'bg-purple-500' : 'bg-green-500'
-                                  }`}
-                                  style={{ width: `${percentage}%` }}
-                                />
-                              </div>
-                              <span className="text-sm font-bold text-gray-800 w-6">{count}</span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          const analisisInstitucional = instituciones.map(inst => {
-                            const usuariosInst = usuarios.filter(u => u.institucionId === inst.id);
-                            const cursosInst = cursos.filter(c => c.institucionId === inst.id);
-                            
-                            return {
-                              'Código DANE': inst.codigo_dane || '-',
-                              'Institución': inst.nombre,
-                              'NIT': inst.nit || '-',
-                              'Naturaleza': inst.naturaleza,
-                              'Teléfono': inst.telefono_principal,
-                              'Email': inst.correo_institucional,
-                              'Rector': inst.rector_nombre || '-',
-                              'Tel. Rector': inst.rector_telefono || '-',
-                              'Total Usuarios': usuariosInst.length,
-                              'Docentes': usuariosInst.filter(u => u.rol === 'docente_aula').length,
-                              'Coordinadores': usuariosInst.filter(u => u.rol === 'coordinador').length,
-                              'Acudientes': usuariosInst.filter(u => u.rol === 'acudiente').length,
-                              'Cursos': cursosInst.length,
-                              'Estado': inst.activo ? 'Activa' : 'Inactiva',
-                              'Nivel Implementación': usuariosInst.length > 50 ? 'Alto' : usuariosInst.length > 20 ? 'Medio' : 'Básico'
-                            };
-                          });
-                          exportToPDF(
-                            analisisInstitucional,
-                            'Analisis_Institucional_Completo',
-                            'Análisis Institucional Completo - Sistema Educativo',
-                            [
-                              { header: 'Institución', dataKey: 'Institución' },
-                              { header: 'Código DANE', dataKey: 'Código DANE' },
-                              { header: 'Naturaleza', dataKey: 'Naturaleza' },
-                              { header: 'Usuarios', dataKey: 'Total Usuarios' },
-                              { header: 'Estado', dataKey: 'Estado' }
-                            ]
-                          );
-                        }}
-                        className="flex-1 px-3 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors flex items-center justify-center gap-2 text-sm"
-                      >
-                        <IconDownload size={14} />
-                        PDF Completo
-                      </button>
-                      <button
-                        onClick={() => {
-                          const resumenEjecutivo = {
-                            'Resumen Ejecutivo': {
-                              'Total Instituciones': stats.totalInstituciones,
-                              'Promedio Usuarios por Institución': Math.round(stats.totalUsuarios / stats.totalInstituciones),
-                              'Instituciones Públicas': instituciones.filter(i => i.naturaleza === 'publica').length,
-                              'Instituciones Privadas': instituciones.filter(i => i.naturaleza === 'privada').length,
-                              'Cobertura Geográfica': 'Colombia - Múltiples Departamentos',
-                              'Estado General': 'Operativo'
-                            }
-                          };
-                          exportEstadisticasToPDF(
-                            resumenEjecutivo,
-                            'Resumen_Ejecutivo_Rector',
-                            'Resumen Ejecutivo - Gestión Rectoral'
-                          );
-                        }}
-                        className="flex-1 px-3 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors flex items-center justify-center gap-2 text-sm"
-                      >
-                        <IconDownload size={14} />
-                        Ejecutivo
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                );
+              })
             )}
           </div>
         </div>

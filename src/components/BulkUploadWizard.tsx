@@ -9,7 +9,15 @@ import {
   IconLoader
 } from './ui/Icons';
 import Button from './ui/Button';
-import { createEstudiante, createUsuario, vincularEstudianteAcudiente } from '../api/endpoints';
+import { 
+  createEstudiante, 
+  createUsuario, 
+  vincularEstudianteAcudiente,
+  descargarPlantillaEstudiantes,
+  validarExcelEstudiantes,
+  cargaMasivaEstudiantes
+} from '../api/endpoints';
+import { isBypassValidationsEnabled } from '../utils/dev';
 
 interface ValidationError {
   fila: number;
@@ -45,10 +53,12 @@ interface ProcessResult {
 
 export default function BulkUploadWizard({ 
   institucionId, 
-  onClose 
+  onClose,
+  cursoId
 }: { 
   institucionId: number;
   onClose: () => void;
+  cursoId?: number;  // Si se provee, usa carga masiva del backend
 }) {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [file, setFile] = useState<File | null>(null);
@@ -57,12 +67,24 @@ export default function BulkUploadWizard({
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<ProcessResult | null>(null);
+  const [useBackendUpload, setUseBackendUpload] = useState(!isBypassValidationsEnabled() && !!cursoId);
 
   // ============================================
   // PASO 1: Descargar plantilla
   // ============================================
   
-  const handleDownloadTemplate = () => {
+  const handleDownloadTemplate = async () => {
+    // Si hay backend disponible, descargar desde el servidor
+    if (useBackendUpload) {
+      try {
+        await descargarPlantillaEstudiantes();
+        return;
+      } catch (error) {
+        console.warn('Error descargando desde backend, usando plantilla local');
+      }
+    }
+    
+    // Plantilla local (CSV)
     const headers = [
       'estudiante_nombre',
       'estudiante_apellidos',
@@ -330,6 +352,63 @@ export default function BulkUploadWizard({
     let exitosos = 0;
     let erroresCount = 0;
     
+    // Si tenemos backend y cursoId, usar carga masiva del servidor
+    if (useBackendUpload && file && cursoId) {
+      try {
+        // Primero validar
+        const validacion = await validarExcelEstudiantes(file);
+        
+        if (!validacion.success) {
+          alert(`Error al validar: ${validacion.error}`);
+          setProcessing(false);
+          return;
+        }
+        
+        if (validacion.filasInvalidas && validacion.filasInvalidas > 0) {
+          const continuar = window.confirm(
+            `Se encontraron ${validacion.filasInvalidas} filas con errores de ${validacion.totalFilas} total.\n` +
+            `¿Desea continuar solo con las ${validacion.filasValidas} filas válidas?`
+          );
+          if (!continuar) {
+            setProcessing(false);
+            return;
+          }
+        }
+        
+        setProgress(50);
+        
+        // Ejecutar carga masiva
+        const resultado = await cargaMasivaEstudiantes(file, cursoId);
+        
+        setProgress(100);
+        
+        if (resultado.success) {
+          setResult({
+            total: resultado.totalProcesados || 0,
+            exitosos: resultado.insertados || 0,
+            errores: resultado.rechazados || 0,
+            detalles: resultado.errores?.map(e => ({
+              fila: e.fila,
+              estudiante: `Fila ${e.fila}`,
+              status: 'error' as const,
+              mensaje: e.error
+            })) || []
+          });
+        } else {
+          alert(`Error en carga masiva: ${resultado.error}`);
+        }
+        
+        setProcessing(false);
+        setStep(4);
+        return;
+      } catch (error: any) {
+        alert(`Error: ${error.message}`);
+        setProcessing(false);
+        return;
+      }
+    }
+    
+    // Proceso local fila por fila (modo bypass o sin backend)
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
       setProgress(Math.round(((i + 1) / data.length) * 100));
@@ -433,11 +512,12 @@ export default function BulkUploadWizard({
   };
 
   const handleExportResult = () => {
-    if (!result) return;
+    if (!result || !result.detalles) return;
     
+    const detallesArray = Array.isArray(result.detalles) ? result.detalles : [];
     const csvContent = [
       'Fila,Estudiante,Estado,Mensaje',
-      ...result.detalles.map(d => 
+      ...detallesArray.map(d => 
         `${d.fila},"${d.estudiante}","${d.status === 'ok' ? 'Exitoso' : 'Error'}","${d.mensaje || '-'}"`
       )
     ].join('\n');
@@ -680,10 +760,10 @@ export default function BulkUploadWizard({
                   </div>
                 </div>
                 
-                {result.errores > 0 && (
+                {result.errores > 0 && result.detalles && (
                   <div className="max-h-48 overflow-y-auto border border-amber-200 rounded-lg bg-amber-50 p-3">
                     <p className="text-sm font-semibold text-amber-800 mb-2">Registros con errores:</p>
-                    {result.detalles.filter(d => d.status === 'error').map((d, i) => (
+                    {(Array.isArray(result.detalles) ? result.detalles : []).filter(d => d.status === 'error').map((d, i) => (
                       <div key={i} className="text-xs text-amber-700 mb-1">
                         • Fila {d.fila} ({d.estudiante}): {d.mensaje}
                       </div>

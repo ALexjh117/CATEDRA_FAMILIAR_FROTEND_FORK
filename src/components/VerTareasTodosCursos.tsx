@@ -48,9 +48,9 @@ export default function VerTareasTodosCursos() {
         getUsuarios()
       ]);
 
-      setTareas(tareasData);
-      setCursos(cursosData);
-      setUsuarios(usuariosData);
+      setTareas(Array.isArray(tareasData) ? tareasData : []);
+      setCursos(Array.isArray(cursosData) ? cursosData : []);
+      setUsuarios(Array.isArray(usuariosData) ? usuariosData : []);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {

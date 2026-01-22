@@ -91,7 +91,7 @@ export default function ForceChangePasswordModal({
     setLoading(true);
 
     try {
-      const result = await cambiarContrasena(userId, currentPassword, newPassword);
+      const result = await cambiarContrasena(userId, currentPassword, newPassword, confirmPassword);
       
       if (result.success) {
         // Limpiar formulario

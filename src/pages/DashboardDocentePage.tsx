@@ -65,10 +65,10 @@ export default function DashboardDocentePage() {
         getEstadisticasDocente(docenteId),
       ]);
 
-      setTareas(tareasData);
-      setEntregasPendientes(entregasData);
-      setCursos(cursosData);
-      setEstadisticas(statsData);
+      setTareas(Array.isArray(tareasData) ? tareasData : []);
+      setEntregasPendientes(Array.isArray(entregasData) ? entregasData : []);
+      setCursos(Array.isArray(cursosData) ? cursosData : []);
+      setEstadisticas(statsData || null);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {

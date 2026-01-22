@@ -8,13 +8,16 @@ import Landing from './pages/Landing'
 import LoginPage from './pages/LoginPage'
 import DashboardDocentePage from './pages/DashboardDocentePage'
 import DashboardSupervisorPage from './pages/DashboardSupervisorPage'
+import DashboardRectorPage from './pages/DashboardRectorPage'
 import DashboardAdminPage from './pages/DashboardAdminPage'
 import DashboardAdminHome from './pages/DashboardAdminHome'
 import DashboardCoordinadorPage from './pages/DashboardCoordinadorPage'
+import DirectivosPage from './pages/DirectivosPage'
+import ProfilePage from './pages/ProfilePage'
+import ReportesPage from './pages/ReportesPage'
 
 // Legacy
 import DashboardPage from './pages/DashboardPage'
-import FloatingRoleSwitch from './components/FloatingRoleSwitch'
 import PagePlaceholder from './components/PagePlaceholder'
 
 // Protected Route wrapper
@@ -25,16 +28,20 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactEleme
     return <Navigate to="/login" replace />;
   }
   
-  const currentRole = (session as any).isPreview && (session as any).previewRole 
+  let currentRole = (session as any).isPreview && (session as any).previewRole 
     ? (session as any).previewRole 
     : session.user.rol;
+  
+  // Normalizar admin_sistema a admin para verificación de permisos
+  const normalizedRole = currentRole === 'admin_sistema' ? 'admin' : currentRole;
   
   // Acudiente no tiene acceso a la web
   if (currentRole === 'acudiente') {
     return <Navigate to="/acceso-denegado" replace />;
   }
   
-  if (allowedRoles && !allowedRoles.includes(currentRole)) {
+  // Verificar permisos usando rol normalizado (admin_sistema cuenta como admin)
+  if (allowedRoles && !allowedRoles.includes(currentRole) && !allowedRoles.includes(normalizedRole)) {
     return <Navigate to="/dashboard" replace />;
   }
   
@@ -64,6 +71,7 @@ function DashboardRedirect() {
     case 'rector':
       return <Navigate to="/dashboard/rector" replace />;
     case 'admin':
+    case 'admin_sistema':
       return <Navigate to="/dashboard/admin" replace />;
     default:
       // Si es acudiente u otro rol no permitido, redirigir a página de acceso denegado
@@ -142,7 +150,7 @@ export default function App(){
           
           <Route path="/dashboard/rector" element={
             <ProtectedRoute allowedRoles={['rector', 'admin']}>
-              <DashboardSupervisorPage />
+              <DashboardRectorPage />
             </ProtectedRoute>
           } />
           
@@ -164,11 +172,19 @@ export default function App(){
           <Route path="/entregas" element={<ProtectedRoute allowedRoles={['docente','docente_aula']}><PagePlaceholder title="Entregas" description="Listado de entregas pendientes."/></ProtectedRoute>} />
           <Route path="/estudiantes" element={<ProtectedRoute allowedRoles={['docente','orientador','coordinador','rector','admin']}><PagePlaceholder title="Estudiantes" description="Listado y seguimiento de estudiantes."/></ProtectedRoute>} />
           <Route path="/docentes" element={<ProtectedRoute allowedRoles={['coordinador','rector','admin']}><PagePlaceholder title="Docentes" description="Gestión de docentes."/></ProtectedRoute>} />
+          <Route path="/directivos" element={<ProtectedRoute allowedRoles={['rector','admin']}><DirectivosPage /></ProtectedRoute>} />
           <Route path="/cursos" element={<ProtectedRoute allowedRoles={['coordinador','rector','admin']}><PagePlaceholder title="Cursos" description="Gestión de cursos."/></ProtectedRoute>} />
-          <Route path="/reportes" element={<ProtectedRoute allowedRoles={['orientador','coordinador','rector','admin']}><PagePlaceholder title="Reportes" description="Generación de reportes."/></ProtectedRoute>} />
+          <Route path="/reportes" element={<ProtectedRoute allowedRoles={['orientador','coordinador','rector','admin']}><ReportesPage /></ProtectedRoute>} />
           <Route path="/configuracion" element={<ProtectedRoute allowedRoles={['rector','admin']}><PagePlaceholder title="Configuración" description="Ajustes del sistema."/></ProtectedRoute>} />
           <Route path="/instituciones" element={<ProtectedRoute allowedRoles={['admin']}><PagePlaceholder title="Instituciones" description="Gestión de instituciones."/></ProtectedRoute>} />
           <Route path="/usuarios" element={<ProtectedRoute allowedRoles={['admin']}><PagePlaceholder title="Usuarios" description="Gestión de usuarios."/></ProtectedRoute>} />
+          
+          {/* Perfil de usuario - disponible para todos los roles autenticados */}
+          <Route path="/perfil" element={
+            <ProtectedRoute allowedRoles={['docente','docente_aula','orientador','coordinador','rector','admin']}>
+              <ProfilePage />
+            </ProtectedRoute>
+          } />
           
           {/* Legacy route */}
           <Route path="/dashboard-old" element={<DashboardPage/>} />
@@ -177,7 +193,6 @@ export default function App(){
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </SessionTimeoutProvider>
-        <FloatingRoleSwitch />
       </BrowserRouter>
     </ToastProvider>
   )

@@ -115,6 +115,7 @@ export default function LoginPage() {
         const rol = result.user.rol;
         switch (rol) {
           case 'admin':
+          case 'admin_sistema':
             navigate('/dashboard/admin');
             break;
           case 'rector':

@@ -41,8 +41,10 @@ export default function PanelAprobarDocentes() {
     setLoading(true);
     try {
       const data = await getUsuarios();
+      // Asegurar que data es un array
+      const usuariosArray = Array.isArray(data) ? data : [];
       // Solo mostrar docentes pendientes de aprobación o que requieren revisión
-      const docentes = data.filter(user => 
+      const docentes = usuariosArray.filter(user => 
         user.rol === 'docente_aula' && 
         (!user.aprobado || user.requiere_revision)
       );

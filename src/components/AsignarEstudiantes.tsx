@@ -46,8 +46,8 @@ export default function AsignarEstudiantes() {
         getCursos(),
         getEstudiantes()
       ]);
-      setCursos(cursosData);
-      setEstudiantes(estudiantesData);
+      setCursos(Array.isArray(cursosData) ? cursosData : []);
+      setEstudiantes(Array.isArray(estudiantesData) ? estudiantesData : []);
     } catch (error) {
       console.error('Error loading data:', error);
       setToast({ message: 'Error al cargar datos', type: 'error' });

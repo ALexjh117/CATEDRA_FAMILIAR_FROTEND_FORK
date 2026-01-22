@@ -1,8 +1,10 @@
 // ============================================
 // API ENDPOINTS - Cátedra de Familia
-// Por ahora retorna datos mock, después será fetch real
+// Usar apiClient centralizado para llamadas HTTP
 // ============================================
 
+import apiClient from './apiClient';
+import { isBypassValidationsEnabled } from '../utils/dev';
 import { 
   usuariosMock,
   usuariosListMock,
@@ -58,44 +60,105 @@ const addLogAuditoria = (accion: 'crear' | 'actualizar' | 'eliminar' | 'login' |
 // AUTENTICACIÓN
 // ============================================
 
-export const login = async (correo: string, _password: string): Promise<{ success: boolean; user?: Usuario; error?: string }> => {
-  await delay(800);
-  
-  // Mock: determinar rol basado en correo
-  let user: Usuario | undefined;
-  const correoLower = correo.toLowerCase();
+export const login = async (correo: string, password: string, roleHint?: 'admin' | 'rector' | 'coordinador'): Promise<{ success: boolean; user?: Usuario; error?: string }> => {
+  // Si está en modo desarrollo o bypass, usar mocks
+  if (isBypassValidationsEnabled()) {
+    await delay(800);
+    
+    // Mock: determinar rol basado en correo
+    let user: Usuario | undefined;
+    const correoLower = correo.toLowerCase();
 
-  // Tratar dominios institucionales de Secretaría como admin
-  if (correoLower.endsWith('@educacionpopayan.gov.co') || correoLower.endsWith('@secretariaed.gov.co') || correo.includes('@admin')) {
-    user = usuariosMock.admin;
-  } else if (correo.includes('@docente')) {
-    // Verificar tipo de docente
-    if (correo.includes('orientador')) {
-      user = usuariosMock.orientador;
-    } else if (correo.includes('coordinador')) {
-      user = usuariosMock.coordinador;
-    } else if (correo.includes('rector')) {
-      user = usuariosMock.rector;
+    // Tratar dominios institucionales de Secretaría como admin
+    if (correoLower.endsWith('@educacionpopayan.gov.co') || correoLower.endsWith('@secretariaed.gov.co') || correo.includes('@admin')) {
+      user = usuariosMock.admin;
+    } else if (correo.includes('@docente')) {
+      // Verificar tipo de docente
+      if (correo.includes('orientador')) {
+        user = usuariosMock.orientador;
+      } else if (correo.includes('coordinador')) {
+        user = usuariosMock.coordinador;
+      } else if (correo.includes('rector')) {
+        user = usuariosMock.rector;
+      } else {
+        user = usuariosMock.docente;
+      }
     } else {
-      user = usuariosMock.docente;
+      user = usuariosMock.acudiente;
     }
-  } else {
-    user = usuariosMock.acudiente;
-  }
 
-  if (user) {
-    // Guardar sesión en localStorage
-    localStorage.setItem('session', JSON.stringify({ user, isPreview: false }));
-    return { success: true, user };
+    if (user) {
+      // Guardar sesión en localStorage
+      localStorage.setItem('session', JSON.stringify({ user, isPreview: false }));
+      return { success: true, user };
+    }
+    
+    return { success: false, error: 'Credenciales incorrectas' };
   }
   
-  return { success: false, error: 'Credenciales incorrectas' };
+  // Detectar roleHint automáticamente si no se proporciona
+  if (!roleHint) {
+    const correoLower = correo.toLowerCase();
+    
+    // Admin: dominios gubernamentales
+    if (correoLower.endsWith('@educacionpopayan.gov.co') || correoLower.endsWith('@secretariaed.gov.co')) {
+      roleHint = 'admin';
+    }
+    // Coordinador: intentar primero (es más común)
+    else if (correo.includes('.edu.co')) {
+      roleHint = 'coordinador';
+    }
+  }
+  
+  // Usar API real con detección inteligente de tipo de usuario
+  try {
+    const result = await apiClient.login(correo, password, roleHint);
+    if (result.success && result.data) {
+      // Mapear rolId a nombre de rol
+      const ROLES_MAP: Record<number, RolUsuario> = {
+        1: 'admin_sistema',
+        2: 'rector',
+        3: 'coordinador',
+        4: 'orientador',
+        5: 'docente_aula',
+        6: 'acudiente'
+      };
+      
+      const rolNombre = ROLES_MAP[result.data.usuario.rolId] || 'admin_sistema';
+      
+      // Convertir respuesta del backend al formato esperado por el frontend
+      const user: Usuario = {
+        id: result.data.usuario.id,
+        nombre: result.data.usuario.nombre || 'Usuario',
+        apellidos: result.data.usuario.apellido || '',
+        correo: result.data.usuario.correo,
+        telefono: '',
+        rol: rolNombre,
+        activo: result.data.usuario.estaActivo,
+        debe_cambiar_contrasena: result.data.usuario.debeCambiarContrasena,
+        institucionId: result.data.usuario.institucionId
+      };
+      return { success: true, user };
+    }
+    return { success: false, error: result.message || 'Credenciales incorrectas' };
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error.message || 'Error de conexión'
+    };
+  }
 };
 
 export const logout = async (): Promise<void> => {
-  await delay(300);
-  localStorage.removeItem('session');
-  localStorage.removeItem('previewRole');
+  if (isBypassValidationsEnabled()) {
+    await delay(300);
+    localStorage.removeItem('session');
+    localStorage.removeItem('previewRole');
+    return;
+  }
+  
+  // Usar API real
+  await apiClient.logout();
 };
 
 export const getSession = (): { user: Usuario; isPreview: boolean } | null => {
@@ -171,43 +234,256 @@ export const registrarDocente = async (data: any): Promise<{ success: boolean; u
 };
 
 // ============================================
+// CREAR RECTOR Y COORDINADOR (Admin Sistema)
+// ============================================
+
+export const crearRector = async (data: {
+  correo: string;
+  contrasena: string;
+  nombre: string;
+  apellido: string;
+  telefono: string;
+  institucionId: number;
+}): Promise<{ success: boolean; user?: Usuario; error?: string }> => {
+  // Si está en modo bypass, usar mock
+  if (isBypassValidationsEnabled()) {
+    await delay(1000);
+    const newUser: Usuario = {
+      id: Date.now(),
+      nombre: data.nombre,
+      apellidos: data.apellido,
+      correo: data.correo,
+      rol: 'rector',
+      telefono: data.telefono,
+      institucionId: data.institucionId,
+      activo: true,
+      debe_cambiar_contrasena: true
+    };
+    usuariosListMock.push(newUser);
+    addLogAuditoria('crear', 'rector', newUser.id, `Rector creado: ${data.nombre} ${data.apellido}`);
+    return { success: true, user: newUser };
+  }
+  
+  // Usar API real
+  const result = await apiClient.crearRector(data);
+  if (result.success && result.data?.rector) {
+    const user: Usuario = {
+      id: result.data.usuario.id,
+      nombre: result.data.rector.nombre,
+      apellidos: result.data.rector.apellido,
+      correo: result.data.usuario.correo,
+      rol: 'rector',
+      telefono: result.data.rector.telefono,
+      institucionId: result.data.rector.institucionId,
+      activo: true,
+      debe_cambiar_contrasena: result.data.usuario.debeCambiarContrasena
+    };
+    return { success: true, user };
+  }
+  return { success: false, error: result.message };
+};
+
+export const crearCoordinador = async (data: {
+  correo: string;
+  contrasena: string;
+  nombre: string;
+  apellido: string;
+  telefono: string;
+  institucionId?: number;
+  documento?: string;
+  tipoDocumento?: 'CC' | 'TI' | 'CE';
+}): Promise<{ success: boolean; user?: Usuario; error?: string }> => {
+  // Si está en modo bypass, usar mock
+  if (isBypassValidationsEnabled()) {
+    await delay(1000);
+    const session = getSession();
+    const institucionIdFinal = data.institucionId || session?.user?.institucionId || 1;
+    
+    const newUser: Usuario = {
+      id: Date.now(),
+      nombre: data.nombre,
+      apellidos: data.apellido,
+      correo: data.correo,
+      rol: 'coordinador',
+      telefono: data.telefono,
+      documento: data.documento,
+      tipoDocumento: data.tipoDocumento,
+      institucionId: institucionIdFinal,
+      activo: true,
+      debe_cambiar_contrasena: true
+    };
+    usuariosListMock.push(newUser);
+    addLogAuditoria('crear', 'coordinador', newUser.id, `Coordinador creado: ${data.nombre} ${data.apellido}`);
+    return { success: true, user: newUser };
+  }
+  
+  // Usar API real - apiClient determina qué endpoint usar según el rol
+  const result = await apiClient.crearCoordinador(data);
+  if (result.success && result.data?.coordinador) {
+    const user: Usuario = {
+      id: result.data.usuario.id,
+      nombre: result.data.coordinador.nombre,
+      apellidos: result.data.coordinador.apellido,
+      correo: result.data.usuario.correo,
+      rol: 'coordinador',
+      telefono: result.data.coordinador.telefono,
+      documento: (result.data.coordinador as any).documento,
+      tipoDocumento: (result.data.coordinador as any).tipoDocumento,
+      institucionId: result.data.coordinador.institucionId,
+      activo: true,
+      debe_cambiar_contrasena: result.data.usuario.debeCambiarContrasena
+    };
+    return { success: true, user };
+  }
+  return { success: false, error: result.message };
+};
+
+/**
+ * Crear coordinador específicamente como Admin (en cualquier institución)
+ */
+export const crearCoordinadorAdmin = async (data: {
+  correo: string;
+  contrasena: string;
+  nombre: string;
+  apellido: string;
+  telefono: string;
+  institucionId: number;
+}): Promise<{ success: boolean; user?: Usuario; error?: string }> => {
+  if (isBypassValidationsEnabled()) {
+    return crearCoordinador(data);
+  }
+  
+  const result = await apiClient.crearCoordinadorAdmin(data);
+  if (result.success && result.data?.coordinador) {
+    const user: Usuario = {
+      id: result.data.usuario.id,
+      nombre: result.data.coordinador.nombre,
+      apellidos: result.data.coordinador.apellido,
+      correo: result.data.usuario.correo,
+      rol: 'coordinador',
+      telefono: result.data.coordinador.telefono,
+      institucionId: result.data.coordinador.institucionId,
+      activo: true,
+      debe_cambiar_contrasena: result.data.usuario.debeCambiarContrasena
+    };
+    return { success: true, user };
+  }
+  return { success: false, error: result.message };
+};
+
+/**
+ * Crear coordinador específicamente como Rector (solo en su institución)
+ */
+export const crearCoordinadorRector = async (data: {
+  correo: string;
+  contrasena: string;
+  nombre: string;
+  apellido: string;
+  telefono: string;
+  documento?: string;
+  tipoDocumento?: 'CC' | 'TI' | 'CE';
+}): Promise<{ success: boolean; user?: Usuario; error?: string; institucionNombre?: string }> => {
+  if (isBypassValidationsEnabled()) {
+    return crearCoordinador(data);
+  }
+  
+  const result = await apiClient.crearCoordinadorRector(data);
+  if (result.success && result.data?.coordinador) {
+    const user: Usuario = {
+      id: result.data.usuario.id,
+      nombre: result.data.coordinador.nombre,
+      apellidos: result.data.coordinador.apellido,
+      correo: result.data.usuario.correo,
+      rol: 'coordinador',
+      telefono: result.data.coordinador.telefono,
+      documento: (result.data.coordinador as any).documento,
+      tipoDocumento: (result.data.coordinador as any).tipoDocumento,
+      institucionId: result.data.coordinador.institucionId,
+      activo: true,
+      debe_cambiar_contrasena: result.data.usuario.debeCambiarContrasena
+    };
+    return { 
+      success: true, 
+      user,
+      institucionNombre: (result.data.coordinador as any).institucionNombre
+    };
+  }
+  return { success: false, error: result.message };
+};
+
+// ============================================
 // TAREAS
 // ============================================
 
 export const getTareas = async (cursoId?: number, busqueda?: string): Promise<Tarea[]> => {
-  await delay(500);
-  
-  let tareas = tareasMock.map(t => ({
-    ...t,
-    categoria: categoriasMock.find(c => c.id === t.categoriaId)
-  }));
-  
-  if (cursoId) {
-    tareas = tareas.filter(t => t.cursoId === cursoId);
+  try {
+    const result = await apiClient.getTareas();
+    if (result.success && result.data) {
+      let tareas = result.data.map((t: any) => ({
+        id: t.id,
+        titulo: t.titulo || t.nombre || '',
+        descripcion: t.descripcion || '',
+        categoriaId: t.categoriaId || t.categoria_id,
+        frecuencia: t.frecuencia || 'semanal',
+        fechaInicio: t.fechaInicio || t.fecha_inicio || '',
+        fechaVencimiento: t.fechaVencimiento || t.fecha_vencimiento || t.fechaLimite || t.fecha_limite || '',
+        cursoId: t.cursoId || t.curso_id,
+        docenteId: t.docenteId || t.docente_id,
+        periodoId: t.periodoId || t.periodo_id,
+        incluyeEnBoletin: t.incluyeEnBoletin ?? t.incluye_en_boletin ?? true,
+        estado: t.estado || 'activa',
+        createdAt: t.createdAt || t.created_at || ''
+      }));
+      
+      if (cursoId) {
+        tareas = tareas.filter((t: Tarea) => t.cursoId === cursoId);
+      }
+      
+      if (busqueda) {
+        const searchLower = busqueda.toLowerCase();
+        tareas = tareas.filter((t: Tarea) => 
+          t.titulo.toLowerCase().includes(searchLower) ||
+          t.descripcion.toLowerCase().includes(searchLower)
+        );
+      }
+      
+      return tareas;
+    }
+    return [];
+  } catch (error) {
+    console.error('Error al obtener tareas:', error);
+    return [];
   }
-  
-  // Búsqueda por título o descripción
-  if (busqueda) {
-    const searchLower = busqueda.toLowerCase();
-    tareas = tareas.filter(t => 
-      t.titulo.toLowerCase().includes(searchLower) ||
-      t.descripcion.toLowerCase().includes(searchLower)
-    );
-  }
-  
-  return tareas;
 };
 
 export const getTareaById = async (id: number): Promise<Tarea | null> => {
-  await delay(300);
-  const tarea = tareasMock.find(t => t.id === id);
-  if (tarea) {
-    return {
-      ...tarea,
-      categoria: categoriasMock.find(c => c.id === tarea.categoriaId)
-    };
+  try {
+    const result = await apiClient.getTareas();
+    if (result.success && result.data) {
+      const tarea = result.data.find((t: any) => t.id === id);
+      if (tarea) {
+        return {
+          id: tarea.id,
+          titulo: tarea.titulo || tarea.nombre || '',
+          descripcion: tarea.descripcion || '',
+          categoriaId: tarea.categoriaId || tarea.categoria_id,
+          frecuencia: tarea.frecuencia || 'semanal',
+          fechaInicio: tarea.fechaInicio || tarea.fecha_inicio || '',
+          fechaVencimiento: tarea.fechaVencimiento || tarea.fecha_vencimiento || tarea.fechaLimite || tarea.fecha_limite || '',
+          cursoId: tarea.cursoId || tarea.curso_id,
+          docenteId: tarea.docenteId || tarea.docente_id,
+          periodoId: tarea.periodoId || tarea.periodo_id,
+          incluyeEnBoletin: tarea.incluyeEnBoletin ?? tarea.incluye_en_boletin ?? true,
+          estado: tarea.estado || 'activa',
+          createdAt: tarea.createdAt || tarea.created_at || ''
+        };
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error('Error al obtener tarea:', error);
+    return null;
   }
-  return null;
 };
 
 export const createTarea = async (data: Partial<Tarea>): Promise<{ success: boolean; tarea?: Tarea; error?: string }> => {
@@ -261,42 +537,26 @@ export const createTarea = async (data: Partial<Tarea>): Promise<{ success: bool
   return { success: true, tarea: newTarea };
 };
 
-export const getTareasPendientesAcudiente = async (acudienteId: number): Promise<Tarea[]> => {
-  await delay(500);
-  
-  // Obtener estudiantes del acudiente
-  const vinculos = estudiantesAcudientesMock.filter(v => v.acudienteId === acudienteId);
-  const estudiantesIds = vinculos.map(v => v.estudianteId);
-  const estudiantes = estudiantesMock.filter(e => estudiantesIds.includes(e.id));
-  const cursoIds = estudiantes.map(e => e.cursoId);
-  
-  // Obtener tareas de esos cursos
-  const tareas = tareasMock
-    .filter(t => cursoIds.includes(t.cursoId) && t.estado === 'activa')
-    .map(t => ({
-      ...t,
-      categoria: categoriasMock.find(c => c.id === t.categoriaId)
-    }));
-  
-  // Filtrar las que ya tienen entrega
-  const entregasAcudiente = entregasMock.filter(e => e.acudienteId === acudienteId);
-  const tareasEntregadas = entregasAcudiente.map(e => e.tareaId);
-  
-  return tareas.filter(t => !tareasEntregadas.includes(t.id));
+export const getTareasPendientesAcudiente = async (_acudienteId: number): Promise<Tarea[]> => {
+  try {
+    // Por ahora retornar tareas activas - cuando el backend tenga el endpoint de vínculos 
+    // se implementará la lógica completa
+    const tareas = await getTareas();
+    return tareas.filter(t => t.estado === 'activa');
+  } catch (error) {
+    console.error('Error al obtener tareas pendientes del acudiente:', error);
+    return [];
+  }
 };
 
 export const getTareasByDocente = async (docenteId: number): Promise<Tarea[]> => {
-  await delay(500);
-  
-  const tareas = tareasMock
-    .filter(t => t.docenteId === docenteId)
-    .map(t => ({
-      ...t,
-      categoria: categoriasMock.find(c => c.id === t.categoriaId),
-      fechaLimite: t.fechaVencimiento // Alias para consistencia
-    }));
-  
-  return tareas;
+  try {
+    const tareas = await getTareas();
+    return tareas.filter(t => t.docenteId === docenteId);
+  } catch (error) {
+    console.error('Error al obtener tareas del docente:', error);
+    return [];
+  }
 };
 
 export const getEntregasPendientesCalificar = async (docenteId: number): Promise<Entrega[]> => {
@@ -391,18 +651,32 @@ export const calificarEntrega = async (
 // ============================================
 // CATEGORÍAS
 // ============================================
-// CATEGORÍAS - CRUD COMPLETO
+// CATEGORÍAS - CONSUMO DESDE BACKEND
 // ============================================
 
 export const getCategorias = async (institucionId?: number): Promise<Categoria[]> => {
-  await delay(300);
-  let categorias = [...categoriasMock];
-  
-  if (institucionId) {
-    categorias = categorias.filter(c => !c.institucionId || c.institucionId === institucionId);
+  try {
+    const result = await apiClient.getCategorias();
+    if (result.success && result.data) {
+      let categorias = result.data.map((c: any) => ({
+        id: c.id,
+        nombre: c.nombre || '',
+        color: c.color || '#3B82F6',
+        icono: c.icono || '📚',
+        institucionId: c.institucionId || c.institucion_id
+      }));
+      
+      if (institucionId) {
+        categorias = categorias.filter((c: Categoria) => !c.institucionId || c.institucionId === institucionId);
+      }
+      
+      return categorias;
+    }
+    return [];
+  } catch (error) {
+    console.error('Error al obtener categorías:', error);
+    return [];
   }
-  
-  return categorias;
 };
 
 // === DEPARTAMENTOS ===
@@ -484,12 +758,44 @@ export const deleteCategoria = async (id: number): Promise<{ success: boolean; e
 };
 
 // ============================================
-// INSTITUCIONES - CRUD COMPLETO
+// INSTITUCIONES - CONSUMO DESDE BACKEND
 // ============================================
 
 export const getInstituciones = async (): Promise<Institucion[]> => {
-  await delay(500);
-  return institucionesMock.filter(i => !i.eliminado_en);
+  // Verificar si hay sesión con token real (no preview)
+  const session = getSession();
+  if (!session?.token || session.isPreview) {
+    // En modo preview o sin token, retornar mock
+    return institucionesMock.filter(i => !i.eliminado_en);
+  }
+
+  try {
+    // Usar endpoint público /instituciones (NO /admin/instituciones/pendientes)
+    const result = await apiClient.getInstituciones();
+    if (result.success && result.data) {
+      // Mapear datos del backend al formato del frontend
+      return result.data.map((inst: any) => ({
+        id: inst.id,
+        nombre: inst.nombre,
+        direccion: inst.direccion || '',
+        telefono: inst.telefono || '',
+        correo: inst.correo || '',
+        naturaleza: inst.naturaleza || 'Pública',
+        municipio_id: inst.municipioId,
+        municipio: inst.municipio?.nombre || '',
+        departamento: inst.municipio?.departamento?.nombre || '',
+        activo: true,
+        aprobado: inst.aprobado || false,
+        createdAt: inst.creadoEn
+      }));
+    }
+    // Si falla la API, usar mock como fallback
+    return institucionesMock.filter(i => !i.eliminado_en);
+  } catch (error) {
+    console.error('Error al obtener instituciones:', error);
+    // Fallback a mock
+    return institucionesMock.filter(i => !i.eliminado_en);
+  }
 };
 
 export const getInstitucionById = async (id: number): Promise<Institucion | null> => {
@@ -561,20 +867,127 @@ export const deleteInstitucion = async (id: number): Promise<{ success: boolean;
 };
 
 // ============================================
-// PERIODOS - CRUD COMPLETO
+// INSTITUCIONES PENDIENTES (Admin Sistema)
+// ============================================
+
+export const getInstitucionesPendientes = async (): Promise<{ success: boolean; instituciones?: Institucion[]; error?: string }> => {
+  // Si está en modo bypass o preview, usar mock
+  const session = getSession();
+  if (isBypassValidationsEnabled() || !session?.token || session.isPreview) {
+    await delay(500);
+    // Simular instituciones pendientes de aprobación
+    const pendientes = institucionesMock
+      .filter(i => !i.activo && !i.eliminado_en)
+      .map(i => ({ ...i, estado: 'pendiente' as const }));
+    return { success: true, instituciones: pendientes };
+  }
+  
+  // Usar API real
+  const result = await apiClient.getInstitucionesPendientes();
+  if (result.success && result.data) {
+    // Mapear respuesta del backend al formato del frontend
+    const instituciones: Institucion[] = result.data.map(inst => ({
+      id: inst.id,
+      nombre: inst.nombre,
+      direccion: inst.direccion,
+      direccion_completa: inst.direccion,
+      telefono: inst.telefono,
+      telefono_principal: inst.telefono,
+      correo: inst.correo,
+      correo_institucional: inst.correo,
+      naturaleza: (inst.naturaleza?.toLowerCase() || 'publica') as 'publica' | 'privada' | 'mixta',
+      municipio_id: inst.municipioId,
+      niveles_educativos: [],
+      modalidad: '',
+      jornadas: [],
+      confesional: false,
+      activo: false,
+      creado_en: inst.creadoEn
+    }));
+    return { success: true, instituciones };
+  }
+  return { success: false, error: result.message };
+};
+
+export const aprobarInstitucion = async (institucionId: number): Promise<{ success: boolean; institucion?: Institucion; error?: string }> => {
+  // Si está en modo bypass, usar mock
+  if (isBypassValidationsEnabled()) {
+    await delay(800);
+    const institucion = institucionesMock.find(i => i.id === institucionId);
+    if (!institucion) {
+      return { success: false, error: 'Institución no encontrada' };
+    }
+    institucion.activo = true;
+    addLogAuditoria('actualizar', 'Institucion', institucionId, `Institución aprobada: ${institucion.nombre}`);
+    return { success: true, institucion };
+  }
+  
+  // Usar API real
+  const result = await apiClient.aprobarInstitucion(institucionId);
+  if (result.success && result.data) {
+    const institucion: Institucion = {
+      id: result.data.id,
+      nombre: result.data.nombre,
+      direccion: result.data.direccion,
+      direccion_completa: result.data.direccion,
+      telefono: result.data.telefono,
+      telefono_principal: result.data.telefono,
+      correo: result.data.correo,
+      correo_institucional: result.data.correo,
+      naturaleza: (result.data.naturaleza?.toLowerCase() || 'publica') as 'publica' | 'privada' | 'mixta',
+      municipio_id: result.data.municipioId,
+      niveles_educativos: [],
+      modalidad: '',
+      jornadas: [],
+      confesional: false,
+      activo: true,
+      creado_en: result.data.creadoEn
+    };
+    return { success: true, institucion };
+  }
+  return { success: false, error: result.message };
+};
+
+// ============================================
+// PERIODOS - CONSUMO DESDE BACKEND
 // ============================================
 
 export const getPeriodos = async (institucionId?: number): Promise<Periodo[]> => {
-  await delay(500);
-  if (institucionId) {
-    return periodosMock.filter(p => p.institucionId === institucionId);
+  try {
+    const result = await apiClient.getPeriodos();
+    if (result.success && result.data) {
+      let periodos = result.data.map((p: any) => ({
+        id: p.id,
+        nombre: p.nombre || '',
+        fechaInicio: p.fechaInicio || p.fecha_inicio || '',
+        fechaFin: p.fechaFin || p.fecha_fin || '',
+        institucionId: p.institucionId || p.institucion_id || 1,
+        anio: p.anio || p.año || new Date().getFullYear(),
+        estado: p.estado || 'planificado',
+        createdAt: p.createdAt || p.created_at || p.creadoEn || ''
+      }));
+      
+      if (institucionId) {
+        periodos = periodos.filter((p: Periodo) => p.institucionId === institucionId);
+      }
+      
+      return periodos;
+    }
+    return [];
+  } catch (error) {
+    console.error('Error al obtener periodos:', error);
+    return [];
   }
-  return periodosMock;
 };
 
 export const getPeriodoActivo = async (institucionId: number): Promise<Periodo | null> => {
-  await delay(300);
-  return periodosMock.find(p => p.institucionId === institucionId && p.estado === 'activo') || null;
+  try {
+    const periodos = await getPeriodos(institucionId);
+    return periodos.find(p => p.estado === 'activo') || null;
+  } catch (error) {
+    console.error('Error al obtener periodo activo:', error);
+    return null;
+  }
 };
 
 export const createPeriodo = async (data: Partial<Periodo>): Promise<{ success: boolean; periodo?: Periodo; error?: string }> => {
@@ -671,15 +1084,32 @@ export const deletePeriodo = async (id: number): Promise<{ success: boolean; err
 };
 
 // ============================================
-// GRADOS - CRUD COMPLETO
+// GRADOS - CONSUMO DESDE BACKEND
 // ============================================
 
 export const getGrados = async (institucionId?: number): Promise<Grado[]> => {
-  await delay(400);
-  if (institucionId) {
-    return gradosMock.filter(g => g.institucionId === institucionId && g.activo).sort((a, b) => a.orden - b.orden);
+  try {
+    const result = await apiClient.getGrados();
+    if (result.success && result.data) {
+      let grados = result.data.map((g: any) => ({
+        id: g.id,
+        nombre: g.nombre || '',
+        orden: g.orden || 0,
+        institucionId: g.institucionId || g.institucion_id || 1,
+        activo: g.activo ?? true
+      }));
+      
+      if (institucionId) {
+        grados = grados.filter((g: Grado) => g.institucionId === institucionId);
+      }
+      
+      return grados.filter((g: Grado) => g.activo).sort((a: Grado, b: Grado) => a.orden - b.orden);
+    }
+    return [];
+  } catch (error) {
+    console.error('Error al obtener grados:', error);
+    return [];
   }
-  return gradosMock.filter(g => g.activo).sort((a, b) => a.orden - b.orden);
 };
 
 export const createGrado = async (data: Partial<Grado>): Promise<{ success: boolean; grado?: Grado; error?: string }> => {
@@ -739,25 +1169,55 @@ export const deleteGrado = async (id: number): Promise<{ success: boolean; error
 };
 
 // ============================================
-// CURSOS - CRUD COMPLETO
+// CURSOS - CONSUMO DESDE BACKEND
 // ============================================
 
 export const getCursos = async (institucionId?: number): Promise<Curso[]> => {
-  await delay(500);
-  if (institucionId) {
-    return cursosMock.filter(c => c.institucionId === institucionId && c.activo);
+  try {
+    // Consumir desde backend real
+    const result = await apiClient.getCursos();
+    if (result.success && result.data) {
+      let cursos = result.data.map((c: any) => ({
+        id: c.id,
+        nombre: c.nombre || '',
+        gradoId: c.gradoId || 1,
+        jornada: c.jornada || 'mañana',
+        institucionId: c.institucionId || 1,
+        docenteDirectorId: c.docenteDirectorId,
+        activo: c.activo !== false
+      }));
+      
+      if (institucionId) {
+        cursos = cursos.filter((c: Curso) => c.institucionId === institucionId);
+      }
+      
+      return cursos;
+    }
+    return [];
+  } catch (error) {
+    console.error('Error al obtener cursos:', error);
+    return [];
   }
-  return cursosMock.filter(c => c.activo);
 };
 
 export const getCursoById = async (id: number): Promise<Curso | null> => {
-  await delay(300);
-  return cursosMock.find(c => c.id === id && c.activo) || null;
+  try {
+    const cursos = await getCursos();
+    return cursos.find(c => c.id === id) || null;
+  } catch (error) {
+    console.error('Error al obtener curso:', error);
+    return null;
+  }
 };
 
 export const getCursosByDocente = async (docenteId: number): Promise<Curso[]> => {
-  await delay(500);
-  return cursosMock.filter(c => c.docenteDirectorId === docenteId && c.activo);
+  try {
+    const cursos = await getCursos();
+    return cursos.filter(c => c.docenteDirectorId === docenteId && c.activo);
+  } catch (error) {
+    console.error('Error al obtener cursos del docente:', error);
+    return [];
+  }
 };
 
 export const createCurso = async (data: Partial<Curso>): Promise<{ success: boolean; curso?: Curso; error?: string }> => {
@@ -835,23 +1295,48 @@ export const deleteCurso = async (id: number): Promise<{ success: boolean; error
 // ============================================
 
 export const getUsuarios = async (institucionId?: number, rol?: RolUsuario): Promise<Usuario[]> => {
-  await delay(500);
-  let usuarios = usuariosListMock.filter(u => u.activo && !u.deletedAt);
-  
-  if (institucionId) {
-    usuarios = usuarios.filter(u => u.institucionId === institucionId || u.rol === 'admin');
+  try {
+    // Consumir desde backend real
+    const result = await apiClient.getUsuarios();
+    if (result.success && result.data) {
+      let usuarios = result.data.map((u: any) => ({
+        id: u.id,
+        nombre: u.nombre || '',
+        apellidos: u.apellido || u.apellidos || '',
+        correo: u.correo || '',
+        rol: u.rol || 'acudiente',
+        telefono: u.telefono || '',
+        institucionId: u.institucionId,
+        activo: u.estaActivo !== false,
+        debe_cambiar_contrasena: u.debeCambiarContrasena
+      }));
+      
+      // Aplicar filtros si se proporcionan
+      if (institucionId) {
+        usuarios = usuarios.filter((u: Usuario) => u.institucionId === institucionId || u.rol === 'admin' || u.rol === 'admin_sistema');
+      }
+      
+      if (rol) {
+        usuarios = usuarios.filter((u: Usuario) => u.rol === rol);
+      }
+      
+      return usuarios;
+    }
+    return [];
+  } catch (error) {
+    console.error('Error al obtener usuarios:', error);
+    return [];
   }
-  
-  if (rol) {
-    usuarios = usuarios.filter(u => u.rol === rol);
-  }
-  
-  return usuarios;
 };
 
 export const getUsuarioById = async (id: number): Promise<Usuario | null> => {
-  await delay(300);
-  return usuariosListMock.find(u => u.id === id && !u.deletedAt) || null;
+  try {
+    const usuarios = await getUsuarios();
+    return usuarios.find(u => u.id === id) || null;
+  } catch (error) {
+    console.error('Error al obtener usuario:', error);
+    return null;
+  }
 };
 
 export const createUsuario = async (data: Partial<Usuario> & { password?: string }): Promise<{ success: boolean; usuario?: Usuario; error?: string }> => {
@@ -900,6 +1385,24 @@ export const createUsuario = async (data: Partial<Usuario> & { password?: string
 };
 
 export const updateUsuario = async (id: number, data: Partial<Usuario>): Promise<{ success: boolean; usuario?: Usuario; error?: string }> => {
+  // Intentar con API real primero
+  try {
+    const result = await apiClient.actualizarPerfil(id, {
+      nombre: data.nombre,
+      apellido: data.apellidos,
+      telefono: data.telefono,
+      documento: data.documento,
+      tipoDocumento: data.tipoDocumento
+    });
+    
+    if (result.success) {
+      return { success: true, usuario: data as Usuario };
+    }
+  } catch (error) {
+    console.warn('API de actualización no disponible, usando mock');
+  }
+
+  // Fallback a mock
   await delay(600);
   
   const index = usuariosListMock.findIndex(u => u.id === id);
@@ -927,6 +1430,57 @@ export const updateUsuario = async (id: number, data: Partial<Usuario>): Promise
   return { success: true, usuario: usuariosListMock[index] };
 };
 
+// Obtener perfil completo del usuario logueado
+export const getPerfilUsuario = async (): Promise<{ success: boolean; usuario?: any; error?: string }> => {
+  try {
+    const result = await apiClient.getPerfilUsuario();
+    if (result.success && result.data) {
+      return { success: true, usuario: result.data };
+    }
+  } catch (error) {
+    console.warn('Endpoint de perfil no disponible');
+  }
+  
+  // Fallback: retornar datos de sesión
+  const session = getSession();
+  if (session?.user) {
+    return { success: true, usuario: session.user };
+  }
+  
+  return { success: false, error: 'No se pudo obtener el perfil' };
+};
+
+// Obtener institución del usuario logueado
+export const getMiInstitucion = async (): Promise<Institucion | null> => {
+  const session = getSession();
+  const institucionId = session?.user?.institucionId;
+  
+  if (!institucionId) return null;
+  
+  // Intentar obtener de API real
+  try {
+    const result = await apiClient.getInstitucionById(institucionId);
+    if (result.success && result.data) {
+      return {
+        id: result.data.id,
+        nombre: result.data.nombre,
+        direccion: result.data.direccion,
+        telefono: result.data.telefono,
+        correo: result.data.correo,
+        naturaleza: result.data.naturaleza?.toLowerCase() as 'publica' | 'privada',
+        activo: true,
+        municipio: result.data.municipio?.nombre,
+        departamento: result.data.municipio?.departamento?.nombre
+      };
+    }
+  } catch (error) {
+    console.warn('API de institución no disponible');
+  }
+  
+  // Fallback a mock
+  return institucionesMock.find(i => i.id === institucionId) || null;
+};
+
 export const deleteUsuario = async (id: number): Promise<{ success: boolean; error?: string }> => {
   await delay(500);
   
@@ -948,28 +1502,72 @@ export const deleteUsuario = async (id: number): Promise<{ success: boolean; err
 // ============================================
 
 export const getEstudiantes = async (institucionId?: number, cursoId?: number): Promise<Estudiante[]> => {
-  await delay(500);
-  let estudiantes = estudiantesMock.filter(e => e.activo && !e.deletedAt);
-  
-  if (institucionId) {
-    estudiantes = estudiantes.filter(e => e.institucionId === institucionId);
+  try {
+    const result = await apiClient.getEstudiantes();
+    if (result.success && result.data) {
+      let estudiantes = result.data.map((e: any) => ({
+        id: e.id,
+        nombre: e.nombre || e.nombres || '',
+        apellidos: e.apellidos || e.apellido || '',
+        documento: e.documento || e.numeroDocumento || '',
+        tipoDocumento: e.tipoDocumento || e.tipo_documento || 'ti',
+        fechaNacimiento: e.fechaNacimiento || e.fecha_nacimiento,
+        cursoId: e.cursoId || e.curso_id,
+        institucionId: e.institucionId || e.institucion_id,
+        activo: e.activo ?? e.estaActivo ?? true,
+        createdAt: e.createdAt || e.created_at || e.creadoEn || ''
+      }));
+      
+      if (institucionId) {
+        estudiantes = estudiantes.filter((e: Estudiante) => e.institucionId === institucionId);
+      }
+      
+      if (cursoId) {
+        estudiantes = estudiantes.filter((e: Estudiante) => e.cursoId === cursoId);
+      }
+      
+      return estudiantes;
+    }
+    return [];
+  } catch (error) {
+    console.error('Error al obtener estudiantes:', error);
+    return [];
   }
-  
-  if (cursoId) {
-    estudiantes = estudiantes.filter(e => e.cursoId === cursoId);
-  }
-  
-  return estudiantes;
 };
 
 export const getEstudianteById = async (id: number): Promise<Estudiante | null> => {
-  await delay(300);
-  return estudiantesMock.find(e => e.id === id && !e.deletedAt) || null;
+  try {
+    const result = await apiClient.getEstudianteById(id);
+    if (result.success && result.data) {
+      const e = result.data;
+      return {
+        id: e.id,
+        nombre: e.nombre || e.nombres || '',
+        apellidos: e.apellidos || e.apellido || '',
+        documento: e.documento || e.numeroDocumento || '',
+        tipoDocumento: e.tipoDocumento || e.tipo_documento || 'ti',
+        fechaNacimiento: e.fechaNacimiento || e.fecha_nacimiento,
+        cursoId: e.cursoId || e.curso_id,
+        institucionId: e.institucionId || e.institucion_id,
+        activo: e.activo ?? e.estaActivo ?? true,
+        createdAt: e.createdAt || e.created_at || e.creadoEn || ''
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error('Error al obtener estudiante:', error);
+    return null;
+  }
 };
 
 export const getEstudiantesByCurso = async (cursoId: number): Promise<Estudiante[]> => {
-  await delay(500);
-  return estudiantesMock.filter(e => e.cursoId === cursoId && e.activo && !e.deletedAt);
+  try {
+    const estudiantes = await getEstudiantes(undefined, cursoId);
+    return estudiantes;
+  } catch (error) {
+    console.error('Error al obtener estudiantes del curso:', error);
+    return [];
+  }
 };
 
 export const createEstudiante = async (data: Partial<Estudiante>): Promise<{ success: boolean; estudiante?: Estudiante; error?: string }> => {
@@ -1221,41 +1819,79 @@ export const getLogsAuditoria = async (filtros?: {
 };
 
 export const getEstadisticasDocente = async (docenteId: number) => {
-  await delay(600);
-  const tareasDocente = tareasMock.filter(t => t.docenteId === docenteId);
-  const tareaIds = tareasDocente.map(t => t.id);
-  const entregasDocente = entregasMock.filter(e => tareaIds.includes(e.tareaId));
-  
-  return {
-    tareasActivas: tareasDocente.filter(t => t.estado === 'activa').length,
-    entregasPorRevisar: entregasDocente.filter(e => e.estado === 'enviada').length,
-    entregasCalificadas: entregasDocente.filter(e => e.estado === 'calificada').length,
-    familiasTotales: 25, // Mock
-    porcentajeParticipacion: 78
-  };
+  try {
+    const tareas = await getTareas();
+    const tareasDocente = tareas.filter(t => t.docenteId === docenteId);
+    
+    return {
+      tareasActivas: tareasDocente.filter(t => t.estado === 'activa').length,
+      entregasPorRevisar: 0, // Se calculará cuando el endpoint de entregas esté disponible
+      entregasCalificadas: 0,
+      familiasTotales: 0,
+      porcentajeParticipacion: 0
+    };
+  } catch (error) {
+    console.error('Error al obtener estadísticas del docente:', error);
+    return {
+      tareasActivas: 0,
+      entregasPorRevisar: 0,
+      entregasCalificadas: 0,
+      familiasTotales: 0,
+      porcentajeParticipacion: 0
+    };
+  }
 };
 
-export const getEstadisticasAcudiente = async (acudienteId: number) => {
-  await delay(600);
-  const entregas = entregasMock.filter(e => e.acudienteId === acudienteId);
-  return {
-    tareasPendientes: 3,
-    entregasRecientes: entregas.length,
-    promedioCalificacion: 4.2,
-    // @ts-ignore
-    estudiantes: estudiantesMock.filter(e => e.acudienteId === acudienteId).length
-  };
+export const getEstadisticasAcudiente = async (_acudienteId: number) => {
+  try {
+    return {
+      tareasPendientes: 0,
+      entregasRecientes: 0,
+      promedioCalificacion: 0,
+      estudiantes: 0
+    };
+  } catch (error) {
+    console.error('Error al obtener estadísticas del acudiente:', error);
+    return {
+      tareasPendientes: 0,
+      entregasRecientes: 0,
+      promedioCalificacion: 0,
+      estudiantes: 0
+    };
+  }
 };
 
 export const getEstadisticasInstitucion = async (institucionId: number) => {
-  await delay(700);
-  return {
-    docentesActivos: 15,
-    estudiantesActivos: 320,
-    cursosActivos: cursosMock.filter(c => c.institucionId === institucionId).length,
-    tareasDelPeriodo: tareasMock.length,
-    porcentajeParticipacion: 72
-  };
+  try {
+    const [cursos, estudiantes, usuarios, tareas] = await Promise.all([
+      getCursos(institucionId),
+      getEstudiantes(institucionId),
+      getUsuarios(),
+      getTareas()
+    ]);
+    
+    const docentesInstitucion = usuarios.filter(u => 
+      u.institucionId === institucionId && 
+      ['docente', 'docente_aula'].includes(u.rol)
+    );
+    
+    return {
+      docentesActivos: docentesInstitucion.length,
+      estudiantesActivos: estudiantes.length,
+      cursosActivos: cursos.length,
+      tareasDelPeriodo: tareas.length,
+      porcentajeParticipacion: 0
+    };
+  } catch (error) {
+    console.error('Error al obtener estadísticas de la institución:', error);
+    return {
+      docentesActivos: 0,
+      estudiantesActivos: 0,
+      cursosActivos: 0,
+      tareasDelPeriodo: 0,
+      porcentajeParticipacion: 0
+    };
+  }
 };
 
 // ============================================
@@ -1280,59 +1916,176 @@ export const solicitarRecuperacionContrasena = async (correo: string): Promise<{
 export const cambiarContrasena = async (
   usuarioId: number, 
   contrasenaActual: string, 
-  _contrasenaNueva: string
+  contrasenaNueva: string,
+  confirmarContrasena?: string
 ): Promise<{ success: boolean; error?: string }> => {
-  await delay(500);
-  
-  const usuario = usuariosListMock.find(u => u.id === usuarioId);
-  
-  if (!usuario) {
-    return { success: false, error: 'Usuario no encontrado' };
+  // Si está en modo bypass, usar mock
+  if (isBypassValidationsEnabled()) {
+    await delay(500);
+    
+    const usuario = usuariosListMock.find(u => u.id === usuarioId);
+    
+    if (!usuario) {
+      return { success: false, error: 'Usuario no encontrado' };
+    }
+    
+    // Verificar contraseña actual (en mock, la contraseña es el documento o '12345678')
+    const contrasenaValida = contrasenaActual === usuario.documento || contrasenaActual === '12345678';
+    
+    if (!contrasenaValida) {
+      return { success: false, error: 'La contraseña actual es incorrecta' };
+    }
+    
+    // Cambiar contraseña (en mock solo marcamos que ya no debe cambiarla)
+    usuario.debe_cambiar_contrasena = false;
+    
+    // Actualizar sesión
+    const session = getSession();
+    if (session && session.user.id === usuarioId) {
+      session.user.debe_cambiar_contrasena = false;
+      localStorage.setItem('session', JSON.stringify(session));
+    }
+    
+    return { success: true };
   }
   
-  // Verificar contraseña actual (en mock, la contraseña es el documento o '12345678')
-  const contrasenaValida = contrasenaActual === usuario.documento || contrasenaActual === '12345678';
+  // Usar API real
+  const result = await apiClient.cambiarContrasena({
+    contrasenaActual,
+    contrasenaNueva,
+    confirmarContrasena: confirmarContrasena || contrasenaNueva
+  });
   
-  if (!contrasenaValida) {
-    return { success: false, error: 'La contraseña actual es incorrecta' };
+  if (result.success) {
+    // Actualizar sesión local
+    const session = getSession();
+    if (session && session.user.id === usuarioId) {
+      session.user.debe_cambiar_contrasena = false;
+      localStorage.setItem('session', JSON.stringify(session));
+    }
   }
   
-  // Cambiar contraseña (en mock solo marcamos que ya no debe cambiarla)
-  usuario.debe_cambiar_contrasena = false;
-  
-  // Actualizar sesión
-  const session = getSession();
-  if (session && session.user.id === usuarioId) {
-    session.user.debe_cambiar_contrasena = false;
-    localStorage.setItem('session', JSON.stringify(session));
-  }
-  
-  return { success: true };
+  return { success: result.success, error: result.message };
 };
 
 // ============================================
-// ESTADÍSTICAS RECTOR
+// ESTADÍSTICAS RECTOR (Usa endpoint real)
 // ============================================
 
 export async function getEstadisticasRector(): Promise<any> {
-  // Simular delay de API
-  await delay(800);
-  
-  const usuarios = usuariosListMock;
-  const instituciones = institucionesMock;
-  const cursos = cursosMock;
-  const tareas = tareasMock;
+  // Si está en modo bypass, calcular localmente
+  if (isBypassValidationsEnabled()) {
+    try {
+      const [usuarios, instituciones] = await Promise.all([
+        getUsuarios(),
+        getInstituciones()
+      ]);
 
+      const coordinadores = usuarios.filter(u => u.rol === 'coordinador');
+      const orientadores = usuarios.filter(u => u.rol === 'orientador');
+      const docentes = usuarios.filter(u => u.rol === 'docente_aula');
+      const personalActivo = usuarios.filter(u => u.activo);
+
+      return {
+        totalInstituciones: instituciones.length,
+        institucionesActivas: instituciones.filter(i => i.activo).length,
+        totalCoordinadores: coordinadores.length,
+        coordinadoresActivos: coordinadores.filter(u => u.activo).length,
+        totalOrientadores: orientadores.length,
+        orientadoresActivos: orientadores.filter(u => u.activo).length,
+        totalDocentes: docentes.length,
+        docentesActivos: docentes.filter(u => u.activo).length,
+        totalCursos: 0,
+        totalEstudiantes: 0,
+        totalPersonal: usuarios.length,
+        personalActivo: personalActivo.length,
+        tasaActivacion: usuarios.length > 0 
+          ? Math.round((personalActivo.length / usuarios.length) * 100) 
+          : 0
+      };
+    } catch (error) {
+      console.error('Error al obtener estadísticas (mock):', error);
+      return getDefaultEstadisticas();
+    }
+  }
+
+  // Usar API real
+  try {
+    const result = await apiClient.getEstadisticasRector();
+    if (result.success && result.data) {
+      return {
+        ...result.data,
+        // Agregar campos calculados para compatibilidad
+        totalPersonal: (result.data.totalCoordinadores || 0) + 
+                       (result.data.totalOrientadores || 0) + 
+                       (result.data.totalDocentes || 0),
+        personalActivo: (result.data.coordinadoresActivos || 0) + 
+                        (result.data.orientadoresActivos || 0) + 
+                        (result.data.docentesActivos || 0),
+        tasaActivacion: calcularTasaActivacion(result.data)
+      };
+    }
+    return getDefaultEstadisticas();
+  } catch (error) {
+    console.error('Error al obtener estadísticas del rector:', error);
+    return getDefaultEstadisticas();
+  }
+}
+
+// Función auxiliar para calcular tasa de activación
+function calcularTasaActivacion(data: any): number {
+  const total = (data.totalCoordinadores || 0) + (data.totalOrientadores || 0) + (data.totalDocentes || 0);
+  const activos = (data.coordinadoresActivos || 0) + (data.orientadoresActivos || 0) + (data.docentesActivos || 0);
+  return total > 0 ? Math.round((activos / total) * 100) : 0;
+}
+
+// Valores por defecto
+function getDefaultEstadisticas() {
   return {
-    totalInstituciones: instituciones.length,
-    totalUsuarios: usuarios.length,
-    totalDocentes: usuarios.filter(u => u.rol === 'docente_aula').length,
-    totalAcudientes: usuarios.filter(u => u.rol === 'acudiente').length,
-    totalCursos: cursos.length,
-    totalTareas: tareas.length,
-    tareasCompletadas: tareas.filter(t => t.estado === 'completada').length,
-    participacionPromedio: Math.round((tareas.filter(t => t.estado === 'completada').length / Math.max(tareas.length, 1)) * 100)
+    totalInstituciones: 0,
+    institucionesActivas: 0,
+    totalCoordinadores: 0,
+    coordinadoresActivos: 0,
+    totalOrientadores: 0,
+    orientadoresActivos: 0,
+    totalDocentes: 0,
+    docentesActivos: 0,
+    totalCursos: 0,
+    totalEstudiantes: 0,
+    totalPersonal: 0,
+    personalActivo: 0,
+    tasaActivacion: 0
   };
+}
+
+// ============================================
+// DIRECTIVOS DE INSTITUCIÓN (Usa endpoint real)
+// ============================================
+
+export async function getDirectivosInstitucion(institucionId: number): Promise<{
+  coordinadores: any[];
+  orientadores: any[];
+}> {
+  // Si está en modo bypass, filtrar de mocks
+  if (isBypassValidationsEnabled()) {
+    const usuarios = await getUsuarios();
+    return {
+      coordinadores: usuarios.filter(u => u.rol === 'coordinador' && u.institucionId === institucionId),
+      orientadores: usuarios.filter(u => u.rol === 'orientador' && u.institucionId === institucionId)
+    };
+  }
+
+  // Usar API real
+  try {
+    const result = await apiClient.getDirectivosInstitucion(institucionId);
+    if (result.success && result.data) {
+      return result.data;
+    }
+    return { coordinadores: [], orientadores: [] };
+  } catch (error) {
+    console.error('Error al obtener directivos:', error);
+    return { coordinadores: [], orientadores: [] };
+  }
 }
 
 // ============================================
@@ -1399,3 +2152,232 @@ export async function deleteMunicipio(id: number): Promise<void> {
   municipiosMock.splice(index, 1);
 }
 
+// ============================================
+// CARGA MASIVA DE ESTUDIANTES
+// ============================================
+
+export interface ValidacionExcelResult {
+  success: boolean;
+  totalFilas?: number;
+  filasValidas?: number;
+  filasInvalidas?: number;
+  errores?: Array<{ fila: number; error: string }>;
+  estudiantesValidos?: Array<{
+    fila: number;
+    nombres: string;
+    apellidos: string;
+    numeroDocumento: string;
+  }>;
+  error?: string;
+}
+
+export interface CargaMasivaResult {
+  success: boolean;
+  totalProcesados?: number;
+  insertados?: number;
+  rechazados?: number;
+  errores?: Array<{ fila: number; error: string }>;
+  error?: string;
+}
+
+/**
+ * Descargar plantilla Excel para carga masiva de estudiantes
+ */
+export const descargarPlantillaEstudiantes = async (): Promise<{ success: boolean; error?: string }> => {
+  // Si está en modo bypass, simular descarga
+  if (isBypassValidationsEnabled()) {
+    await delay(300);
+    // Crear un archivo de ejemplo
+    const csvContent = 'tipo_documento,numero_documento,nombres,apellidos,fecha_nacimiento,genero,correo_acudiente,telefono_acudiente\n';
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'plantilla_estudiantes.csv';
+    a.click();
+    window.URL.revokeObjectURL(url);
+    return { success: true };
+  }
+  
+  // Usar API real
+  try {
+    await apiClient.descargarPlantillaExcel();
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Error al descargar plantilla' };
+  }
+};
+
+/**
+ * Validar archivo Excel antes de carga masiva
+ */
+export const validarExcelEstudiantes = async (archivo: File): Promise<ValidacionExcelResult> => {
+  // Si está en modo bypass, simular validación
+  if (isBypassValidationsEnabled()) {
+    await delay(1000);
+    // Simular validación exitosa
+    return {
+      success: true,
+      totalFilas: 10,
+      filasValidas: 8,
+      filasInvalidas: 2,
+      errores: [
+        { fila: 3, error: 'Número de documento duplicado' },
+        { fila: 7, error: 'Correo de acudiente inválido' }
+      ],
+      estudiantesValidos: [
+        { fila: 1, nombres: 'Juan', apellidos: 'Pérez', numeroDocumento: '1234567890' },
+        { fila: 2, nombres: 'María', apellidos: 'González', numeroDocumento: '0987654321' }
+      ]
+    };
+  }
+  
+  // Usar API real
+  const result = await apiClient.validarExcel(archivo);
+  if (result.success && result.data) {
+    return {
+      success: true,
+      totalFilas: result.data.totalFilas,
+      filasValidas: result.data.filasValidas,
+      filasInvalidas: result.data.filasInvalidas,
+      errores: result.data.errores,
+      estudiantesValidos: result.data.estudiantesValidos
+    };
+  }
+  return { success: false, error: result.message };
+};
+
+/**
+ * Ejecutar carga masiva de estudiantes
+ */
+export const cargaMasivaEstudiantes = async (archivo: File, cursoId: number): Promise<CargaMasivaResult> => {
+  // Si está en modo bypass, simular carga
+  if (isBypassValidationsEnabled()) {
+    await delay(2000);
+    // Simular carga exitosa
+    return {
+      success: true,
+      totalProcesados: 8,
+      insertados: 7,
+      rechazados: 1,
+      errores: [
+        { fila: 5, error: 'El estudiante ya existe en el sistema' }
+      ]
+    };
+  }
+  
+  // Usar API real
+  const result = await apiClient.cargaMasivaEstudiantes(archivo, cursoId);
+  if (result.success && result.data) {
+    return {
+      success: true,
+      totalProcesados: result.data.totalProcesados,
+      insertados: result.data.insertados,
+      rechazados: result.data.rechazados,
+      errores: result.data.errores
+    };
+  }
+  return { success: false, error: result.message };
+};
+
+// ============================================
+// NOTIFICACIONES FCM
+// ============================================
+
+/**
+ * Registrar token FCM para notificaciones push
+ */
+export const registrarTokenFCM = async (tokenFcm: string): Promise<{ success: boolean; error?: string }> => {
+  // Si está en modo bypass, simular registro
+  if (isBypassValidationsEnabled()) {
+    await delay(300);
+    console.log('📱 Token FCM registrado (mock):', tokenFcm.substring(0, 20) + '...');
+    return { success: true };
+  }
+  
+  // Usar API real
+  const result = await apiClient.registrarTokenFCM(tokenFcm);
+  return { success: result.success, error: result.message };
+};
+
+// ============================================
+// COORDINADOR ACADÉMICO
+// ============================================
+
+/**
+ * Obtener estadísticas del coordinador
+ * GET /coordinadores/estadisticas
+ */
+export const getEstadisticasCoordinador = async () => {
+  const result = await apiClient.getEstadisticasCoordinador();
+  return result.data || {
+    totalCursos: 0,
+    totalDocentes: 0,
+    totalOrientadores: 0,
+    totalEstudiantes: 0,
+    tareasCreadas: 0,
+    tareasCalificadas: 0,
+    tareasPendientes: 0,
+    promedioGeneral: 0,
+    cursosConAlerta: 0
+  };
+};
+
+/**
+ * Obtener cursos con métricas académicas
+ * GET /coordinadores/cursos
+ */
+export const getCursosCoordinador = async () => {
+  const result = await apiClient.getCursosCoordinador();
+  return result.data || [];
+};
+
+/**
+ * Obtener alertas académicas
+ * GET /coordinadores/alertas
+ */
+export const getAlertasCoordinador = async () => {
+  const result = await apiClient.getAlertasCoordinador();
+  return result.data || {
+    alertas: [],
+    resumen: { criticas: 0, moderadas: 0, leves: 0 }
+  };
+};
+
+/**
+ * Obtener docentes con seguimiento académico
+ * GET /coordinadores/docentes
+ */
+export const getDocentesCoordinador = async () => {
+  const result = await apiClient.getDocentesCoordinador();
+  return result.data || [];
+};
+
+/**
+ * Obtener orientadores con métricas
+ * GET /coordinadores/orientadores
+ */
+export const getOrientadoresCoordinador = async () => {
+  const result = await apiClient.getOrientadoresCoordinador();
+  return result.data || [];
+};
+
+/**
+ * Obtener rendimiento detallado de un curso
+ * GET /coordinadores/cursos/:id/rendimiento
+ */
+export const getRendimientoCurso = async (cursoId: number) => {
+  const result = await apiClient.getRendimientoCurso(cursoId);
+  return result.data || {
+    cursoId,
+    promedioGeneral: 0,
+    distribucionRangos: {
+      superior: { cantidad: 0, porcentaje: 0 },
+      alto: { cantidad: 0, porcentaje: 0 },
+      basico: { cantidad: 0, porcentaje: 0 },
+      bajo: { cantidad: 0, porcentaje: 0 }
+    },
+    promediosPorAsignatura: [],
+    tendencia: 'estable' as const
+  };
+};
