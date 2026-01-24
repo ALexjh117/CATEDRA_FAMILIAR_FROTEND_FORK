@@ -14,7 +14,13 @@ import {
   getCursosCoordinador,
   getAlertasCoordinador,
   getDocentesCoordinador,
-  getOrientadoresCoordinador
+  getOrientadoresCoordinador,
+  getOrientadoresCRUD,
+  crearOrientador,
+  actualizarOrientador,
+  desactivarOrientador,
+  getAcudientesDeEstudianteAPI,
+  vincularAcudienteAPI
 } from '../api/endpoints';
 import { type Estudiante, type Usuario, type Curso, type Grado, type Tarea } from '../mocks/data';
 import DashboardLayout from '../components/DashboardLayout';
@@ -40,7 +46,8 @@ import {
   IconClock,
   IconTrendingUp,
   IconAlertTriangle,
-  IconBarChart
+  IconBarChart,
+  IconEye
 } from '../components/ui/Icons';
 
 export default function DashboardCoordinadorPage() {
@@ -54,7 +61,7 @@ export default function DashboardCoordinadorPage() {
   const [cursos, setCursos] = useState<Curso[]>([]);
   const [grados, setGrados] = useState<Grado[]>([]);
   const [institucion, setInstitucion] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'resumen' | 'cursos' | 'docentes' | 'estudiantes' | 'carga-masiva'>('resumen');
+  const [activeTab, setActiveTab] = useState<'resumen' | 'cursos' | 'docentes' | 'orientadores' | 'estudiantes' | 'carga-masiva'>('resumen');
   
   // Filtros y búsqueda
   const [busqueda, setBusqueda] = useState('');
@@ -64,10 +71,14 @@ export default function DashboardCoordinadorPage() {
   // Modales
   const [modalEstudiante, setModalEstudiante] = useState(false);
   const [modalCargaMasiva, setModalCargaMasiva] = useState(false);
+  const [modalOrientador, setModalOrientador] = useState(false);
+  const [modalVinculacion, setModalVinculacion] = useState(false);
   
   // Estados de edición
   const [editingEstudiante, setEditingEstudiante] = useState<Estudiante | null>(null);
   const [estudianteVincular, setEstudianteVincular] = useState<Estudiante | null>(null);
+  const [editingOrientador, setEditingOrientador] = useState<any>(null);
+  const [acudientesEstudiante, setAcudientesEstudiante] = useState<any[]>([]);
   
   // Formularios
   const [formEstudiante, setFormEstudiante] = useState<{
@@ -293,6 +304,137 @@ export default function DashboardCoordinadorPage() {
   };
 
   // ============================================
+  // HANDLERS ORIENTADORES
+  // ============================================
+  
+  // Generar contraseña sugerida
+  const generarContrasenaOrientador = (apellido?: string) => {
+    const año = new Date().getFullYear();
+    if (apellido && apellido.trim()) {
+      // Capitalizar primera letra del apellido
+      const apellidoCapitalizado = apellido.trim().charAt(0).toUpperCase() + apellido.trim().slice(1).toLowerCase();
+      return `${apellidoCapitalizado}${año}!`;
+    }
+    return `Orient${año}!`;
+  };
+
+  const [formOrientador, setFormOrientador] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    address: '',
+    contrasena: generarContrasenaOrientador()
+  });
+
+  const resetFormOrientador = () => {
+    setFormOrientador({
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      address: '',
+      contrasena: generarContrasenaOrientador()
+    });
+  };
+
+  // Actualizar contraseña sugerida cuando cambia el apellido
+  const handleOrientadorLastNameChange = (value: string) => {
+    setFormOrientador(prev => ({
+      ...prev,
+      lastName: value,
+      // Solo actualizar si la contraseña no ha sido modificada manualmente
+      contrasena: prev.contrasena === generarContrasenaOrientador(prev.lastName) || prev.contrasena === generarContrasenaOrientador()
+        ? generarContrasenaOrientador(value)
+        : prev.contrasena
+    }));
+  };
+
+  const handleCreateOrientador = async () => {
+    setError(null);
+    if (!formOrientador.firstName || !formOrientador.lastName || !formOrientador.email) {
+      setError('Nombre, apellido y correo son requeridos');
+      return;
+    }
+    
+    const result = await crearOrientador(formOrientador);
+    if (result.success) {
+      const msg = result.passwordTemporal 
+        ? `✅ Orientador creado. Contraseña temporal: ${result.passwordTemporal}`
+        : '✅ Orientador creado correctamente';
+      setSuccess(msg);
+      await loadData();
+      setModalOrientador(false);
+      setEditingOrientador(null);
+      resetFormOrientador();
+      setTimeout(() => setSuccess(null), 8000); // Más tiempo para ver la contraseña
+    } else {
+      setError(result.error || 'Error al crear orientador');
+    }
+  };
+
+  const handleUpdateOrientador = async () => {
+    if (!editingOrientador) return;
+    setError(null);
+    
+    const result = await actualizarOrientador(editingOrientador.id, {
+      firstName: formOrientador.firstName,
+      lastName: formOrientador.lastName,
+      phone: formOrientador.phone,
+      address: formOrientador.address
+    });
+    
+    if (result.success) {
+      setSuccess('✅ Orientador actualizado correctamente');
+      await loadData();
+      setModalOrientador(false);
+      setEditingOrientador(null);
+      resetFormOrientador();
+      setTimeout(() => setSuccess(null), 3000);
+    } else {
+      setError(result.error || 'Error al actualizar orientador');
+    }
+  };
+
+  const handleDeleteOrientador = async (id: number, nombre: string) => {
+    if (!confirm(`¿Está seguro de desactivar al orientador ${nombre}?`)) return;
+    
+    const result = await desactivarOrientador(id);
+    if (result.success) {
+      setSuccess('✅ Orientador desactivado correctamente');
+      await loadData();
+      setTimeout(() => setSuccess(null), 3000);
+    } else {
+      setError(result.error || 'Error al desactivar orientador');
+    }
+  };
+
+  const openEditOrientador = (orientador: any) => {
+    setEditingOrientador(orientador);
+    setFormOrientador({
+      firstName: orientador.firstName || orientador.nombre || '',
+      lastName: orientador.lastName || orientador.apellido || '',
+      email: orientador.email || orientador.correo || '',
+      phone: orientador.phone || orientador.telefono || '',
+      address: orientador.address || orientador.direccion || '',
+      contrasena: '' // No se muestra contraseña en edición
+    });
+    setModalOrientador(true);
+  };
+
+  // ============================================
+  // HANDLERS VINCULACIÓN
+  // ============================================
+  
+  const openVinculacion = async (est: Estudiante) => {
+    setEstudianteVincular(est);
+    // Cargar acudientes actuales del estudiante
+    const result = await getAcudientesDeEstudianteAPI(est.id);
+    setAcudientesEstudiante(result.data || []);
+    setModalVinculacion(true);
+  };
+
+  // ============================================
   // FILTROS
   // ============================================
   
@@ -469,6 +611,7 @@ export default function DashboardCoordinadorPage() {
                 { id: 'resumen', label: 'Resumen', Icon: IconBarChart },
                 { id: 'cursos', label: 'Cursos', Icon: IconFilter },
                 { id: 'docentes', label: 'Docentes', Icon: IconUsers },
+                { id: 'orientadores', label: 'Orientadores', Icon: IconUserPlus },
                 { id: 'estudiantes', label: 'Estudiantes', Icon: IconBook },
                 { id: 'carga-masiva', label: 'Carga Masiva', Icon: IconFileUpload },
               ].map(tab => (
@@ -888,6 +1031,141 @@ export default function DashboardCoordinadorPage() {
             );
             })()}
 
+            {/* Tab: Orientadores */}
+            {activeTab === 'orientadores' && (
+              <div className="space-y-5">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold text-slate-800">Gestión de Orientadores</h2>
+                  <Button
+                    onClick={() => {
+                      setEditingOrientador(null);
+                      resetFormOrientador();
+                      setModalOrientador(true);
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <IconPlus size={16} />
+                    Nuevo Orientador
+                  </Button>
+                </div>
+                
+                {/* Tabla de orientadores */}
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-slate-50/80">
+                        <th className="text-left py-3.5 px-5 font-semibold text-slate-600 text-sm">Orientador</th>
+                        <th className="text-center py-3.5 px-4 font-semibold text-slate-600 text-sm">Correo</th>
+                        <th className="text-center py-3.5 px-4 font-semibold text-slate-600 text-sm">Teléfono</th>
+                        <th className="text-center py-3.5 px-4 font-semibold text-slate-600 text-sm">Estado</th>
+                        <th className="text-center py-3.5 px-4 font-semibold text-slate-600 text-sm">Grados Asignados</th>
+                        <th className="text-center py-3.5 px-4 font-semibold text-slate-600 text-sm">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const listaOrientadores = orientadoresCoord || [];
+                        if (listaOrientadores.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={6} className="py-12 text-center text-slate-500">
+                                <IconUserPlus className="mx-auto mb-3 text-slate-400" size={48} />
+                                <p className="font-medium">No hay orientadores registrados</p>
+                                <p className="text-sm text-slate-400 mt-1">Haz clic en "Nuevo Orientador" para agregar uno</p>
+                              </td>
+                            </tr>
+                          );
+                        }
+                        return listaOrientadores.map((orientador: any) => {
+                          if (!orientador) return null;
+                          const nombre = orientador.firstName || orientador.nombre || '';
+                          const apellido = orientador.lastName || orientador.apellido || '';
+                          const email = orientador.email || orientador.correo || orientador.correo_institucional || '';
+                          const telefono = orientador.phone || orientador.telefono || '-';
+                          const activo = orientador.activo ?? true;
+                          const gradosAsignados = orientador.gradosAsignados || [];
+                          
+                          return (
+                            <tr key={orientador.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                              <td className="py-4 px-5">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-400 to-emerald-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
+                                    {nombre[0] || '?'}{apellido[0] || ''}
+                                  </div>
+                                  <div>
+                                    <div className="font-medium text-slate-800">{nombre} {apellido}</div>
+                                    {orientador.cursosAcompanados > 0 && (
+                                      <div className="text-sm text-slate-500">{orientador.cursosAcompanados} curso(s) acompañados</div>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="text-center py-4 px-4 text-slate-600 text-sm">
+                                {email}
+                              </td>
+                              <td className="text-center py-4 px-4 text-slate-600">
+                                {telefono}
+                              </td>
+                              <td className="text-center py-4 px-4">
+                                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                  activo 
+                                    ? 'bg-emerald-100 text-emerald-700' 
+                                    : 'bg-slate-100 text-slate-600'
+                                }`}>
+                                  {activo ? 'Activo' : 'Inactivo'}
+                                </span>
+                              </td>
+                              <td className="text-center py-4 px-4">
+                                {gradosAsignados.length > 0 ? (
+                                  <div className="flex flex-wrap justify-center gap-1">
+                                    {gradosAsignados.slice(0, 3).map((g: any) => (
+                                      <span key={g.id} className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs">
+                                        {g.nombre}
+                                      </span>
+                                    ))}
+                                    {gradosAsignados.length > 3 && (
+                                      <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-xs">
+                                        +{gradosAsignados.length - 3}
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400 text-sm">Sin asignar</span>
+                                )}
+                              </td>
+                              <td className="text-center py-4 px-4">
+                                <div className="flex justify-center gap-1">
+                                  <button
+                                    onClick={() => openEditOrientador(orientador)}
+                                    className="p-2 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
+                                    title="Editar"
+                                  >
+                                    <IconEdit size={18} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteOrientador(orientador.id, `${nombre} ${apellido}`)}
+                                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                    title="Desactivar"
+                                  >
+                                    <IconTrash size={18} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+                
+                {/* Resumen */}
+                <div className="text-sm text-slate-600">
+                  Total: <span className="font-semibold text-teal-600">{orientadoresCoord?.length || 0}</span> orientador(es)
+                </div>
+              </div>
+            )}
+
             {/* Tab: Estudiantes */}
             {activeTab === 'estudiantes' && (
               <div className="space-y-5">
@@ -1141,6 +1419,160 @@ export default function DashboardCoordinadorPage() {
             </Button>
             <Button onClick={editingEstudiante ? handleUpdateEstudiante : handleCreateEstudiante}>
               {editingEstudiante ? 'Actualizar' : 'Crear'} Estudiante
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal Nuevo/Editar Orientador */}
+      <Modal
+        isOpen={modalOrientador}
+        onClose={() => {
+          setModalOrientador(false);
+          setEditingOrientador(null);
+          resetFormOrientador();
+          setError(null);
+        }}
+        title={editingOrientador ? 'Editar Orientador' : 'Nuevo Orientador'}
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <FormFieldInput
+              name="firstName"
+              label="Nombres"
+              placeholder="Nombres del orientador"
+              value={formOrientador.firstName}
+              onChange={(e) => setFormOrientador({ ...formOrientador, firstName: e.target.value })}
+              required
+            />
+            <FormFieldInput
+              name="lastName"
+              label="Apellidos"
+              placeholder="Apellidos del orientador"
+              value={formOrientador.lastName}
+              onChange={(e) => handleOrientadorLastNameChange(e.target.value)}
+              required
+            />
+          </div>
+
+          <FormFieldInput
+            name="email"
+            label="Correo Electrónico"
+            type="email"
+            placeholder="orientador@institucion.edu.co"
+            value={formOrientador.email}
+            onChange={(e) => setFormOrientador({ ...formOrientador, email: e.target.value })}
+            required
+            disabled={!!editingOrientador} // No editable si ya existe
+          />
+
+          {!editingOrientador && (
+            <div>
+              <FormFieldInput
+                name="contrasena"
+                label="Contraseña Temporal"
+                type="text"
+                placeholder="Contraseña inicial"
+                value={formOrientador.contrasena}
+                onChange={(e) => setFormOrientador({ ...formOrientador, contrasena: e.target.value })}
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                💡 Sugerencia auto-generada. El orientador deberá cambiarla en su primer inicio de sesión.
+              </p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <FormFieldInput
+              name="phone"
+              label="Teléfono"
+              placeholder="3001234567"
+              value={formOrientador.phone}
+              onChange={(e) => setFormOrientador({ ...formOrientador, phone: e.target.value })}
+            />
+            <FormFieldInput
+              name="address"
+              label="Dirección"
+              placeholder="Dirección del orientador"
+              value={formOrientador.address}
+              onChange={(e) => setFormOrientador({ ...formOrientador, address: e.target.value })}
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setModalOrientador(false);
+                setEditingOrientador(null);
+                resetFormOrientador();
+                setError(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={editingOrientador ? handleUpdateOrientador : handleCreateOrientador}>
+              {editingOrientador ? 'Actualizar' : 'Crear'} Orientador
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal Vinculación Acudiente */}
+      <Modal
+        isOpen={modalVinculacion}
+        onClose={() => {
+          setModalVinculacion(false);
+          setEstudianteVincular(null);
+          setAcudientesEstudiante([]);
+        }}
+        title={`Acudientes de ${estudianteVincular?.nombre || ''} ${estudianteVincular?.apellidos || ''}`}
+        size="lg"
+      >
+        <div className="space-y-4">
+          {/* Lista de acudientes actuales */}
+          {acudientesEstudiante.length > 0 ? (
+            <div className="space-y-3">
+              <h4 className="font-medium text-slate-700">Acudientes vinculados:</h4>
+              {acudientesEstudiante.map((acud: any) => (
+                <div key={acud.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+                  <div>
+                    <p className="font-medium text-slate-800">
+                      {acud.nombres || acud.nombre} {acud.apellidos || acud.apellido}
+                    </p>
+                    <p className="text-sm text-slate-500">
+                      {acud.parentesco || 'Parentesco no especificado'} • {acud.telefono || 'Sin teléfono'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {acud.pivot?.es_principal && (
+                      <span className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded text-xs font-medium">
+                        Principal
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-slate-500">
+              <IconUsers className="mx-auto mb-2 text-slate-400" size={40} />
+              <p>Este estudiante no tiene acudientes vinculados</p>
+              <p className="text-sm text-slate-400">Use el sistema para vincular acudientes</p>
+            </div>
+          )}
+
+          <div className="flex justify-end pt-4">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setModalVinculacion(false);
+                setEstudianteVincular(null);
+                setAcudientesEstudiante([]);
+              }}
+            >
+              Cerrar
             </Button>
           </div>
         </div>

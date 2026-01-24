@@ -2381,3 +2381,366 @@ export const getRendimientoCurso = async (cursoId: number) => {
     tendencia: 'estable' as const
   };
 };
+
+// ============================================
+// CRUD ORIENTADORES (Panel Coordinador)
+// ============================================
+
+/**
+ * Listar orientadores de la institución
+ * GET /orientadores
+ */
+export const getOrientadoresCRUD = async () => {
+  const result = await apiClient.getOrientadores();
+  return { success: result.success, data: result.data || [], error: result.message };
+};
+
+/**
+ * Ver detalle de un orientador
+ * GET /orientadores/:id
+ */
+export const getOrientadorById = async (id: number) => {
+  const result = await apiClient.getOrientador(id);
+  return { success: result.success, data: result.data, error: result.message };
+};
+
+/**
+ * Crear orientador
+ * POST /orientadores
+ */
+export const crearOrientador = async (data: {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  address?: string;
+}) => {
+  const result = await apiClient.createOrientador(data);
+  return { 
+    success: result.success, 
+    data: result.data, 
+    error: result.message,
+    passwordTemporal: result.data?.passwordTemporal 
+  };
+};
+
+/**
+ * Actualizar orientador
+ * PUT /orientadores/:id
+ */
+export const actualizarOrientador = async (id: number, data: {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  address?: string;
+}) => {
+  const result = await apiClient.updateOrientador(id, data);
+  return { success: result.success, error: result.message };
+};
+
+/**
+ * Desactivar orientador
+ * DELETE /orientadores/:id
+ */
+export const desactivarOrientador = async (id: number) => {
+  const result = await apiClient.deleteOrientador(id);
+  return { success: result.success, error: result.message };
+};
+
+// ============================================
+// VINCULACIÓN ESTUDIANTE-ACUDIENTE (Backend Real)
+// ============================================
+
+/**
+ * Listar acudientes de un estudiante (Backend Real)
+ * GET /estudiantes/:id/acudientes
+ */
+export const getAcudientesDeEstudianteAPI = async (estudianteId: number) => {
+  const result = await apiClient.getAcudientesEstudiante(estudianteId);
+  return { success: result.success, data: result.data || [], error: result.message };
+};
+
+/**
+ * Vincular acudiente a estudiante (Backend Real)
+ * POST /estudiantes/:id/acudientes
+ */
+export const vincularAcudienteAPI = async (estudianteId: number, data: {
+  acudienteId: number;
+  esPrincipal?: boolean;
+  autorizacionRecogida?: boolean;
+}) => {
+  const result = await apiClient.vincularAcudiente(estudianteId, data);
+  return { success: result.success, error: result.message };
+};
+
+/**
+ * Actualizar vínculo estudiante-acudiente
+ * PUT /estudiantes/:estudianteId/acudientes/:acudienteId
+ */
+export const actualizarVinculoAcudiente = async (
+  estudianteId: number, 
+  acudienteId: number, 
+  data: {
+    esPrincipal?: boolean;
+    autorizacionRecogida?: boolean;
+  }
+) => {
+  const result = await apiClient.updateVinculoAcudiente(estudianteId, acudienteId, data);
+  return { success: result.success, error: result.message };
+};
+
+/**
+ * Desvincular acudiente de estudiante
+ * DELETE /estudiantes/:estudianteId/acudientes/:acudienteId
+ */
+export const desvincularAcudienteReal = async (estudianteId: number, acudienteId: number) => {
+  const result = await apiClient.desvincularAcudiente(estudianteId, acudienteId);
+  return { success: result.success, error: result.message };
+};
+
+// ============================================
+// GESTIÓN AVANZADA DE ESTUDIANTES
+// ============================================
+
+/**
+ * Cambiar curso de un estudiante
+ * POST /estudiantes/:id/cambiar-curso
+ */
+export const cambiarCursoEstudiante = async (estudianteId: number, data: {
+  nuevoCursoId: number;
+  motivo?: string;
+}) => {
+  const result = await apiClient.cambiarCursoEstudiante(estudianteId, data);
+  return { success: result.success, error: result.message };
+};
+
+/**
+ * Retirar estudiante
+ * POST /estudiantes/:id/retirar
+ */
+export const retirarEstudiante = async (estudianteId: number, data: {
+  motivo: string;
+  fechaRetiro?: string;
+}) => {
+  const result = await apiClient.retirarEstudiante(estudianteId, data);
+  return { success: result.success, error: result.message };
+};
+
+/**
+ * Historial del estudiante
+ * GET /estudiantes/:id/historial
+ */
+export const getHistorialEstudiante = async (estudianteId: number) => {
+  const result = await apiClient.getHistorialEstudiante(estudianteId);
+  return { success: result.success, data: result.data || [], error: result.message };
+};
+
+// ============================================
+// REPORTES COORDINADOR
+// ============================================
+
+/**
+ * Reporte de entregas por curso
+ * GET /reportes/cursos/:cursoId/entregas
+ */
+export const getReporteEntregasCurso = async (cursoId: number, periodo?: number) => {
+  const result = await apiClient.getReporteEntregasCurso(cursoId, periodo);
+  return { success: result.success, data: result.data, error: result.message };
+};
+
+/**
+ * Reporte de calificaciones por curso
+ * GET /reportes/cursos/:cursoId/calificaciones
+ */
+export const getReporteCalificacionesCurso = async (cursoId: number, periodo?: number) => {
+  const result = await apiClient.getReporteCalificacionesCurso(cursoId, periodo);
+  return { success: result.success, data: result.data, error: result.message };
+};
+
+/**
+ * Resumen institucional
+ * GET /reportes/institucion/resumen
+ */
+export const getResumenInstitucional = async () => {
+  const result = await apiClient.getResumenInstitucional();
+  return { success: result.success, data: result.data, error: result.message };
+};
+
+// ============================================
+// CRUD DOCENTES (Vista /docentes)
+// ============================================
+
+/**
+ * Obtener todos los docentes
+ * GET /docentes
+ */
+export const getDocentesCRUD = async () => {
+  const result = await apiClient.getDocentes();
+  return result.data || [];
+};
+
+/**
+ * Obtener docente por ID
+ * GET /docentes/:id
+ */
+export const getDocenteById = async (id: number) => {
+  const result = await apiClient.getDocenteById(id);
+  return { success: result.success, data: result.data, error: result.message };
+};
+
+/**
+ * Crear docente
+ * POST /docentes
+ */
+export const crearDocente = async (data: {
+  correo: string;
+  contrasena: string;
+  nombre: string;
+  apellido: string;
+  telefono?: string;
+  institucionId: number;
+  cursoIds?: number[];
+}) => {
+  const result = await apiClient.createDocente(data);
+  return { success: result.success, data: result.data, error: result.message };
+};
+
+/**
+ * Actualizar docente
+ * PUT /docentes/:id
+ */
+export const actualizarDocente = async (id: number, data: {
+  nombre?: string;
+  apellido?: string;
+  telefono?: string;
+  cursoIds?: number[];
+  estaActivo?: boolean;
+}) => {
+  const result = await apiClient.updateDocente(id, data);
+  return { success: result.success, data: result.data, error: result.message };
+};
+
+/**
+ * Eliminar docente
+ * DELETE /docentes/:id
+ */
+export const eliminarDocente = async (id: number) => {
+  const result = await apiClient.deleteDocente(id);
+  return { success: result.success, error: result.message };
+};
+
+// ============================================
+// CRUD CURSOS (Vista /cursos)
+// ============================================
+
+/**
+ * Obtener todos los cursos
+ * GET /cursos
+ */
+export const getCursosCRUD = async () => {
+  const result = await apiClient.getCursos();
+  return result.data || [];
+};
+
+/**
+ * Obtener curso por ID (API real)
+ * GET /cursos/:id
+ */
+export const getCursoByIdAPI = async (id: number) => {
+  const result = await apiClient.getCursoById(id);
+  return { success: result.success, data: result.data, error: result.message };
+};
+
+/**
+ * Crear curso
+ * POST /cursos
+ */
+export const crearCurso = async (data: {
+  nombre: string;
+  gradoId: number;
+  jornada: 'Mañana' | 'Tarde' | 'Completa';
+  institucionId: number;
+  docenteId?: number;
+}) => {
+  const result = await apiClient.createCurso(data);
+  return { success: result.success, data: result.data, error: result.message };
+};
+
+/**
+ * Actualizar curso
+ * PUT /cursos/:id
+ */
+export const actualizarCurso = async (id: number, data: {
+  nombre?: string;
+  gradoId?: number;
+  jornada?: 'Mañana' | 'Tarde' | 'Completa';
+  docenteId?: number;
+}) => {
+  const result = await apiClient.updateCurso(id, data);
+  return { success: result.success, data: result.data, error: result.message };
+};
+
+/**
+ * Eliminar curso
+ * DELETE /cursos/:id
+ */
+export const eliminarCurso = async (id: number) => {
+  const result = await apiClient.deleteCurso(id);
+  return { success: result.success, error: result.message };
+};
+
+// ============================================
+// CRUD GRADOS
+// ============================================
+
+/**
+ * Obtener todos los grados
+ * GET /grados
+ */
+export const getGradosCRUD = async () => {
+  const result = await apiClient.getGrados();
+  return result.data || [];
+};
+
+/**
+ * Obtener grado por ID
+ * GET /grados/:id
+ */
+export const getGradoById = async (id: number) => {
+  const result = await apiClient.getGradoById(id);
+  return { success: result.success, data: result.data, error: result.message };
+};
+
+/**
+ * Crear grado
+ * POST /grados
+ */
+export const crearGrado = async (data: {
+  nombre: string;
+  descripcion?: string;
+  institucionId?: number;
+}) => {
+  const result = await apiClient.createGrado(data);
+  return { success: result.success, data: result.data, error: result.message };
+};
+
+/**
+ * Actualizar grado
+ * PUT /grados/:id
+ */
+export const actualizarGrado = async (id: number, data: {
+  nombre?: string;
+  descripcion?: string;
+}) => {
+  const result = await apiClient.updateGrado(id, data);
+  return { success: result.success, data: result.data, error: result.message };
+};
+
+/**
+ * Eliminar grado
+ * DELETE /grados/:id
+ */
+export const eliminarGrado = async (id: number) => {
+  const result = await apiClient.deleteGrado(id);
+  return { success: result.success, error: result.message };
+};

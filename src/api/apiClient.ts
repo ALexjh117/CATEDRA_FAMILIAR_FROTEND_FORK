@@ -913,7 +913,94 @@ class ApiClient {
   }
 
   // ============================================
-  // CURSOS - Listar todos
+  // DOCENTES - CRUD COMPLETO
+  // ============================================
+  
+  /**
+   * Obtener todos los docentes
+   * GET /docentes
+   */
+  async getDocentes(): Promise<ApiResponse<any[]>> {
+    try {
+      const response = await httpService.get<ApiResponse<any[]>>('/docentes');
+      return response.data;
+    } catch (error: any) {
+      console.warn('Endpoint /docentes no disponible, usando respuesta vacía');
+      return { success: true, message: 'Sin datos', data: [] };
+    }
+  }
+
+  /**
+   * Obtener un docente por ID
+   * GET /docentes/:id
+   */
+  async getDocenteById(id: number): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.get<ApiResponse<any>>(`/docentes/${id}`);
+      return response.data;
+    } catch (error: any) {
+      return { success: false, message: error.message || 'Docente no encontrado' };
+    }
+  }
+
+  /**
+   * Crear un nuevo docente
+   * POST /docentes
+   */
+  async createDocente(data: {
+    correo: string;
+    contrasena: string;
+    nombre: string;
+    apellido: string;
+    telefono?: string;
+    institucionId: number;
+    cursoIds?: number[];
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.post<ApiResponse<any>>('/docentes', data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Error POST /docentes:', error.message);
+      return { success: false, message: error.message || 'Error al crear docente' };
+    }
+  }
+
+  /**
+   * Actualizar un docente
+   * PUT /docentes/:id
+   */
+  async updateDocente(id: number, data: {
+    nombre?: string;
+    apellido?: string;
+    telefono?: string;
+    cursoIds?: number[];
+    estaActivo?: boolean;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.put<ApiResponse<any>>(`/docentes/${id}`, data);
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error PUT /docentes/${id}:`, error.message);
+      return { success: false, message: error.message || 'Error al actualizar docente' };
+    }
+  }
+
+  /**
+   * Eliminar un docente
+   * DELETE /docentes/:id
+   */
+  async deleteDocente(id: number): Promise<ApiResponse<void>> {
+    try {
+      const response = await httpService.delete<ApiResponse<void>>(`/docentes/${id}`);
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error DELETE /docentes/${id}:`, error.message);
+      return { success: false, message: error.message || 'Error al eliminar docente' };
+    }
+  }
+
+  // ============================================
+  // CURSOS - CRUD COMPLETO
   // ============================================
   
   /**
@@ -926,11 +1013,73 @@ class ApiClient {
       return response.data;
     } catch (error: any) {
       console.warn('Endpoint /cursos no disponible, usando respuesta vacía');
-      return {
-        success: true,
-        message: 'Sin datos',
-        data: []
-      };
+      return { success: true, message: 'Sin datos', data: [] };
+    }
+  }
+
+  /**
+   * Obtener un curso por ID
+   * GET /cursos/:id
+   */
+  async getCursoById(id: number): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.get<ApiResponse<any>>(`/cursos/${id}`);
+      return response.data;
+    } catch (error: any) {
+      return { success: false, message: error.message || 'Curso no encontrado' };
+    }
+  }
+
+  /**
+   * Crear un nuevo curso
+   * POST /cursos
+   */
+  async createCurso(data: {
+    nombre: string;
+    gradoId: number;
+    jornada: 'Mañana' | 'Tarde' | 'Completa';
+    institucionId: number;
+    docenteId?: number;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.post<ApiResponse<any>>('/cursos', data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Error POST /cursos:', error.message);
+      return { success: false, message: error.message || 'Error al crear curso' };
+    }
+  }
+
+  /**
+   * Actualizar un curso
+   * PUT /cursos/:id
+   */
+  async updateCurso(id: number, data: {
+    nombre?: string;
+    gradoId?: number;
+    jornada?: 'Mañana' | 'Tarde' | 'Completa';
+    docenteId?: number;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.put<ApiResponse<any>>(`/cursos/${id}`, data);
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error PUT /cursos/${id}:`, error.message);
+      return { success: false, message: error.message || 'Error al actualizar curso' };
+    }
+  }
+
+  /**
+   * Eliminar un curso
+   * DELETE /cursos/:id
+   */
+  async deleteCurso(id: number): Promise<ApiResponse<void>> {
+    try {
+      const response = await httpService.delete<ApiResponse<void>>(`/cursos/${id}`);
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error DELETE /cursos/${id}:`, error.message);
+      return { success: false, message: error.message || 'Error al eliminar curso' };
     }
   }
 
@@ -1043,7 +1192,7 @@ class ApiClient {
   }
 
   // ============================================
-  // GRADOS
+  // GRADOS - CRUD COMPLETO
   // ============================================
   
   /**
@@ -1056,11 +1205,69 @@ class ApiClient {
       return response.data;
     } catch (error: any) {
       console.warn('Endpoint /grados no disponible, usando respuesta vacía');
-      return {
-        success: true,
-        message: 'Sin datos',
-        data: []
-      };
+      return { success: true, message: 'Sin datos', data: [] };
+    }
+  }
+
+  /**
+   * Obtener un grado por ID
+   * GET /grados/:id
+   */
+  async getGradoById(id: number): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.get<ApiResponse<any>>(`/grados/${id}`);
+      return response.data;
+    } catch (error: any) {
+      return { success: false, message: error.message || 'Grado no encontrado' };
+    }
+  }
+
+  /**
+   * Crear un nuevo grado
+   * POST /grados
+   */
+  async createGrado(data: {
+    nombre: string;
+    descripcion?: string;
+    institucionId?: number;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.post<ApiResponse<any>>('/grados', data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Error POST /grados:', error.message);
+      return { success: false, message: error.message || 'Error al crear grado' };
+    }
+  }
+
+  /**
+   * Actualizar un grado
+   * PUT /grados/:id
+   */
+  async updateGrado(id: number, data: {
+    nombre?: string;
+    descripcion?: string;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.put<ApiResponse<any>>(`/grados/${id}`, data);
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error PUT /grados/${id}:`, error.message);
+      return { success: false, message: error.message || 'Error al actualizar grado' };
+    }
+  }
+
+  /**
+   * Eliminar un grado
+   * DELETE /grados/:id
+   */
+  async deleteGrado(id: number): Promise<ApiResponse<void>> {
+    try {
+      const response = await httpService.delete<ApiResponse<void>>(`/grados/${id}`);
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error DELETE /grados/${id}:`, error.message);
+      return { success: false, message: error.message || 'Error al eliminar grado' };
     }
   }
 
@@ -1391,6 +1598,269 @@ class ApiClient {
           tendencia: 'estable'
         }
       };
+    }
+  }
+
+  // ============================================
+  // CRUD ORIENTADORES (Panel Coordinador)
+  // ============================================
+
+  /**
+   * Listar orientadores de la institución
+   * GET /orientadores
+   */
+  async getOrientadores(): Promise<ApiResponse<any[]>> {
+    try {
+      const response = await httpService.get<ApiResponse<any[]>>('/orientadores');
+      return response.data;
+    } catch (error: any) {
+      console.error('Error GET /orientadores:', error.message);
+      return { success: false, message: error.message || 'Error al obtener orientadores', data: [] };
+    }
+  }
+
+  /**
+   * Ver detalle de un orientador
+   * GET /orientadores/:id
+   */
+  async getOrientador(id: number): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.get<ApiResponse<any>>(`/orientadores/${id}`);
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error GET /orientadores/${id}:`, error.message);
+      return { success: false, message: error.message || 'Error al obtener orientador', data: null };
+    }
+  }
+
+  /**
+   * Crear orientador
+   * POST /orientadores
+   */
+  async createOrientador(data: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string;
+    address?: string;
+  }): Promise<ApiResponse<{ id: number; email: string; passwordTemporal: string }>> {
+    try {
+      const response = await httpService.post<ApiResponse<any>>('/orientadores', data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Error POST /orientadores:', error.message);
+      return { success: false, message: error.message || 'Error al crear orientador', data: null as any };
+    }
+  }
+
+  /**
+   * Actualizar orientador
+   * PUT /orientadores/:id
+   */
+  async updateOrientador(id: number, data: {
+    firstName?: string;
+    lastName?: string;
+    phone?: string;
+    address?: string;
+  }): Promise<ApiResponse<void>> {
+    try {
+      const response = await httpService.put<ApiResponse<void>>(`/orientadores/${id}`, data);
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error PUT /orientadores/${id}:`, error.message);
+      return { success: false, message: error.message || 'Error al actualizar orientador' };
+    }
+  }
+
+  /**
+   * Desactivar orientador (soft delete)
+   * DELETE /orientadores/:id
+   */
+  async deleteOrientador(id: number): Promise<ApiResponse<void>> {
+    try {
+      const response = await httpService.delete<ApiResponse<void>>(`/orientadores/${id}`);
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error DELETE /orientadores/${id}:`, error.message);
+      return { success: false, message: error.message || 'Error al desactivar orientador' };
+    }
+  }
+
+  // ============================================
+  // VINCULACIÓN ESTUDIANTE-ACUDIENTE
+  // ============================================
+
+  /**
+   * Listar acudientes de un estudiante
+   * GET /estudiantes/:id/acudientes
+   */
+  async getAcudientesEstudiante(estudianteId: number): Promise<ApiResponse<any[]>> {
+    try {
+      const response = await httpService.get<ApiResponse<any[]>>(`/estudiantes/${estudianteId}/acudientes`);
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error GET /estudiantes/${estudianteId}/acudientes:`, error.message);
+      return { success: false, message: error.message || 'Error al obtener acudientes', data: [] };
+    }
+  }
+
+  /**
+   * Vincular acudiente a estudiante
+   * POST /estudiantes/:id/acudientes
+   */
+  async vincularAcudiente(estudianteId: number, data: {
+    acudienteId: number;
+    esPrincipal?: boolean;
+    autorizacionRecogida?: boolean;
+  }): Promise<ApiResponse<void>> {
+    try {
+      const response = await httpService.post<ApiResponse<void>>(`/estudiantes/${estudianteId}/acudientes`, data);
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error POST /estudiantes/${estudianteId}/acudientes:`, error.message);
+      return { success: false, message: error.message || 'Error al vincular acudiente' };
+    }
+  }
+
+  /**
+   * Actualizar vínculo estudiante-acudiente
+   * PUT /estudiantes/:estudianteId/acudientes/:acudienteId
+   */
+  async updateVinculoAcudiente(estudianteId: number, acudienteId: number, data: {
+    esPrincipal?: boolean;
+    autorizacionRecogida?: boolean;
+  }): Promise<ApiResponse<void>> {
+    try {
+      const response = await httpService.put<ApiResponse<void>>(
+        `/estudiantes/${estudianteId}/acudientes/${acudienteId}`, 
+        data
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error PUT vinculo estudiante-acudiente:`, error.message);
+      return { success: false, message: error.message || 'Error al actualizar vínculo' };
+    }
+  }
+
+  /**
+   * Desvincular acudiente de estudiante
+   * DELETE /estudiantes/:estudianteId/acudientes/:acudienteId
+   */
+  async desvincularAcudiente(estudianteId: number, acudienteId: number): Promise<ApiResponse<void>> {
+    try {
+      const response = await httpService.delete<ApiResponse<void>>(
+        `/estudiantes/${estudianteId}/acudientes/${acudienteId}`
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error DELETE vinculo estudiante-acudiente:`, error.message);
+      return { success: false, message: error.message || 'Error al desvincular acudiente' };
+    }
+  }
+
+  // ============================================
+  // GESTIÓN AVANZADA DE ESTUDIANTES
+  // ============================================
+
+  /**
+   * Cambiar curso de un estudiante
+   * POST /estudiantes/:id/cambiar-curso
+   */
+  async cambiarCursoEstudiante(estudianteId: number, data: {
+    nuevoCursoId: number;
+    motivo?: string;
+  }): Promise<ApiResponse<void>> {
+    try {
+      const response = await httpService.post<ApiResponse<void>>(
+        `/estudiantes/${estudianteId}/cambiar-curso`, 
+        data
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error POST /estudiantes/${estudianteId}/cambiar-curso:`, error.message);
+      return { success: false, message: error.message || 'Error al cambiar curso' };
+    }
+  }
+
+  /**
+   * Retirar estudiante (soft delete)
+   * POST /estudiantes/:id/retirar
+   */
+  async retirarEstudiante(estudianteId: number, data: {
+    motivo: string;
+    fechaRetiro?: string;
+  }): Promise<ApiResponse<void>> {
+    try {
+      const response = await httpService.post<ApiResponse<void>>(
+        `/estudiantes/${estudianteId}/retirar`, 
+        data
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error POST /estudiantes/${estudianteId}/retirar:`, error.message);
+      return { success: false, message: error.message || 'Error al retirar estudiante' };
+    }
+  }
+
+  /**
+   * Historial de cambios del estudiante
+   * GET /estudiantes/:id/historial
+   */
+  async getHistorialEstudiante(estudianteId: number): Promise<ApiResponse<any[]>> {
+    try {
+      const response = await httpService.get<ApiResponse<any[]>>(`/estudiantes/${estudianteId}/historial`);
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error GET /estudiantes/${estudianteId}/historial:`, error.message);
+      return { success: false, message: error.message || 'Error al obtener historial', data: [] };
+    }
+  }
+
+  // ============================================
+  // REPORTES COORDINADOR
+  // ============================================
+
+  /**
+   * Reporte de entregas por curso
+   * GET /reportes/cursos/:cursoId/entregas
+   */
+  async getReporteEntregasCurso(cursoId: number, periodo?: number): Promise<ApiResponse<any>> {
+    try {
+      const params = periodo ? `?periodo=${periodo}` : '';
+      const response = await httpService.get<ApiResponse<any>>(`/reportes/cursos/${cursoId}/entregas${params}`);
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error GET /reportes/cursos/${cursoId}/entregas:`, error.message);
+      return { success: false, message: error.message || 'Error al obtener reporte', data: null };
+    }
+  }
+
+  /**
+   * Reporte de calificaciones por curso
+   * GET /reportes/cursos/:cursoId/calificaciones
+   */
+  async getReporteCalificacionesCurso(cursoId: number, periodo?: number): Promise<ApiResponse<any>> {
+    try {
+      const params = periodo ? `?periodo=${periodo}` : '';
+      const response = await httpService.get<ApiResponse<any>>(`/reportes/cursos/${cursoId}/calificaciones${params}`);
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error GET /reportes/cursos/${cursoId}/calificaciones:`, error.message);
+      return { success: false, message: error.message || 'Error al obtener reporte', data: null };
+    }
+  }
+
+  /**
+   * Resumen institucional
+   * GET /reportes/institucion/resumen
+   */
+  async getResumenInstitucional(): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.get<ApiResponse<any>>('/reportes/institucion/resumen');
+      return response.data;
+    } catch (error: any) {
+      console.error('Error GET /reportes/institucion/resumen:', error.message);
+      return { success: false, message: error.message || 'Error al obtener resumen', data: null };
     }
   }
 }

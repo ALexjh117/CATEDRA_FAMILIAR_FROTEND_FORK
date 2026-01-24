@@ -209,18 +209,18 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               <IconMenu size={22} />
             </button>
             
-            <Link to="/" className="flex items-center gap-3">
+            <div className="flex items-center gap-3 cursor-default">
               <img src="/src/assets/logo.jpg" alt="Logo" className="w-10 h-10 rounded-xl object-cover shadow-sm" />
               <div className="hidden sm:block">
                 <div className="font-display font-bold text-slate-800">Cátedra de Familia</div>
                 <div className="text-xs text-slate-500">{user?.institucion || 'Parchando Juntos'}</div>
               </div>
-            </Link>
+            </div>
           </div>
 
           <div className="flex items-center gap-4">
-            {/* Invite Admin Button (solo para admin) o Role Switcher (para otros roles) */}
-            {isAdmin ? (
+            {/* Invite Admin Button (solo para admin) */}
+            {isAdmin && (
               <button
                 onClick={() => setShowInviteAdmin(true)}
                 className="hidden md:flex items-center gap-2 px-4 py-2 bg-teal-600 rounded-xl text-sm font-medium hover:bg-teal-700 transition-colors text-white shadow-sm"
@@ -229,17 +229,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
                 </svg>
                 <span>Invitar Admin</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => setShowRoleSwitcher(true)}
-                className="hidden md:flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-xl text-sm font-medium hover:bg-slate-200 transition-colors text-slate-700"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                </svg>
-                <span>Ver como</span>
               </button>
             )}
 
@@ -265,11 +254,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       </header>
 
       <div className="flex">
-        {/* Sidebar */}
+        {/* Sidebar - sticky en desktop, fixed en mobile */}
         <aside className={`
-          fixed lg:static inset-y-0 left-0 z-30 w-64 bg-white border-r border-slate-200/80 transform transition-transform duration-200
+          fixed lg:sticky inset-y-0 left-0 z-30 w-64 bg-white border-r border-slate-200/80 transform transition-transform duration-200
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-          ${isPreview ? 'top-10' : 'top-0'} lg:top-0 pt-16 lg:pt-0
+          ${isPreview ? 'top-10' : 'top-0'} lg:top-[61px] h-screen lg:h-[calc(100vh-61px)] overflow-y-auto
         `}>
           <div className="p-4 flex justify-between items-center lg:hidden">
             <span className="font-semibold text-slate-800">Menú</span>

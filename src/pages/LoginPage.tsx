@@ -277,35 +277,21 @@ export default function LoginPage() {
             <div className="grid grid-cols-2 gap-2 text-xs">
               <button
                 type="button"
-                onClick={() => { setFormData({ ...formData, correo: 'garcia@docente.com', password: 'Password123!' }); setCaptchaToken('demo-token'); }}
-                className="p-2 bg-gray-50 rounded-lg hover:bg-gray-100 text-gray-700 transition-colors"
-              >
-                👨‍🏫 Docente
-              </button>
-              <button
-                type="button"
-                onClick={() => { setFormData({ ...formData, correo: 'orientador@docente.com', password: 'Password123!' }); setCaptchaToken('demo-token'); }}
-                className="p-2 bg-gray-50 rounded-lg hover:bg-gray-100 text-gray-700 transition-colors"
-              >
-                🎯 Orientador
-              </button>
-              <button
-                type="button"
-                onClick={() => { setFormData({ ...formData, correo: 'coordinador@docente.com', password: 'Password123!' }); setCaptchaToken('demo-token'); }}
+                onClick={() => { setFormData({ ...formData, correo: 'coordinador@instituciontest.edu.co', password: 'Coord123!' }); setCaptchaToken('demo-token'); }}
                 className="p-2 bg-gray-50 rounded-lg hover:bg-gray-100 text-gray-700 transition-colors"
               >
                 📋 Coordinador
               </button>
               <button
                 type="button"
-                onClick={() => { setFormData({ ...formData, correo: 'rector@docente.com', password: 'Password123!' }); setCaptchaToken('demo-token'); }}
+                onClick={() => { setFormData({ ...formData, correo: 'rector@instituciontest.edu.co', password: 'Rector123!' }); setCaptchaToken('demo-token'); }}
                 className="p-2 bg-gray-50 rounded-lg hover:bg-gray-100 text-gray-700 transition-colors"
               >
                 🏛️ Rector
               </button>
               <button
                 type="button"
-                onClick={() => { setFormData({ ...formData, correo: 'admin@educacionpopayan.gov.co', password: 'AdminPass123!' }); setCaptchaToken('demo-token'); }}
+                onClick={() => { setFormData({ ...formData, correo: 'admin@educacionpopayan.gov.co', password: 'Admin123!' }); setCaptchaToken('demo-token'); }}
                 className="p-2 bg-purple-50 rounded-lg hover:bg-purple-100 text-purple-700 transition-colors col-span-2 font-medium"
               >
                 🏛️ Admin Secretaría

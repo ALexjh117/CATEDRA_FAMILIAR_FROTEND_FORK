@@ -15,6 +15,8 @@ import DashboardCoordinadorPage from './pages/DashboardCoordinadorPage'
 import DirectivosPage from './pages/DirectivosPage'
 import ProfilePage from './pages/ProfilePage'
 import ReportesPage from './pages/ReportesPage'
+import DocentesPage from './pages/DocentesPage'
+import CursosPage from './pages/CursosPage'
 
 // Legacy
 import DashboardPage from './pages/DashboardPage'
@@ -171,9 +173,9 @@ export default function App(){
           <Route path="/tareas/crear" element={<ProtectedRoute allowedRoles={['docente','docente_aula']}><PagePlaceholder title="Crear Tarea" description="Formulario temporal para crear tareas."/></ProtectedRoute>} />
           <Route path="/entregas" element={<ProtectedRoute allowedRoles={['docente','docente_aula']}><PagePlaceholder title="Entregas" description="Listado de entregas pendientes."/></ProtectedRoute>} />
           <Route path="/estudiantes" element={<ProtectedRoute allowedRoles={['docente','orientador','coordinador','rector','admin']}><PagePlaceholder title="Estudiantes" description="Listado y seguimiento de estudiantes."/></ProtectedRoute>} />
-          <Route path="/docentes" element={<ProtectedRoute allowedRoles={['coordinador','rector','admin']}><PagePlaceholder title="Docentes" description="Gestión de docentes."/></ProtectedRoute>} />
+          <Route path="/docentes" element={<ProtectedRoute allowedRoles={['coordinador','rector','admin']}><DocentesPage /></ProtectedRoute>} />
           <Route path="/directivos" element={<ProtectedRoute allowedRoles={['rector','admin']}><DirectivosPage /></ProtectedRoute>} />
-          <Route path="/cursos" element={<ProtectedRoute allowedRoles={['coordinador','rector','admin']}><PagePlaceholder title="Cursos" description="Gestión de cursos."/></ProtectedRoute>} />
+          <Route path="/cursos" element={<ProtectedRoute allowedRoles={['coordinador','rector','admin']}><CursosPage /></ProtectedRoute>} />
           <Route path="/reportes" element={<ProtectedRoute allowedRoles={['orientador','coordinador','rector','admin']}><ReportesPage /></ProtectedRoute>} />
           <Route path="/configuracion" element={<ProtectedRoute allowedRoles={['rector','admin']}><PagePlaceholder title="Configuración" description="Ajustes del sistema."/></ProtectedRoute>} />
           <Route path="/instituciones" element={<ProtectedRoute allowedRoles={['admin']}><PagePlaceholder title="Instituciones" description="Gestión de instituciones."/></ProtectedRoute>} />
