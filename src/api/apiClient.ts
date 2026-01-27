@@ -212,6 +212,30 @@ export interface DirectivosInstitucionResponse {
   }>;
 }
 
+export interface PersonalCoordinadorItem {
+  id: number;
+  nombre: string;
+  apellido: string;
+  correo: string;
+  tipo: 'docente' | 'orientador';
+  rolNombre: string;
+  estaActivo: boolean;
+  tienePerfilCompleto?: boolean;
+  metricas: {
+    tareasCreadas?: number;
+    casosAcompanamiento?: number;
+  };
+}
+
+export interface PersonalCoordinadorResponse {
+  data: PersonalCoordinadorItem[];
+  resumen: {
+    totalDocentes: number;
+    totalOrientadores: number;
+    totalActivos: number;
+  };
+}
+
 export interface ValidacionExcelResponse {
   success: boolean;
   message: string;
@@ -891,31 +915,173 @@ class ApiClient {
   }
 
   // ============================================
-  // USUARIOS - Listar todos
+  // USUARIOS - CRUD COMPLETO (API Admin)
   // ============================================
-  
+
   /**
    * Obtener todos los usuarios del sistema
-   * GET /usuarios (endpoint que debe existir en backend)
+   * GET /admin/usuarios
    */
   async getUsuarios(): Promise<ApiResponse<any[]>> {
     try {
-      const response = await httpService.get<ApiResponse<any[]>>('/usuarios');
+      const response = await httpService.get<ApiResponse<any[]>>('/admin/usuarios');
+      console.log('📋 [apiClient.ts] getUsuarios respuesta:', response.data);
       return response.data;
     } catch (error: any) {
-      console.warn('Endpoint /usuarios no disponible, usando respuesta vacía');
-      return {
-        success: true,
-        message: 'Sin datos',
-        data: []
-      };
+      console.warn('Endpoint /admin/usuarios no disponible:', error.message);
+      return { success: false, message: error.message || 'Error al obtener usuarios', data: [] };
+    }
+  }
+
+  /**
+   * Crear usuario (cualquier rol)
+   * POST /admin/usuarios
+   */
+  async createUsuario(data: {
+    correo: string;
+    contrasena: string;
+    rolId: number;
+    nombre?: string;
+    apellido?: string;
+    telefono?: string;
+    institucionId?: number;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.post<ApiResponse<any>>('/admin/usuarios', data);
+      return response.data;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || 'Error al crear usuario';
+      return { success: false, message: errorMessage, data: null };
+    }
+  }
+
+  /**
+   * Actualizar usuario
+   * PUT /usuarios/:id
+   */
+  async updateUsuario(id: number, data: any): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.put<ApiResponse<any>>(`/usuarios/${id}`, data);
+      return response.data;
+    } catch (error: any) {
+      return { success: false, message: error.message || 'Error al actualizar usuario', data: null };
+    }
+  }
+
+  /**
+   * Eliminar usuario permanentemente (hard delete)
+   * DELETE /admin/usuarios/:id
+   */
+  async deleteUsuario(id: number): Promise<ApiResponse<void>> {
+    console.log('🗑️ [apiClient.ts] deleteUsuario (HARD DELETE) llamado con id:', id);
+    console.log('🗑️ [apiClient.ts] Endpoint: DELETE /admin/usuarios/' + id);
+    try {
+      const response = await httpService.delete<ApiResponse<void>>(`/admin/usuarios/${id}`);
+      console.log('🗑️ [apiClient.ts] Respuesta del servidor:', response);
+      console.log('🗑️ [apiClient.ts] response.data:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('🗑️ [apiClient.ts] Error en la petición:', error);
+      console.error('🗑️ [apiClient.ts] error.response:', error.response);
+      console.error('🗑️ [apiClient.ts] error.response?.data:', error.response?.data);
+      const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || 'Error al eliminar usuario';
+      return { success: false, message: errorMessage };
+    }
+  }
+
+  /**
+   * Activar usuario
+   * PUT /admin/usuarios/:id/activar
+   */
+  async activarUsuario(id: number): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.put<ApiResponse<any>>(`/admin/usuarios/${id}/activar`);
+      return response.data;
+    } catch (error: any) {
+      return { success: false, message: error.message || 'Error al activar usuario', data: null };
+    }
+  }
+
+  /**
+   * Desactivar usuario
+   * PUT /admin/usuarios/:id/desactivar
+   */
+  async desactivarUsuario(id: number): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.put<ApiResponse<any>>(`/admin/usuarios/${id}/desactivar`);
+      return response.data;
+    } catch (error: any) {
+      return { success: false, message: error.message || 'Error al desactivar usuario', data: null };
+    }
+  }
+
+  /**
+   * Crear Rector
+   * POST /admin/rectores
+   */
+  async createRector(data: {
+    correo: string;
+    contrasena: string;
+    nombre: string;
+    apellido: string;
+    telefono?: string;
+    institucionId: number;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.post<ApiResponse<any>>('/admin/rectores', data);
+      return response.data;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || 'Error al crear rector';
+      return { success: false, message: errorMessage, data: null };
+    }
+  }
+
+  /**
+   * Crear Coordinador (Admin)
+   * POST /admin/coordinadores
+   */
+  async createCoordinadorAdmin(data: {
+    correo: string;
+    contrasena: string;
+    nombre: string;
+    apellido: string;
+    telefono?: string;
+    institucionId: number;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.post<ApiResponse<any>>('/admin/coordinadores', data);
+      return response.data;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || 'Error al crear coordinador';
+      return { success: false, message: errorMessage, data: null };
+    }
+  }
+
+  /**
+   * Crear Orientador
+   * POST /admin/orientadores
+   */
+  async createOrientador(data: {
+    correo: string;
+    contrasena: string;
+    nombre: string;
+    apellido: string;
+    telefono?: string;
+    institucionId: number;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.post<ApiResponse<any>>('/admin/orientadores', data);
+      return response.data;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || 'Error al crear orientador';
+      return { success: false, message: errorMessage, data: null };
     }
   }
 
   // ============================================
   // DOCENTES - CRUD COMPLETO
   // ============================================
-  
+
   /**
    * Obtener todos los docentes
    * GET /docentes
@@ -1413,6 +1579,73 @@ class ApiClient {
   }
 
   /**
+   * Crear institución
+   * POST /instituciones
+   */
+  async createInstitucion(data: any): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.post<ApiResponse<any>>('/instituciones', data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Error al crear institución:', error);
+      
+      const errorMessage = error.response?.data?.error 
+        || error.response?.data?.message 
+        || error.message 
+        || 'Error al crear la institución';
+      
+      return {
+        success: false,
+        message: errorMessage,
+        data: null
+      };
+    }
+  }
+
+  /**
+   * Actualizar institución
+   * PUT /instituciones/:id
+   */
+  async updateInstitucion(id: number, data: any): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.put<ApiResponse<any>>(`/instituciones/${id}`, data);
+      return response.data;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error 
+        || error.response?.data?.message 
+        || error.message 
+        || 'Error al actualizar la institución';
+      
+      return {
+        success: false,
+        message: errorMessage,
+        data: null
+      };
+    }
+  }
+
+  /**
+   * Eliminar institución
+   * DELETE /instituciones/:id
+   */
+  async deleteInstitucion(id: number): Promise<ApiResponse<void>> {
+    try {
+      const response = await httpService.delete<ApiResponse<void>>(`/instituciones/${id}`);
+      return response.data;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error 
+        || error.response?.data?.message 
+        || error.message 
+        || 'Error al eliminar la institución';
+      
+      return {
+        success: false,
+        message: errorMessage
+      };
+    }
+  }
+
+  /**
    * Obtener estadísticas del rector
    * GET /rectores/estadisticas
    */
@@ -1426,6 +1659,156 @@ class ApiClient {
         success: false,
         message: error.message || 'Error al obtener estadísticas'
       };
+    }
+  }
+
+  /**
+   * Listar coordinadores de la institución del rector
+   * GET /rectores/coordinadores
+   */
+  async getCoordinadoresRector(): Promise<ApiResponse<any[]>> {
+    try {
+      const response = await httpService.get<ApiResponse<any[]>>('/rectores/coordinadores');
+      return response.data;
+    } catch (error: any) {
+      return { success: false, message: error.message || 'Error al obtener coordinadores', data: [] };
+    }
+  }
+
+  /**
+   * Listar orientadores de la institución del rector
+   * GET /rectores/orientadores
+   */
+  async getOrientadoresRector(): Promise<ApiResponse<any[]>> {
+    try {
+      const response = await httpService.get<ApiResponse<any[]>>('/rectores/orientadores');
+      return response.data;
+    } catch (error: any) {
+      return { success: false, message: error.message || 'Error al obtener orientadores', data: [] };
+    }
+  }
+
+  /**
+   * Listar docentes de la institución del rector
+   * GET /rectores/docentes
+   */
+  async getDocentesRector(): Promise<ApiResponse<any[]>> {
+    try {
+      const response = await httpService.get<ApiResponse<any[]>>('/rectores/docentes');
+      return response.data;
+    } catch (error: any) {
+      return { success: false, message: error.message || 'Error al obtener docentes', data: [] };
+    }
+  }
+
+  /**
+   * Listar cursos de la institución del rector
+   * GET /rectores/cursos
+   */
+  async getCursosRector(): Promise<ApiResponse<any[]>> {
+    try {
+      const response = await httpService.get<ApiResponse<any[]>>('/rectores/cursos');
+      return response.data;
+    } catch (error: any) {
+      return { success: false, message: error.message || 'Error al obtener cursos', data: [] };
+    }
+  }
+
+  /**
+   * Obtener datos de la institución del rector
+   * GET /rectores/mi-institucion
+   */
+  async getMiInstitucionRector(): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.get<ApiResponse<any>>('/rectores/mi-institucion');
+      return response.data;
+    } catch (error: any) {
+      return { success: false, message: error.message || 'Error al obtener institución', data: null };
+    }
+  }
+
+  /**
+   * Actualizar datos de la institución del rector
+   * PUT /rectores/mi-institucion
+   */
+  async updateMiInstitucionRector(data: {
+    telefono?: string;
+    correo?: string;
+    direccion?: string;
+    rectorNombre?: string;
+    rectorDocumento?: string;
+    rectorCorreo?: string;
+    rectorTelefono?: string;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.put<ApiResponse<any>>('/rectores/mi-institucion', data);
+      return response.data;
+    } catch (error: any) {
+      return { success: false, message: error.message || 'Error al actualizar institución' };
+    }
+  }
+
+  /**
+   * Listar períodos académicos de la institución del rector
+   * GET /rectores/periodos
+   */
+  async getPeriodosRector(): Promise<ApiResponse<any[]>> {
+    try {
+      const response = await httpService.get<ApiResponse<any[]>>('/rectores/periodos');
+      return response.data;
+    } catch (error: any) {
+      return { success: false, message: error.message || 'Error al obtener períodos', data: [] };
+    }
+  }
+
+  /**
+   * Crear período académico
+   * POST /rectores/periodos
+   */
+  async createPeriodoRector(data: {
+    nombre: string;
+    fechaInicio: string;
+    fechaFin: string;
+    anio: number;
+    estado?: 'activo' | 'inactivo' | 'finalizado';
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.post<ApiResponse<any>>('/rectores/periodos', data);
+      return response.data;
+    } catch (error: any) {
+      return { success: false, message: error.message || 'Error al crear período' };
+    }
+  }
+
+  /**
+   * Actualizar período académico
+   * PUT /rectores/periodos/:id
+   */
+  async updatePeriodoRector(id: number, data: {
+    nombre?: string;
+    fechaInicio?: string;
+    fechaFin?: string;
+    anio?: number;
+    estado?: 'activo' | 'inactivo' | 'finalizado';
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.put<ApiResponse<any>>(`/rectores/periodos/${id}`, data);
+      return response.data;
+    } catch (error: any) {
+      return { success: false, message: error.message || 'Error al actualizar período' };
+    }
+  }
+
+  /**
+   * Eliminar período académico
+   * DELETE /rectores/periodos/:id
+   */
+  async deletePeriodoRector(id: number): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.delete<ApiResponse<any>>(`/rectores/periodos/${id}`);
+      return response.data;
+    } catch (error: any) {
+      return { success: false, message: error.message || 'Error al eliminar período' };
     }
   }
 
@@ -1450,7 +1833,7 @@ class ApiClient {
   // ============================================
   // UTILIDADES
   // ============================================
-  
+
   private getToken(): string | null {
     try {
       const session = localStorage.getItem('session');
@@ -1467,7 +1850,7 @@ class ApiClient {
   // ============================================
   // COORDINADOR ACADÉMICO
   // ============================================
-  
+
   /**
    * Obtener estadísticas del coordinador
    * GET /coordinadores/estadisticas
@@ -1597,6 +1980,88 @@ class ApiClient {
           promediosPorAsignatura: [],
           tendencia: 'estable'
         }
+      };
+    }
+  }
+
+  /**
+   * Crear docente en la institución del coordinador
+   * POST /coordinadores/docentes
+   */
+  async crearDocenteCoordinador(data: {
+    correo: string;
+    contrasena: string;
+    nombre: string;
+    apellido: string;
+    telefono?: string;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.post<ApiResponse<any>>('/coordinadores/docentes', data);
+      return response.data;
+    } catch (error: any) {
+      return { success: false, message: error.response?.data?.message || error.message || 'Error al crear docente' };
+    }
+  }
+
+  /**
+   * Crear orientador en la institución del coordinador
+   * POST /coordinadores/orientadores
+   */
+  async crearOrientadorCoordinador(data: {
+    correo: string;
+    contrasena: string;
+    nombre: string;
+    apellido: string;
+    telefono?: string;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.post<ApiResponse<any>>('/coordinadores/orientadores', data);
+      return response.data;
+    } catch (error: any) {
+      return { success: false, message: error.response?.data?.message || error.message || 'Error al crear orientador' };
+    }
+  }
+
+  /**
+   * Obtener datos de la institución del coordinador (solo lectura)
+   * GET /coordinadores/mi-institucion
+   */
+  async getMiInstitucionCoordinador(): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.get<ApiResponse<any>>('/coordinadores/mi-institucion');
+      return response.data;
+    } catch (error: any) {
+      return { success: false, message: error.message || 'Error al obtener institución', data: null };
+    }
+  }
+
+  /**
+   * Obtener períodos académicos (solo lectura para coordinador)
+   * GET /coordinadores/periodos
+   */
+  async getPeriodosCoordinador(): Promise<ApiResponse<any[]>> {
+    try {
+      const response = await httpService.get<ApiResponse<any[]>>('/coordinadores/periodos');
+      return response.data;
+    } catch (error: any) {
+      return { success: false, message: error.message || 'Error al obtener períodos', data: [] };
+    }
+  }
+
+  /**
+   * Obtener vista unificada de personal (docentes + orientadores)
+   * GET /coordinadores/personal
+   * ⭐ RECOMENDADO: 1 request en lugar de 2, incluye resumen automático
+   */
+  async getPersonalCoordinador(): Promise<ApiResponse<PersonalCoordinadorResponse>> {
+    try {
+      const response = await httpService.get<ApiResponse<PersonalCoordinadorResponse>>('/coordinadores/personal');
+      return response.data;
+    } catch (error: any) {
+      return { 
+        success: false, 
+        message: error.message || 'Error al obtener personal',
+        data: { data: [], resumen: { totalDocentes: 0, totalOrientadores: 0, totalActivos: 0 } }
       };
     }
   }

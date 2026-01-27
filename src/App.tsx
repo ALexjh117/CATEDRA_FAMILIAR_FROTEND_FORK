@@ -17,6 +17,7 @@ import ProfilePage from './pages/ProfilePage'
 import ReportesPage from './pages/ReportesPage'
 import DocentesPage from './pages/DocentesPage'
 import CursosPage from './pages/CursosPage'
+import ConfiguracionRectorPage from './pages/ConfiguracionRectorPage'
 
 // Legacy
 import DashboardPage from './pages/DashboardPage'
@@ -177,7 +178,7 @@ export default function App(){
           <Route path="/directivos" element={<ProtectedRoute allowedRoles={['rector','admin']}><DirectivosPage /></ProtectedRoute>} />
           <Route path="/cursos" element={<ProtectedRoute allowedRoles={['coordinador','rector','admin']}><CursosPage /></ProtectedRoute>} />
           <Route path="/reportes" element={<ProtectedRoute allowedRoles={['orientador','coordinador','rector','admin']}><ReportesPage /></ProtectedRoute>} />
-          <Route path="/configuracion" element={<ProtectedRoute allowedRoles={['rector','admin']}><PagePlaceholder title="Configuración" description="Ajustes del sistema."/></ProtectedRoute>} />
+          <Route path="/configuracion" element={<ProtectedRoute allowedRoles={['rector','admin']}><ConfiguracionRectorPage /></ProtectedRoute>} />
           <Route path="/instituciones" element={<ProtectedRoute allowedRoles={['admin']}><PagePlaceholder title="Instituciones" description="Gestión de instituciones."/></ProtectedRoute>} />
           <Route path="/usuarios" element={<ProtectedRoute allowedRoles={['admin']}><PagePlaceholder title="Usuarios" description="Gestión de usuarios."/></ProtectedRoute>} />
           
