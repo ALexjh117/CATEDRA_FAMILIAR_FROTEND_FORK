@@ -12,6 +12,7 @@ import DashboardRectorPage from './pages/DashboardRectorPage'
 import DashboardAdminPage from './pages/DashboardAdminPage'
 import DashboardAdminHome from './pages/DashboardAdminHome'
 import DashboardCoordinadorPage from './pages/DashboardCoordinadorPage'
+import DashboardAcudientePage from './pages/DashboardAcudientePage'
 import DirectivosPage from './pages/DirectivosPage'
 import ProfilePage from './pages/ProfilePage'
 import ReportesPage from './pages/ReportesPage'
@@ -37,11 +38,6 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactEleme
   
   // Normalizar admin_sistema a admin para verificación de permisos
   const normalizedRole = currentRole === 'admin_sistema' ? 'admin' : currentRole;
-  
-  // Acudiente no tiene acceso a la web
-  if (currentRole === 'acudiente') {
-    return <Navigate to="/acceso-denegado" replace />;
-  }
   
   // Verificar permisos usando rol normalizado (admin_sistema cuenta como admin)
   if (allowedRoles && !allowedRoles.includes(currentRole) && !allowedRoles.includes(normalizedRole)) {
@@ -76,6 +72,8 @@ function DashboardRedirect() {
     case 'admin':
     case 'admin_sistema':
       return <Navigate to="/dashboard/admin" replace />;
+    case 'acudiente':
+      return <Navigate to="/dashboard/acudiente" replace />;
     default:
       // Si es acudiente u otro rol no permitido, redirigir a página de acceso denegado
       return <Navigate to="/acceso-denegado" replace />;
@@ -157,6 +155,12 @@ export default function App(){
             </ProtectedRoute>
           } />
           
+          <Route path="/dashboard/acudiente" element={
+            <ProtectedRoute allowedRoles={['acudiente']}>
+              <DashboardAcudientePage />
+            </ProtectedRoute>
+          } />
+          
           <Route path="/dashboard/admin" element={
             <ProtectedRoute allowedRoles={['admin']}>
               <DashboardAdminHome />
@@ -176,7 +180,8 @@ export default function App(){
           <Route path="/estudiantes" element={<ProtectedRoute allowedRoles={['docente','orientador','coordinador','rector','admin']}><PagePlaceholder title="Estudiantes" description="Listado y seguimiento de estudiantes."/></ProtectedRoute>} />
           <Route path="/docentes" element={<ProtectedRoute allowedRoles={['coordinador','rector','admin']}><DocentesPage /></ProtectedRoute>} />
           <Route path="/directivos" element={<ProtectedRoute allowedRoles={['rector','admin']}><DirectivosPage /></ProtectedRoute>} />
-          <Route path="/cursos" element={<ProtectedRoute allowedRoles={['coordinador','rector','admin']}><CursosPage /></ProtectedRoute>} />
+          <Route path="/cursos" element={<ProtectedRoute allowedRoles={['orientador','coordinador','rector','admin']}><CursosPage /></ProtectedRoute>} />
+          <Route path="/padres-familia" element={<ProtectedRoute allowedRoles={['orientador','coordinador','rector','admin']}><PagePlaceholder title="Padres de familia" description="Listado de padres de familia."/></ProtectedRoute>} />
           <Route path="/reportes" element={<ProtectedRoute allowedRoles={['orientador','coordinador','rector','admin']}><ReportesPage /></ProtectedRoute>} />
           <Route path="/configuracion" element={<ProtectedRoute allowedRoles={['rector','admin']}><ConfiguracionRectorPage /></ProtectedRoute>} />
           <Route path="/instituciones" element={<ProtectedRoute allowedRoles={['admin']}><PagePlaceholder title="Instituciones" description="Gestión de instituciones."/></ProtectedRoute>} />
@@ -184,7 +189,7 @@ export default function App(){
           
           {/* Perfil de usuario - disponible para todos los roles autenticados */}
           <Route path="/perfil" element={
-            <ProtectedRoute allowedRoles={['docente','docente_aula','orientador','coordinador','rector','admin']}>
+            <ProtectedRoute allowedRoles={['docente','docente_aula','orientador','coordinador','rector','admin','acudiente']}>
               <ProfilePage />
             </ProtectedRoute>
           } />
