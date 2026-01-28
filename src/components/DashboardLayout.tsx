@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { logout, getSession, setPreviewRole } from '../api/endpoints';
 import { usuariosMock, type RolUsuario } from '../mocks/data';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   IconHome,
   IconBarChart,
@@ -14,10 +14,12 @@ import {
   IconGraduationCap,
   IconSettings,
   IconBuilding,
+  IconFamily,
   IconLogout,
   IconMenu,
   IconX,
-  IconUser
+  IconUser,
+  IconChevronRight
 } from './ui/Icons';
 
 interface DashboardLayoutProps {
@@ -37,6 +39,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string; size?: n
   courses: IconGraduationCap,
   settings: IconSettings,
   institutions: IconBuilding,
+  family: IconFamily,
   profile: IconUser,
 };
 
@@ -57,6 +60,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteSuccess, setInviteSuccess] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [expandedNavGroups, setExpandedNavGroups] = useState<Record<string, boolean>>({});
 
   // Verificar si el usuario actual es admin
   const isAdmin = user?.rol === 'admin' || user?.rol === 'admin_sistema';
@@ -100,6 +104,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       rector: '/dashboard/rector',
       admin: '/dashboard/admin',
       admin_sistema: '/dashboard/admin',
+      acudiente: '/dashboard/acudiente',
     };
     navigate(roleRoutes[role] || '/dashboard/docente');
   };
@@ -108,57 +113,93 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     const rol = user?.rol;
     
     const commonItems = [
-      { path: '/dashboard', label: 'Inicio', icon: 'home' },
+      { type: 'link', path: '/dashboard', label: 'Inicio', icon: 'home' },
     ];
 
-    const profileItem = { path: '/perfil', label: 'Mi Perfil', icon: 'profile' };
+    const profileItem = { type: 'link', path: '/perfil', label: 'Mi Perfil', icon: 'profile' };
+
+    type NavItemLink = { type: 'link'; path: string; label: string; icon: string };
+    type NavItemGroup = { type: 'group'; key: string; label: string; icon: string; children: NavItem[] };
+    type NavItem = NavItemLink | NavItemGroup;
 
     switch (rol) {
       case 'docente_aula':
         return [
           ...commonItems,
-          { path: '/dashboard/docente', label: 'Mi Panel', icon: 'dashboard' },
-          { path: '/tareas', label: 'Tareas', icon: 'tasks' },
-          { path: '/tareas/crear', label: 'Crear Tarea', icon: 'plus' },
-          { path: '/entregas', label: 'Entregas', icon: 'inbox' },
-          { path: '/estudiantes', label: 'Estudiantes', icon: 'users' },
+          { type: 'link', path: '/dashboard/docente', label: 'Mi Panel', icon: 'dashboard' },
+          { type: 'link', path: '/tareas', label: 'Tareas', icon: 'tasks' },
+          { type: 'link', path: '/tareas/crear', label: 'Crear Tarea', icon: 'plus' },
+          { type: 'link', path: '/entregas', label: 'Entregas', icon: 'inbox' },
+          { type: 'link', path: '/estudiantes', label: 'Estudiantes', icon: 'users' },
           profileItem,
         ];
       case 'orientador':
         return [
           ...commonItems,
-          { path: '/dashboard/orientador', label: 'Mi Panel', icon: 'dashboard' },
-          { path: '/estudiantes', label: 'Seguimiento', icon: 'users' },
-          { path: '/reportes', label: 'Reportes', icon: 'reports' },
+          { type: 'link', path: '/dashboard/orientador', label: 'Mi Panel', icon: 'dashboard' },
+          {
+            type: 'group',
+            key: 'mi-institucion',
+            label: 'Mi institución',
+            icon: 'institutions',
+            children: [
+              {
+                type: 'group',
+                key: 'mi-institucion-estudiantes',
+                label: 'Estudiantes',
+                icon: 'users',
+                children: [
+                  { type: 'link', path: '/estudiantes', label: 'Ver todos los estudiantes', icon: 'users' },
+                  { type: 'link', path: '/cursos', label: 'Ver cursos', icon: 'courses' },
+                ],
+              },
+              {
+                type: 'group',
+                key: 'mi-institucion-padres',
+                label: 'Padres de familia',
+                icon: 'family',
+                children: [
+                  { type: 'link', path: '/padres-familia', label: 'Ver todos los padres de familia', icon: 'family' },
+                ],
+              },
+            ],
+          },
+          { type: 'link', path: '/reportes', label: 'Reportes', icon: 'reports' },
           profileItem,
         ];
       case 'coordinador':
         return [
           ...commonItems,
-          { path: '/dashboard/coordinador', label: 'Mi Panel', icon: 'dashboard' },
-          { path: '/docentes', label: 'Docentes', icon: 'teachers' },
-          { path: '/cursos', label: 'Cursos', icon: 'courses' },
-          { path: '/reportes', label: 'Reportes', icon: 'reports' },
+          { type: 'link', path: '/dashboard/coordinador', label: 'Mi Panel', icon: 'dashboard' },
+          { type: 'link', path: '/docentes', label: 'Docentes', icon: 'teachers' },
+          { type: 'link', path: '/cursos', label: 'Cursos', icon: 'courses' },
+          { type: 'link', path: '/reportes', label: 'Reportes', icon: 'reports' },
           profileItem,
         ];
       case 'rector':
         return [
           ...commonItems,
-          { path: '/dashboard/rector', label: 'Mi Panel', icon: 'dashboard' },
-          { path: '/directivos', label: 'Directivos', icon: 'users' },
-          { path: '/reportes', label: 'Reportes', icon: 'reports' },
-          { path: '/configuracion', label: 'Configuración', icon: 'settings' },
+          { type: 'link', path: '/dashboard/rector', label: 'Mi Panel', icon: 'dashboard' },
+          { type: 'link', path: '/directivos', label: 'Directivos', icon: 'users' },
+          { type: 'link', path: '/reportes', label: 'Reportes', icon: 'reports' },
+          { type: 'link', path: '/configuracion', label: 'Configuración', icon: 'settings' },
           profileItem,
         ];
       case 'admin':
       case 'admin_sistema':
         return [
           ...commonItems,
-          { path: '/dashboard/admin', label: 'Mi Panel', icon: 'dashboard' },
-          { path: '/dashboard/admin/manage?tab=instituciones', label: 'Instituciones', icon: 'institutions' },
-          { path: '/dashboard/admin/manage?tab=usuarios', label: 'Usuarios', icon: 'users' },
-          { path: '/dashboard/admin/manage?tab=configuracion', label: 'Sistema', icon: 'settings' },
+          { type: 'link', path: '/dashboard/admin', label: 'Mi Panel', icon: 'dashboard' },
+          { type: 'link', path: '/dashboard/admin/manage?tab=instituciones', label: 'Instituciones', icon: 'institutions' },
+          { type: 'link', path: '/dashboard/admin/manage?tab=usuarios', label: 'Usuarios', icon: 'users' },
+          { type: 'link', path: '/dashboard/admin/manage?tab=configuracion', label: 'Sistema', icon: 'settings' },
           // Admin no tiene perfil - solo gestiona sistema e invita admins
+        ];
+      case 'acudiente':
+        return [
+          ...commonItems,
+          { type: 'link', path: '/dashboard/acudiente', label: 'Mi Panel', icon: 'dashboard' },
+          profileItem,
         ];
       default:
         return [...commonItems, profileItem];
@@ -179,6 +220,47 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   };
 
   const navItems = getNavItems();
+
+  const fullPath = location.pathname + (location.search || '');
+
+  const isNavLinkActive = (path: string) => fullPath === path || location.pathname === path;
+
+  const isNavItemActive = (item: any): boolean => {
+    if (item?.type === 'link') return isNavLinkActive(item.path);
+    if (item?.type === 'group') return Array.isArray(item.children) && item.children.some((c: any) => isNavItemActive(c));
+    return false;
+  };
+
+  const ensureActiveGroupsExpanded = (items: any[]) => {
+    const activeGroupKeys: string[] = [];
+
+    const walk = (node: any) => {
+      if (!node) return;
+      if (node.type === 'group') {
+        const active = isNavItemActive(node);
+        if (active) activeGroupKeys.push(node.key);
+        if (Array.isArray(node.children)) node.children.forEach(walk);
+      }
+    };
+
+    items.forEach(walk);
+
+    setExpandedNavGroups((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const key of activeGroupKeys) {
+        if (!next[key]) {
+          next[key] = true;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  };
+
+  useEffect(() => {
+    ensureActiveGroupsExpanded(navItems as any);
+  }, [location.pathname, location.search, user?.rol]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -267,26 +349,69 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             </button>
           </div>
           <nav className="p-3 space-y-1">
-            {navItems.map((item) => {
-              const Icon = iconMap[item.icon] || IconHome;
-              const full = location.pathname + (location.search || '');
-              const isActive = full === item.path || location.pathname === item.path;
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  onClick={() => setSidebarOpen(false)}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                    isActive
-                      ? 'bg-gradient-to-r from-teal-500 to-teal-600 text-white shadow-md shadow-teal-200/50'
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-800'
-                  }`}
-                >
-                  <Icon size={20} className={isActive ? 'text-white' : 'text-slate-400'} />
-                  <span className="font-medium">{item.label}</span>
-                </Link>
-              );
-            })}
+            {(() => {
+              const renderNavItem = (item: any, depth = 0) => {
+                const paddingLeft = 16 + depth * 14;
+
+                if (item?.type === 'link') {
+                  const Icon = iconMap[item.icon] || IconHome;
+                  const isActive = isNavLinkActive(item.path);
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => setSidebarOpen(false)}
+                      style={{ paddingLeft }}
+                      className={`flex items-center gap-3 py-3 pr-4 rounded-xl transition-all duration-200 ${
+                        isActive
+                          ? 'bg-gradient-to-r from-teal-500 to-teal-600 text-white shadow-md shadow-teal-200/50'
+                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-800'
+                      }`}
+                    >
+                      <Icon size={20} className={isActive ? 'text-white' : 'text-slate-400'} />
+                      <span className="font-medium">{item.label}</span>
+                    </Link>
+                  );
+                }
+
+                if (item?.type === 'group') {
+                  const Icon = iconMap[item.icon] || IconHome;
+                  const isOpen = !!expandedNavGroups[item.key];
+                  const isActive = isNavItemActive(item);
+
+                  return (
+                    <div key={item.key} className="space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedNavGroups((prev) => ({ ...prev, [item.key]: !prev[item.key] }))}
+                        style={{ paddingLeft }}
+                        className={`w-full flex items-center gap-3 py-3 pr-4 rounded-xl transition-all duration-200 ${
+                          isActive
+                            ? 'bg-gradient-to-r from-teal-500 to-teal-600 text-white shadow-md shadow-teal-200/50'
+                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-800'
+                        }`}
+                      >
+                        <Icon size={20} className={isActive ? 'text-white' : 'text-slate-400'} />
+                        <span className="font-medium flex-1 text-left">{item.label}</span>
+                        <span className={`transition-transform ${isOpen ? 'rotate-90' : ''}`}>
+                          <IconChevronRight size={18} className={isActive ? 'text-white' : 'text-slate-400'} />
+                        </span>
+                      </button>
+
+                      {isOpen && Array.isArray(item.children) && (
+                        <div className="space-y-1">
+                          {item.children.map((child: any) => renderNavItem(child, depth + 1))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                return null;
+              };
+
+              return (navItems as any[]).map((item) => renderNavItem(item, 0));
+            })()}
           </nav>
         </aside>
 

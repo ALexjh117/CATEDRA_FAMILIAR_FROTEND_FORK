@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { login, setPreviewRole } from '../api/endpoints';
+import { setPreviewRole } from '../api/endpoints';
+import { loginUnicoMultiRol } from '../api/endpointsDocente-orinetador';
 import FormFieldInput from '../components/ui/FormFieldInput';
 import Button from '../components/ui/Button';
 import ForgotPasswordModal from '../components/ForgotPasswordModal';
@@ -97,8 +98,8 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const result = await login(formData.correo, formData.password);
-      
+      const result = await loginUnicoMultiRol(formData.correo, formData.password);
+
       if (result.success && result.user) {
         // Verificar si debe cambiar contraseña
         if (result.user.debe_cambiar_contrasena) {
@@ -131,14 +132,13 @@ export default function LoginPage() {
             navigate('/dashboard/docente');
             break;
           case 'acudiente':
-            // Acudientes deben usar la app móvil
-            navigate('/acceso-denegado');
+            navigate('/dashboard/acudiente');
             break;
           default:
             navigate('/dashboard/docente');
         }
       } else {
-        setError(result.error || 'Error al iniciar sesión');
+        setError(result.error || result.message || 'Error al iniciar sesión');
       }
     } catch (err) {
       setError('Error de conexión. Intenta de nuevo.');
@@ -172,8 +172,8 @@ export default function LoginPage() {
               <FormFieldInput
                 label="Correo electrónico"
                 name="correo"
-                type="email"
-                placeholder="tu@correo.com"
+                type="text"
+                placeholder="tu@correo.com o 3001234567"
                 value={formData.correo}
                 onChange={handleChange}
                 required
