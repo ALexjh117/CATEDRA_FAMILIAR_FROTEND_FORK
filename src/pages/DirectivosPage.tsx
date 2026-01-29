@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getSession, getUsuarios, getInstituciones, crearCoordinadorRector, getMiInstitucion } from '../api/endpoints';
+import apiClient from '../api/apiClient';
 import { type Usuario, type Institucion } from '../mocks/data';
 import DashboardLayout from '../components/DashboardLayout';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -55,26 +56,58 @@ export default function DirectivosPage() {
         setMiInstitucion(inst);
       }
       
-      const [usuariosData, institucionesData] = await Promise.all([
-        getUsuarios(),
-        getInstituciones()
-      ]);
-
-      // Asegurar que usuariosData es un array
-      const usuariosArray = Array.isArray(usuariosData) ? usuariosData : [];
+      let directivosData: Usuario[] = [];
+      const esAdmin = user?.rol === 'admin' || user?.rol === 'admin_sistema';
       
-      // Filtrar solo directivos (coordinadores y orientadores)
-      let directivosData = usuariosArray.filter(
-        (u: Usuario) => ['coordinador', 'orientador'].includes(u.rol)
-      );
-      
-      // Si es rector, filtrar solo los de su institución
-      if (esRector && user?.institucionId) {
-        directivosData = directivosData.filter(d => d.institucionId === user.institucionId);
+      if (esAdmin) {
+        // Admin usa /admin/usuarios
+        const [usuariosData, institucionesData] = await Promise.all([
+          getUsuarios(),
+          getInstituciones()
+        ]);
+        const usuariosArray = Array.isArray(usuariosData) ? usuariosData : [];
+        directivosData = usuariosArray.filter(
+          (u: Usuario) => ['coordinador', 'orientador'].includes(u.rol)
+        );
+        setInstituciones(Array.isArray(institucionesData) ? institucionesData : []);
+      } else if (esRector) {
+        // Rector usa endpoints específicos
+        const [coordRes, orientRes] = await Promise.all([
+          apiClient.getCoordinadoresRector(),
+          apiClient.getOrientadoresRector()
+        ]);
+        
+        if (coordRes.success && coordRes.data) {
+          coordRes.data.forEach((c: any) => {
+            directivosData.push({
+              id: c.usuarioId || c.id,
+              nombre: c.nombre || '',
+              apellidos: c.apellido || '',
+              correo: c.correo || '',
+              telefono: c.telefono || '',
+              rol: 'coordinador',
+              activo: c.estaActivo ?? false,
+              institucionId: c.institucionId
+            } as Usuario);
+          });
+        }
+        if (orientRes.success && orientRes.data) {
+          orientRes.data.forEach((o: any) => {
+            directivosData.push({
+              id: o.usuarioId || o.id,
+              nombre: o.nombre || '',
+              apellidos: o.apellido || '',
+              correo: o.correo || '',
+              telefono: o.telefono || '',
+              rol: 'orientador',
+              activo: o.estaActivo ?? false,
+              institucionId: o.institucionId
+            } as Usuario);
+          });
+        }
       }
 
       setDirectivos(directivosData);
-      setInstituciones(Array.isArray(institucionesData) ? institucionesData : []);
     } catch (error) {
       console.error('Error loading directivos:', error);
     } finally {

@@ -777,16 +777,21 @@ export const getInstituciones = async (): Promise<Institucion[]> => {
       return result.data.map((inst: any) => ({
         id: inst.id,
         nombre: inst.nombre,
-        direccion: inst.direccion || '',
-        telefono: inst.telefono || '',
-        correo: inst.correo || '',
-        naturaleza: inst.naturaleza || 'Pública',
-        municipio_id: inst.municipioId,
+        codigo_dane: inst.codigoDane || inst.codigo_dane,
+        nit: inst.nit,
+        naturaleza: inst.naturaleza || 'publica',
+        municipio_id: inst.municipioId || inst.municipio_id,
         municipio: inst.municipio?.nombre || '',
         departamento: inst.municipio?.departamento?.nombre || '',
-        activo: true,
+        telefono_principal: inst.telefonoPrincipal || inst.telefono_principal || inst.telefono || '',
+        correo_institucional: inst.correoInstitucional || inst.correo_institucional || inst.correo || '',
+        direccion_completa: inst.direccionCompleta || inst.direccion_completa || inst.direccion || '',
+        rector_nombre: inst.rectorNombre || inst.rector_nombre || '',
+        rector_documento: inst.rectorDocumento || inst.rector_documento || '',
+        rector_telefono: inst.rectorTelefono || inst.rector_telefono || '',
+        activo: inst.activo !== false,
         aprobado: inst.aprobado || false,
-        createdAt: inst.creadoEn
+        creado_en: inst.creadoEn || inst.creado_en
       }));
     }
     // Si falla la API, usar mock como fallback
@@ -799,957 +804,67 @@ export const getInstituciones = async (): Promise<Institucion[]> => {
 };
 
 export const getInstitucionById = async (id: number): Promise<Institucion | null> => {
-  await delay(300);
-  return institucionesMock.find(i => i.id === id && !i.eliminado_en) || null;
+  try {
+    const result = await apiClient.getInstitucionById(id);
+    if (result.success && result.data) {
+      const inst = result.data;
+      return {
+        id: inst.id,
+        nombre: inst.nombre,
+        codigo_dane: inst.codigoDane || inst.codigo_dane,
+        nit: inst.nit,
+        naturaleza: inst.naturaleza || 'publica',
+        municipio_id: inst.municipioId || inst.municipio_id,
+        municipio: inst.municipio?.nombre || '',
+        departamento: inst.municipio?.departamento?.nombre || '',
+        telefono_principal: inst.telefonoPrincipal || inst.telefono_principal || inst.telefono || '',
+        correo_institucional: inst.correoInstitucional || inst.correo_institucional || inst.correo || '',
+        direccion_completa: inst.direccionCompleta || inst.direccion_completa || inst.direccion || '',
+        rector_nombre: inst.rectorNombre || inst.rector_nombre || '',
+        rector_documento: inst.rectorDocumento || inst.rector_documento || '',
+        rector_telefono: inst.rectorTelefono || inst.rector_telefono || '',
+        activo: inst.activo !== false,
+        aprobado: inst.aprobado || false,
+        creado_en: inst.creadoEn || inst.creado_en
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error('Error al obtener institución por ID:', error);
+    return null;
+  }
 };
 
 export const createInstitucion = async (data: Partial<Institucion>): Promise<{ success: boolean; institucion?: Institucion; error?: string }> => {
-  await delay(800);
-  
-  // Validar correo único
-  // @ts-ignore
-  if (data.correo && institucionesMock.some(i => i.correo === data.correo && !i.deletedAt)) {
-    return { success: false, error: 'Ya existe una institución con este correo' };
-  }
-  
-  const newInstitucion: Institucion = {
-    id: Date.now(),
-    nombre: data.nombre || '',
-    direccion: data.direccion || '',
-    telefono: data.telefono || '',
-    correo: data.correo,
-    // @ts-ignore
-    rectorId: data.rectorId,
-    activo: true,
-    createdAt: new Date().toISOString().split('T')[0]
+  // Transformar datos de snake_case a camelCase para el backend
+  const backendData = {
+    nombre: data.nombre,
+    codigoDane: data.codigo_dane,
+    nit: data.nit,
+    naturaleza: data.naturaleza,
+    municipioId: data.municipio_id,
+    telefonoPrincipal: data.telefono_principal,
+    correoInstitucional: data.correo_institucional,
+    direccionCompleta: data.direccion_completa,
+    rectorNombre: data.rector_nombre,
+    rectorDocumento: data.rector_documento,
+    rectorTelefono: data.rector_telefono
   };
   
-  institucionesMock.push(newInstitucion);
-  addLogAuditoria('crear', 'Institucion', newInstitucion.id, `Institución creada: ${newInstitucion.nombre}`);
+  // Usar API real del backend
+  const result = await apiClient.createInstitucion(backendData);
   
-  return { success: true, institucion: newInstitucion };
-};
-
-export const updateInstitucion = async (id: number, data: Partial<Institucion>): Promise<{ success: boolean; institucion?: Institucion; error?: string }> => {
-  await delay(600);
-  
-  const index = institucionesMock.findIndex(i => i.id === id);
-  if (index === -1) {
-    return { success: false, error: 'Institución no encontrada' };
-  }
-  
-  // Validar correo único si se está cambiando
-  // @ts-ignore
-  if (data.correo && institucionesMock.some(i => i.correo === data.correo && i.id !== id && !i.deletedAt)) {
-    return { success: false, error: 'Ya existe una institución con este correo' };
-  }
-  
-  institucionesMock[index] = { ...institucionesMock[index], ...data };
-  addLogAuditoria('actualizar', 'Institucion', id, `Institución actualizada: ${institucionesMock[index].nombre}`);
-  
-  return { success: true, institucion: institucionesMock[index] };
-};
-
-export const deleteInstitucion = async (id: number): Promise<{ success: boolean; error?: string }> => {
-  await delay(500);
-  
-  const institucion = institucionesMock.find(i => i.id === id);
-  if (!institucion) {
-    return { success: false, error: 'Institución no encontrada' };
-  }
-  
-  // Eliminación suave
-  institucion.eliminado_en = new Date().toISOString();
-  institucion.activo = false;
-  addLogAuditoria('eliminar', 'Institucion', id, `Institución eliminada: ${institucion.nombre}`);
-  
-  return { success: true };
-};
-
-// ============================================
-// INSTITUCIONES PENDIENTES (Admin Sistema)
-// ============================================
-
-export const getInstitucionesPendientes = async (): Promise<{ success: boolean; instituciones?: Institucion[]; error?: string }> => {
-  // Si está en modo bypass o preview, usar mock
-  const session = getSession();
-  if (isBypassValidationsEnabled() || !session?.token || session.isPreview) {
-    await delay(500);
-    // Simular instituciones pendientes de aprobación
-    const pendientes = institucionesMock
-      .filter(i => !i.activo && !i.eliminado_en)
-      .map(i => ({ ...i, estado: 'pendiente' as const }));
-    return { success: true, instituciones: pendientes };
-  }
-  
-  // Usar API real
-  const result = await apiClient.getInstitucionesPendientes();
   if (result.success && result.data) {
-    // Mapear respuesta del backend al formato del frontend
-    const instituciones: Institucion[] = result.data.map(inst => ({
-      id: inst.id,
-      nombre: inst.nombre,
-      direccion: inst.direccion,
-      direccion_completa: inst.direccion,
-      telefono: inst.telefono,
-      telefono_principal: inst.telefono,
-      correo: inst.correo,
-      correo_institucional: inst.correo,
-      naturaleza: (inst.naturaleza?.toLowerCase() || 'publica') as 'publica' | 'privada' | 'mixta',
-      municipio_id: inst.municipioId,
-      niveles_educativos: [],
-      modalidad: '',
-      jornadas: [],
-      confesional: false,
-      activo: false,
-      creado_en: inst.creadoEn
-    }));
-    return { success: true, instituciones };
-  }
-  return { success: false, error: result.message };
-};
-
-export const aprobarInstitucion = async (institucionId: number): Promise<{ success: boolean; institucion?: Institucion; error?: string }> => {
-  // Si está en modo bypass, usar mock
-  if (isBypassValidationsEnabled()) {
-    await delay(800);
-    const institucion = institucionesMock.find(i => i.id === institucionId);
-    if (!institucion) {
-      return { success: false, error: 'Institución no encontrada' };
-    }
-    institucion.activo = true;
-    addLogAuditoria('actualizar', 'Institucion', institucionId, `Institución aprobada: ${institucion.nombre}`);
-    return { success: true, institucion };
-  }
-  
-  // Usar API real
-  const result = await apiClient.aprobarInstitucion(institucionId);
-  if (result.success && result.data) {
-    const institucion: Institucion = {
-      id: result.data.id,
-      nombre: result.data.nombre,
-      direccion: result.data.direccion,
-      direccion_completa: result.data.direccion,
-      telefono: result.data.telefono,
-      telefono_principal: result.data.telefono,
-      correo: result.data.correo,
-      correo_institucional: result.data.correo,
-      naturaleza: (result.data.naturaleza?.toLowerCase() || 'publica') as 'publica' | 'privada' | 'mixta',
-      municipio_id: result.data.municipioId,
-      niveles_educativos: [],
-      modalidad: '',
-      jornadas: [],
-      confesional: false,
-      activo: true,
-      creado_en: result.data.creadoEn
-    };
-    return { success: true, institucion };
-  }
-  return { success: false, error: result.message };
-};
-
-// ============================================
-// PERIODOS - CONSUMO DESDE BACKEND
-// ============================================
-
-export const getPeriodos = async (institucionId?: number): Promise<Periodo[]> => {
-  try {
-    const result = await apiClient.getPeriodos();
-    if (result.success && result.data) {
-      let periodos = result.data.map((p: any) => ({
-        id: p.id,
-        nombre: p.nombre || '',
-        fechaInicio: p.fechaInicio || p.fecha_inicio || '',
-        fechaFin: p.fechaFin || p.fecha_fin || '',
-        institucionId: p.institucionId || p.institucion_id || 1,
-        anio: p.anio || p.año || new Date().getFullYear(),
-        estado: p.estado || 'planificado',
-        createdAt: p.createdAt || p.created_at || p.creadoEn || ''
-      }));
-      
-      if (institucionId) {
-        periodos = periodos.filter((p: Periodo) => p.institucionId === institucionId);
-      }
-      
-      return periodos;
-    }
-    return [];
-  } catch (error) {
-    console.error('Error al obtener periodos:', error);
-    return [];
-  }
-};
-
-export const getPeriodoActivo = async (institucionId: number): Promise<Periodo | null> => {
-  try {
-    const periodos = await getPeriodos(institucionId);
-    return periodos.find(p => p.estado === 'activo') || null;
-  } catch (error) {
-    console.error('Error al obtener periodo activo:', error);
-    return null;
-  }
-};
-
-export const createPeriodo = async (data: Partial<Periodo>): Promise<{ success: boolean; periodo?: Periodo; error?: string }> => {
-  await delay(800);
-  
-  // Validar fechas
-  if (!data.fechaInicio || !data.fechaFin) {
-    return { success: false, error: 'Las fechas de inicio y fin son requeridas' };
-  }
-  
-  if (new Date(data.fechaFin) <= new Date(data.fechaInicio)) {
-    return { success: false, error: 'La fecha de fin debe ser posterior a la fecha de inicio' };
-  }
-  
-  // Validar que no haya otro período activo
-  if (data.estado === 'activo') {
-    const periodoActivo = periodosMock.find(p => 
-      p.institucionId === data.institucionId && p.estado === 'activo'
-    );
-    if (periodoActivo) {
-      return { success: false, error: 'Ya existe un período activo. Ciérrelo primero.' };
-    }
-  }
-  
-  const newPeriodo: Periodo = {
-    id: Date.now(),
-    nombre: data.nombre || '',
-    fechaInicio: data.fechaInicio,
-    fechaFin: data.fechaFin,
-    institucionId: data.institucionId || 1,
-    anio: data.anio || new Date().getFullYear(),
-    estado: data.estado || 'planificado',
-    createdAt: new Date().toISOString().split('T')[0]
-  };
-  
-  periodosMock.push(newPeriodo);
-  addLogAuditoria('crear', 'Periodo', newPeriodo.id, `Período creado: ${newPeriodo.nombre}`);
-  
-  return { success: true, periodo: newPeriodo };
-};
-
-export const updatePeriodo = async (id: number, data: Partial<Periodo>): Promise<{ success: boolean; periodo?: Periodo; error?: string }> => {
-  await delay(600);
-  
-  const index = periodosMock.findIndex(p => p.id === id);
-  if (index === -1) {
-    return { success: false, error: 'Período no encontrado' };
-  }
-  
-  // Validar fechas si se están actualizando
-  const fechaInicio = data.fechaInicio || periodosMock[index].fechaInicio;
-  const fechaFin = data.fechaFin || periodosMock[index].fechaFin;
-  
-  if (new Date(fechaFin) <= new Date(fechaInicio)) {
-    return { success: false, error: 'La fecha de fin debe ser posterior a la fecha de inicio' };
-  }
-  
-  // Validar que no haya otro período activo
-  if (data.estado === 'activo' && periodosMock[index].estado !== 'activo') {
-    const periodoActivo = periodosMock.find(p => 
-      p.institucionId === periodosMock[index].institucionId && 
-      p.estado === 'activo' && 
-      p.id !== id
-    );
-    if (periodoActivo) {
-      return { success: false, error: 'Ya existe un período activo. Ciérrelo primero.' };
-    }
-  }
-  
-  periodosMock[index] = { ...periodosMock[index], ...data };
-  addLogAuditoria('actualizar', 'Periodo', id, `Período actualizado: ${periodosMock[index].nombre}`);
-  
-  return { success: true, periodo: periodosMock[index] };
-};
-
-export const deletePeriodo = async (id: number): Promise<{ success: boolean; error?: string }> => {
-  await delay(500);
-  
-  const index = periodosMock.findIndex(p => p.id === id);
-  if (index === -1) {
-    return { success: false, error: 'Período no encontrado' };
-  }
-  
-  // No permitir eliminar período activo
-  if (periodosMock[index].estado === 'activo') {
-    return { success: false, error: 'No se puede eliminar un período activo' };
-  }
-  
-  const nombre = periodosMock[index].nombre;
-  periodosMock.splice(index, 1);
-  addLogAuditoria('eliminar', 'Periodo', id, `Período eliminado: ${nombre}`);
-  
-  return { success: true };
-};
-
-// ============================================
-// GRADOS - CONSUMO DESDE BACKEND
-// ============================================
-
-export const getGrados = async (institucionId?: number): Promise<Grado[]> => {
-  try {
-    const result = await apiClient.getGrados();
-    if (result.success && result.data) {
-      let grados = result.data.map((g: any) => ({
-        id: g.id,
-        nombre: g.nombre || '',
-        orden: g.orden || 0,
-        institucionId: g.institucionId || g.institucion_id || 1,
-        activo: g.activo ?? true
-      }));
-      
-      if (institucionId) {
-        grados = grados.filter((g: Grado) => g.institucionId === institucionId);
-      }
-      
-      return grados.filter((g: Grado) => g.activo).sort((a: Grado, b: Grado) => a.orden - b.orden);
-    }
-    return [];
-  } catch (error) {
-    console.error('Error al obtener grados:', error);
-    return [];
-  }
-};
-
-export const createGrado = async (data: Partial<Grado>): Promise<{ success: boolean; grado?: Grado; error?: string }> => {
-  await delay(600);
-  
-  // Validar nombre único en la institución
-  if (gradosMock.some(g => g.nombre === data.nombre && g.institucionId === data.institucionId && g.activo)) {
-    return { success: false, error: 'Ya existe un grado con este nombre' };
-  }
-  
-  const newGrado: Grado = {
-    id: Date.now(),
-    nombre: data.nombre || '',
-    orden: data.orden || gradosMock.length,
-    institucionId: data.institucionId || 1,
-    activo: true
-  };
-  
-  gradosMock.push(newGrado);
-  addLogAuditoria('crear', 'Grado', newGrado.id, `Grado creado: ${newGrado.nombre}`);
-  
-  return { success: true, grado: newGrado };
-};
-
-export const updateGrado = async (id: number, data: Partial<Grado>): Promise<{ success: boolean; grado?: Grado; error?: string }> => {
-  await delay(500);
-  
-  const index = gradosMock.findIndex(g => g.id === id);
-  if (index === -1) {
-    return { success: false, error: 'Grado no encontrado' };
-  }
-  
-  gradosMock[index] = { ...gradosMock[index], ...data };
-  addLogAuditoria('actualizar', 'Grado', id, `Grado actualizado: ${gradosMock[index].nombre}`);
-  
-  return { success: true, grado: gradosMock[index] };
-};
-
-export const deleteGrado = async (id: number): Promise<{ success: boolean; error?: string }> => {
-  await delay(500);
-  
-  const grado = gradosMock.find(g => g.id === id);
-  if (!grado) {
-    return { success: false, error: 'Grado no encontrado' };
-  }
-  
-  // Verificar si hay cursos asociados
-  const cursosAsociados = cursosMock.filter(c => c.gradoId === id && c.activo);
-  if (cursosAsociados.length > 0) {
-    return { success: false, error: 'No se puede eliminar un grado con cursos asociados' };
-  }
-  
-  grado.activo = false;
-  addLogAuditoria('eliminar', 'Grado', id, `Grado eliminado: ${grado.nombre}`);
-  
-  return { success: true };
-};
-
-// ============================================
-// CURSOS - CONSUMO DESDE BACKEND
-// ============================================
-
-export const getCursos = async (institucionId?: number): Promise<Curso[]> => {
-  try {
-    // Consumir desde backend real
-    const result = await apiClient.getCursos();
-    if (result.success && result.data) {
-      let cursos = result.data.map((c: any) => ({
-        id: c.id,
-        nombre: c.nombre || '',
-        gradoId: c.gradoId || 1,
-        jornada: c.jornada || 'mañana',
-        institucionId: c.institucionId || 1,
-        docenteDirectorId: c.docenteDirectorId,
-        activo: c.activo !== false
-      }));
-      
-      if (institucionId) {
-        cursos = cursos.filter((c: Curso) => c.institucionId === institucionId);
-      }
-      
-      return cursos;
-    }
-    return [];
-  } catch (error) {
-    console.error('Error al obtener cursos:', error);
-    return [];
-  }
-};
-
-export const getCursoById = async (id: number): Promise<Curso | null> => {
-  try {
-    const cursos = await getCursos();
-    return cursos.find(c => c.id === id) || null;
-  } catch (error) {
-    console.error('Error al obtener curso:', error);
-    return null;
-  }
-};
-
-export const getCursosByDocente = async (docenteId: number): Promise<Curso[]> => {
-  try {
-    const cursos = await getCursos();
-    return cursos.filter(c => c.docenteDirectorId === docenteId && c.activo);
-  } catch (error) {
-    console.error('Error al obtener cursos del docente:', error);
-    return [];
-  }
-};
-
-export const createCurso = async (data: Partial<Curso>): Promise<{ success: boolean; curso?: Curso; error?: string }> => {
-  await delay(700);
-  
-  // Validar que el docente pertenezca a la misma institución
-  if (data.docenteDirectorId) {
-    const docente = usuariosListMock.find(u => u.id === data.docenteDirectorId);
-    if (docente && docente.institucionId !== data.institucionId) {
-      return { success: false, error: 'El docente debe pertenecer a la misma institución del curso' };
-    }
-  }
-  
-  const newCurso: Curso = {
-    id: Date.now(),
-    nombre: data.nombre || '',
-    gradoId: data.gradoId || 1,
-    jornada: data.jornada || 'mañana',
-    institucionId: data.institucionId || 1,
-    docenteDirectorId: data.docenteDirectorId,
-    activo: true
-  };
-  
-  cursosMock.push(newCurso);
-  addLogAuditoria('crear', 'Curso', newCurso.id, `Curso creado: ${newCurso.nombre}`);
-  
-  return { success: true, curso: newCurso };
-};
-
-export const updateCurso = async (id: number, data: Partial<Curso>): Promise<{ success: boolean; curso?: Curso; error?: string }> => {
-  await delay(600);
-  
-  const index = cursosMock.findIndex(c => c.id === id);
-  if (index === -1) {
-    return { success: false, error: 'Curso no encontrado' };
-  }
-  
-  // Validar multitenancy
-  if (data.docenteDirectorId) {
-    const docente = usuariosListMock.find(u => u.id === data.docenteDirectorId);
-    const institucionId = data.institucionId || cursosMock[index].institucionId;
-    if (docente && docente.institucionId !== institucionId) {
-      return { success: false, error: 'El docente debe pertenecer a la misma institución del curso' };
-    }
-  }
-  
-  cursosMock[index] = { ...cursosMock[index], ...data };
-  addLogAuditoria('actualizar', 'Curso', id, `Curso actualizado: ${cursosMock[index].nombre}`);
-  
-  return { success: true, curso: cursosMock[index] };
-};
-
-export const deleteCurso = async (id: number): Promise<{ success: boolean; error?: string }> => {
-  await delay(500);
-  
-  const curso = cursosMock.find(c => c.id === id);
-  if (!curso) {
-    return { success: false, error: 'Curso no encontrado' };
-  }
-  
-  // Verificar si hay estudiantes asociados
-  const estudiantesAsociados = estudiantesMock.filter(e => e.cursoId === id && e.activo);
-  if (estudiantesAsociados.length > 0) {
-    return { success: false, error: 'No se puede eliminar un curso con estudiantes asociados' };
-  }
-  
-  curso.activo = false;
-  addLogAuditoria('eliminar', 'Curso', id, `Curso eliminado: ${curso.nombre}`);
-  
-  return { success: true };
-};
-
-// ============================================
-// USUARIOS - CRUD COMPLETO
-// ============================================
-
-export const getUsuarios = async (institucionId?: number, rol?: RolUsuario): Promise<Usuario[]> => {
-  try {
-    // Consumir desde backend real
-    const result = await apiClient.getUsuarios();
-    if (result.success && result.data) {
-      let usuarios = result.data.map((u: any) => ({
-        id: u.id,
-        nombre: u.nombre || '',
-        apellidos: u.apellido || u.apellidos || '',
-        correo: u.correo || '',
-        rol: u.rol || 'acudiente',
-        telefono: u.telefono || '',
-        institucionId: u.institucionId,
-        activo: u.estaActivo !== false,
-        debe_cambiar_contrasena: u.debeCambiarContrasena
-      }));
-      
-      // Aplicar filtros si se proporcionan
-      if (institucionId) {
-        usuarios = usuarios.filter((u: Usuario) => u.institucionId === institucionId || u.rol === 'admin' || u.rol === 'admin_sistema');
-      }
-      
-      if (rol) {
-        usuarios = usuarios.filter((u: Usuario) => u.rol === rol);
-      }
-      
-      return usuarios;
-    }
-    return [];
-  } catch (error) {
-    console.error('Error al obtener usuarios:', error);
-    return [];
-  }
-};
-
-export const getUsuarioById = async (id: number): Promise<Usuario | null> => {
-  try {
-    const usuarios = await getUsuarios();
-    return usuarios.find(u => u.id === id) || null;
-  } catch (error) {
-    console.error('Error al obtener usuario:', error);
-    return null;
-  }
-};
-
-export const createUsuario = async (data: Partial<Usuario> & { password?: string }): Promise<{ success: boolean; usuario?: Usuario; error?: string }> => {
-  await delay(800);
-  
-  // Validar documento único
-  if (data.documento && usuariosListMock.some(u => u.documento === data.documento && !u.deletedAt)) {
-    return { success: false, error: 'Ya existe un usuario con este documento' };
-  }
-  
-  // Validar correo único (excepto si es acudiente sin correo)
-  if (data.correo && usuariosListMock.some(u => u.correo === data.correo && !u.deletedAt)) {
-    return { success: false, error: 'Ya existe un usuario con este correo' };
-  }
-  
-  // Correo requerido para roles que no sean acudiente
-  if (data.rol !== 'acudiente' && !data.correo) {
-    return { success: false, error: 'El correo es requerido para este rol' };
-  }
-  
-  const newUsuario: Usuario = {
-    id: Date.now(),
-    nombre: data.nombre || '',
-    apellidos: data.apellidos || '',
-    correo: data.correo || '',
-    rol: data.rol || 'acudiente',
-    telefono: data.telefono || '',
-    documento: data.documento,
-    tipoDocumento: data.tipoDocumento,
-    institucionId: data.institucionId,
-    activo: true,
-    debe_cambiar_contrasena: data.password ? true : false, // Si se establece password inicial, debe cambiarlo
-    createdAt: new Date().toISOString().split('T')[0]
-  };
-  
-  // En una implementación real, la contraseña se almacenaría hasheada
-  // Aquí solo la registramos en console para fines de demostración
-  if (data.password) {
-    console.log(`🔐 Usuario ${newUsuario.correo} creado con contraseña inicial: ${data.password}`);
-  }
-  
-  usuariosListMock.push(newUsuario);
-  addLogAuditoria('crear', 'Usuario', newUsuario.id, `Usuario creado: ${newUsuario.nombre} ${newUsuario.apellidos} (${newUsuario.rol})`);
-  
-  return { success: true, usuario: newUsuario };
-};
-
-export const updateUsuario = async (id: number, data: Partial<Usuario>): Promise<{ success: boolean; usuario?: Usuario; error?: string }> => {
-  // Intentar con API real primero
-  try {
-    const result = await apiClient.actualizarPerfil(id, {
-      nombre: data.nombre,
-      apellido: data.apellidos,
-      telefono: data.telefono,
-      documento: data.documento,
-      tipoDocumento: data.tipoDocumento
-    });
-    
-    if (result.success) {
-      return { success: true, usuario: data as Usuario };
-    }
-  } catch (error) {
-    console.warn('API de actualización no disponible, usando mock');
-  }
-
-  // Fallback a mock
-  await delay(600);
-  
-  const index = usuariosListMock.findIndex(u => u.id === id);
-  if (index === -1) {
-    return { success: false, error: 'Usuario no encontrado' };
-  }
-  
-  // Validar documento único si se está cambiando
-  if (data.documento && usuariosListMock.some(u => u.documento === data.documento && u.id !== id && !u.deletedAt)) {
-    return { success: false, error: 'Ya existe un usuario con este documento' };
-  }
-  
-  // Validar correo único si se está cambiando
-  if (data.correo && usuariosListMock.some(u => u.correo === data.correo && u.id !== id && !u.deletedAt)) {
-    return { success: false, error: 'Ya existe un usuario con este correo' };
-  }
-  
-  usuariosListMock[index] = { 
-    ...usuariosListMock[index], 
-    ...data,
-    updatedAt: new Date().toISOString().split('T')[0]
-  };
-  addLogAuditoria('actualizar', 'Usuario', id, `Usuario actualizado: ${usuariosListMock[index].nombre} ${usuariosListMock[index].apellidos}`);
-  
-  return { success: true, usuario: usuariosListMock[index] };
-};
-
-// Obtener perfil completo del usuario logueado
-export const getPerfilUsuario = async (): Promise<{ success: boolean; usuario?: any; error?: string }> => {
-  try {
-    const result = await apiClient.getPerfilUsuario();
-    if (result.success && result.data) {
-      return { success: true, usuario: result.data };
-    }
-  } catch (error) {
-    console.warn('Endpoint de perfil no disponible');
-  }
-  
-  // Fallback: retornar datos de sesión
-  const session = getSession();
-  if (session?.user) {
-    return { success: true, usuario: session.user };
-  }
-  
-  return { success: false, error: 'No se pudo obtener el perfil' };
-};
-
-// Obtener institución del usuario logueado
-export const getMiInstitucion = async (): Promise<Institucion | null> => {
-  const session = getSession();
-  const institucionId = session?.user?.institucionId;
-  
-  if (!institucionId) return null;
-  
-  // Intentar obtener de API real
-  try {
-    const result = await apiClient.getInstitucionById(institucionId);
-    if (result.success && result.data) {
-      return {
-        id: result.data.id,
-        nombre: result.data.nombre,
-        direccion: result.data.direccion,
-        telefono: result.data.telefono,
-        correo: result.data.correo,
-        naturaleza: result.data.naturaleza?.toLowerCase() as 'publica' | 'privada',
-        activo: true,
-        municipio: result.data.municipio?.nombre,
-        departamento: result.data.municipio?.departamento?.nombre
-      };
-    }
-  } catch (error) {
-    console.warn('API de institución no disponible');
-  }
-  
-  // Fallback a mock
-  return institucionesMock.find(i => i.id === institucionId) || null;
-};
-
-export const deleteUsuario = async (id: number): Promise<{ success: boolean; error?: string }> => {
-  await delay(500);
-  
-  const usuario = usuariosListMock.find(u => u.id === id);
-  if (!usuario) {
-    return { success: false, error: 'Usuario no encontrado' };
-  }
-  
-  // Eliminación suave
-  usuario.deletedAt = new Date().toISOString();
-  usuario.activo = false;
-  addLogAuditoria('eliminar', 'Usuario', id, `Usuario eliminado: ${usuario.nombre} ${usuario.apellidos}`);
-  
-  return { success: true };
-};
-
-// ============================================
-// ESTUDIANTES - CRUD COMPLETO
-// ============================================
-
-export const getEstudiantes = async (institucionId?: number, cursoId?: number): Promise<Estudiante[]> => {
-  try {
-    const result = await apiClient.getEstudiantes();
-    if (result.success && result.data) {
-      let estudiantes = result.data.map((e: any) => ({
-        id: e.id,
-        nombre: e.nombre || e.nombres || '',
-        apellidos: e.apellidos || e.apellido || '',
-        documento: e.documento || e.numeroDocumento || '',
-        tipoDocumento: e.tipoDocumento || e.tipo_documento || 'ti',
-        fechaNacimiento: e.fechaNacimiento || e.fecha_nacimiento,
-        cursoId: e.cursoId || e.curso_id,
-        institucionId: e.institucionId || e.institucion_id,
-        activo: e.activo ?? e.estaActivo ?? true,
-        createdAt: e.createdAt || e.created_at || e.creadoEn || ''
-      }));
-      
-      if (institucionId) {
-        estudiantes = estudiantes.filter((e: Estudiante) => e.institucionId === institucionId);
-      }
-      
-      if (cursoId) {
-        estudiantes = estudiantes.filter((e: Estudiante) => e.cursoId === cursoId);
-      }
-      
-      return estudiantes;
-    }
-    return [];
-  } catch (error) {
-    console.error('Error al obtener estudiantes:', error);
-    return [];
-  }
-};
-
-export const getEstudianteById = async (id: number): Promise<Estudiante | null> => {
-  try {
-    const result = await apiClient.getEstudianteById(id);
-    if (result.success && result.data) {
-      const e = result.data;
-      return {
-        id: e.id,
-        nombre: e.nombre || e.nombres || '',
-        apellidos: e.apellidos || e.apellido || '',
-        documento: e.documento || e.numeroDocumento || '',
-        tipoDocumento: e.tipoDocumento || e.tipo_documento || 'ti',
-        fechaNacimiento: e.fechaNacimiento || e.fecha_nacimiento,
-        cursoId: e.cursoId || e.curso_id,
-        institucionId: e.institucionId || e.institucion_id,
-        activo: e.activo ?? e.estaActivo ?? true,
-        createdAt: e.createdAt || e.created_at || e.creadoEn || ''
-      };
-    }
-    return null;
-  } catch (error) {
-    console.error('Error al obtener estudiante:', error);
-    return null;
-  }
-};
-
-export const getEstudiantesByCurso = async (cursoId: number): Promise<Estudiante[]> => {
-  try {
-    const estudiantes = await getEstudiantes(undefined, cursoId);
-    return estudiantes;
-  } catch (error) {
-    console.error('Error al obtener estudiantes del curso:', error);
-    return [];
-  }
-};
-
-export const createEstudiante = async (data: Partial<Estudiante>): Promise<{ success: boolean; estudiante?: Estudiante; error?: string }> => {
-  await delay(800);
-  
-  // Validar documento único
-  if (data.documento && estudiantesMock.some(e => e.documento === data.documento && !e.deletedAt)) {
-    return { success: false, error: 'Ya existe un estudiante con este documento' };
-  }
-  
-  const newEstudiante: Estudiante = {
-    id: Date.now(),
-    nombre: data.nombre || '',
-    apellidos: data.apellidos || '',
-    documento: data.documento || '',
-    tipoDocumento: data.tipoDocumento || 'ti',
-    fechaNacimiento: data.fechaNacimiento,
-    cursoId: data.cursoId || 1,
-    institucionId: data.institucionId || 1,
-    activo: true,
-    createdAt: new Date().toISOString().split('T')[0]
-  };
-  
-  estudiantesMock.push(newEstudiante);
-  addLogAuditoria('crear', 'Estudiante', newEstudiante.id, `Estudiante creado: ${newEstudiante.nombre} ${newEstudiante.apellidos}`);
-  
-  return { success: true, estudiante: newEstudiante };
-};
-
-export const updateEstudiante = async (id: number, data: Partial<Estudiante>): Promise<{ success: boolean; estudiante?: Estudiante; error?: string }> => {
-  await delay(600);
-  
-  const index = estudiantesMock.findIndex(e => e.id === id);
-  if (index === -1) {
-    return { success: false, error: 'Estudiante no encontrado' };
-  }
-  
-  // Validar documento único si se está cambiando
-  if (data.documento && estudiantesMock.some(e => e.documento === data.documento && e.id !== id && !e.deletedAt)) {
-    return { success: false, error: 'Ya existe un estudiante con este documento' };
-  }
-  
-  estudiantesMock[index] = { ...estudiantesMock[index], ...data };
-  addLogAuditoria('actualizar', 'Estudiante', id, `Estudiante actualizado: ${estudiantesMock[index].nombre} ${estudiantesMock[index].apellidos}`);
-  
-  return { success: true, estudiante: estudiantesMock[index] };
-};
-
-export const deleteEstudiante = async (id: number): Promise<{ success: boolean; error?: string }> => {
-  await delay(500);
-  
-  const estudiante = estudiantesMock.find(e => e.id === id);
-  if (!estudiante) {
-    return { success: false, error: 'Estudiante no encontrado' };
-  }
-  
-  // Eliminación suave
-  estudiante.deletedAt = new Date().toISOString();
-  estudiante.activo = false;
-  addLogAuditoria('eliminar', 'Estudiante', id, `Estudiante eliminado: ${estudiante.nombre} ${estudiante.apellidos}`);
-  
-  return { success: true };
-};
-
-// ============================================
-// VINCULACIÓN ESTUDIANTE-ACUDIENTE
-// ============================================
-
-export const getAcudientesDeEstudiante = async (estudianteId: number): Promise<{ 
-  success: boolean; 
-  vinculos?: Array<{ id: number; acudiente: Usuario; parentesco: string; esPrincipal: boolean }> 
-}> => {
-  await delay(400);
-  
-  const vinculos = estudiantesAcudientesMock.filter(v => v.estudianteId === estudianteId);
-  const resultado = vinculos.map(v => {
-    const acudiente = usuariosListMock.find(u => u.id === v.acudienteId);
     return { 
-      id: v.id,
-      acudiente: acudiente!, 
-      parentesco: v.parentesco,
-      esPrincipal: v.esPrincipal
+      success: true, 
+      institucion: result.data as Institucion 
     };
-  }).filter(item => item.acudiente);
-  
-  return { success: true, vinculos: resultado };
-};
-
-export const getEstudiantesDeAcudiente = async (acudienteId: number): Promise<{ estudiante: Estudiante; relacion: EstudianteAcudiente }[]> => {
-  await delay(400);
-  
-  const vinculos = estudiantesAcudientesMock.filter(v => v.acudienteId === acudienteId);
-  return vinculos.map(v => {
-    const estudiante = estudiantesMock.find(e => e.id === v.estudianteId);
-    return { estudiante: estudiante!, relacion: v };
-  }).filter(item => item.estudiante);
-};
-
-export const vincularEstudianteAcudiente = async (data: {
-  estudianteId: number;
-  acudienteId: number;
-  parentesco: string;
-  esPrincipal: boolean;
-}): Promise<{ success: boolean; vinculo?: EstudianteAcudiente; error?: string }> => {
-  await delay(600);
-  
-  // Verificar que no exista ya el vínculo
-  const existeVinculo = estudiantesAcudientesMock.some(
-    v => v.estudianteId === data.estudianteId && v.acudienteId === data.acudienteId
-  );
-  
-  if (existeVinculo) {
-    return { success: false, error: 'Este acudiente ya está vinculado al estudiante' };
   }
   
-  // Si es principal, quitar el flag a los demás
-  if (data.esPrincipal) {
-    estudiantesAcudientesMock
-      .filter(v => v.estudianteId === data.estudianteId)
-      .forEach(v => v.esPrincipal = false);
-  }
-  
-  const newVinculo: EstudianteAcudiente = {
-    id: Date.now(),
-    estudianteId: data.estudianteId,
-    acudienteId: data.acudienteId,
-    parentesco: data.parentesco,
-    esPrincipal: data.esPrincipal,
-    createdAt: new Date().toISOString().split('T')[0]
+  return { 
+    success: false, 
+    error: result.message || 'Error al crear la institución' 
   };
-  
-  estudiantesAcudientesMock.push(newVinculo);
-  addLogAuditoria('crear', 'EstudianteAcudiente', newVinculo.id, `Vinculación creada: Estudiante ${data.estudianteId} - Acudiente ${data.acudienteId}`);
-  
-  return { success: true, vinculo: newVinculo };
-};
-
-export const updateVinculoEstudianteAcudiente = async (id: number, data: Partial<EstudianteAcudiente>): Promise<{ success: boolean; error?: string }> => {
-  await delay(500);
-  
-  const index = estudiantesAcudientesMock.findIndex(v => v.id === id);
-  if (index === -1) {
-    return { success: false, error: 'Vínculo no encontrado' };
-  }
-  
-  // Si se está marcando como principal, quitar el flag a los demás
-  if (data.esPrincipal) {
-    const estudianteId = estudiantesAcudientesMock[index].estudianteId;
-    estudiantesAcudientesMock
-      .filter(v => v.estudianteId === estudianteId && v.id !== id)
-      .forEach(v => v.esPrincipal = false);
-  }
-  
-  estudiantesAcudientesMock[index] = { ...estudiantesAcudientesMock[index], ...data };
-  
-  return { success: true };
-};
-
-export const desvincularEstudianteAcudiente = async (id: number): Promise<{ success: boolean; error?: string }> => {
-  await delay(400);
-  
-  const index = estudiantesAcudientesMock.findIndex(v => v.id === id);
-  if (index === -1) {
-    return { success: false, error: 'Vínculo no encontrado' };
-  }
-  
-  estudiantesAcudientesMock.splice(index, 1);
-  addLogAuditoria('eliminar', 'EstudianteAcudiente', id, 'Vinculación eliminada');
-  
-  return { success: true };
-};
-
-// ============================================
-// NOTIFICACIONES
-// ============================================
-
-export const getNotificaciones = async (destinatarioId?: number): Promise<Notificacion[]> => {
-  await delay(400);
-  if (destinatarioId) {
-    return notificacionesMock.filter(n => n.destinatarioId === destinatarioId);
-  }
-  return notificacionesMock;
 };
 
 export const getNotificacionesPorTarea = async (tareaId: number): Promise<Notificacion[]> => {
@@ -1759,18 +874,16 @@ export const getNotificacionesPorTarea = async (tareaId: number): Promise<Notifi
 
 export const enviarNotificacion = async (data: Partial<Notificacion>): Promise<{ success: boolean; notificacion?: Notificacion }> => {
   await delay(500);
-  
   const newNotificacion: Notificacion = {
     id: Date.now(),
-    tipo: data.tipo || 'sistema',
+    tipo: data.tipo || 'general',
     titulo: data.titulo || '',
     mensaje: data.mensaje || '',
     destinatarioId: data.destinatarioId || 0,
     tareaId: data.tareaId,
     leida: false,
-    fechaEnvio: new Date().toISOString()
+    fechaCreacion: new Date().toISOString()
   };
-  
   notificacionesMock.push(newNotificacion);
   return { success: true, notificacion: newNotificacion };
 };
@@ -2181,34 +1294,6 @@ export interface CargaMasivaResult {
 }
 
 /**
- * Descargar plantilla Excel para carga masiva de estudiantes
- */
-export const descargarPlantillaEstudiantes = async (): Promise<{ success: boolean; error?: string }> => {
-  // Si está en modo bypass, simular descarga
-  if (isBypassValidationsEnabled()) {
-    await delay(300);
-    // Crear un archivo de ejemplo
-    const csvContent = 'tipo_documento,numero_documento,nombres,apellidos,fecha_nacimiento,genero,correo_acudiente,telefono_acudiente\n';
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'plantilla_estudiantes.csv';
-    a.click();
-    window.URL.revokeObjectURL(url);
-    return { success: true };
-  }
-  
-  // Usar API real
-  try {
-    await apiClient.descargarPlantillaExcel();
-    return { success: true };
-  } catch (error: any) {
-    return { success: false, error: error.message || 'Error al descargar plantilla' };
-  }
-};
-
-/**
  * Validar archivo Excel antes de carga masiva
  */
 export const validarExcelEstudiantes = async (archivo: File): Promise<ValidacionExcelResult> => {
@@ -2278,6 +1363,17 @@ export const cargaMasivaEstudiantes = async (archivo: File, cursoId: number): Pr
     };
   }
   return { success: false, error: result.message };
+};
+
+/**
+ * Carga masiva dual (dos archivos: estudiantes + acudientes)
+ */
+export const cargaMasivaDual = async (
+  archivoEstudiantes: File,
+  archivoAcudientes: File,
+  institucionId: number
+) => {
+  return await apiClient.cargaMasivaDual(archivoEstudiantes, archivoAcudientes, institucionId);
 };
 
 // ============================================
@@ -2405,51 +1501,84 @@ export const getOrientadorById = async (id: number) => {
 };
 
 /**
- * Crear orientador
- * POST /orientadores
+ * Crear orientador (usa endpoint de coordinador)
+ * POST /coordinadores/orientadores
  */
 export const crearOrientador = async (data: {
   firstName: string;
   lastName: string;
   email: string;
+  password: string;
   phone?: string;
-  address?: string;
 }) => {
-  const result = await apiClient.createOrientador(data);
+  // Mapear al formato que espera el endpoint del coordinador
+  const coordinadorData = {
+    correo: data.email,
+    contrasena: data.password,
+    nombre: data.firstName,
+    apellido: data.lastName,
+    telefono: data.phone || ''
+  };
+  const result = await apiClient.crearOrientadorCoordinador(coordinadorData);
   return { 
     success: result.success, 
     data: result.data, 
-    error: result.message,
-    passwordTemporal: result.data?.passwordTemporal 
+    error: result.message
   };
 };
 
 /**
- * Actualizar orientador
- * PUT /orientadores/:id
+ * Actualizar orientador (usa endpoint de coordinador)
+ * PUT /coordinadores/orientadores/:id
  */
 export const actualizarOrientador = async (id: number, data: {
   firstName?: string;
   lastName?: string;
+  email?: string;
   phone?: string;
-  address?: string;
+  password?: string;
 }) => {
-  const result = await apiClient.updateOrientador(id, data);
+  // Mapear al formato que espera el endpoint del coordinador
+  const coordinadorData: any = {};
+  if (data.firstName) coordinadorData.nombre = data.firstName;
+  if (data.lastName) coordinadorData.apellido = data.lastName;
+  if (data.email) coordinadorData.correo = data.email;
+  if (data.phone) coordinadorData.telefono = data.phone;
+  
+  const result = await apiClient.actualizarOrientadorCoordinador(id, coordinadorData);
   return { success: result.success, error: result.message };
 };
 
 /**
- * Desactivar orientador
- * DELETE /orientadores/:id
+ * Desactivar/Eliminar orientador (usa endpoint de coordinador)
+ * DELETE /coordinadores/orientadores/:id
  */
 export const desactivarOrientador = async (id: number) => {
-  const result = await apiClient.deleteOrientador(id);
-  return { success: result.success, error: result.message };
+  const result = await apiClient.eliminarOrientadorCoordinador(id);
+  return { success: result.success, message: result.message, error: result.message };
 };
 
 // ============================================
 // VINCULACIÓN ESTUDIANTE-ACUDIENTE (Backend Real)
 // ============================================
+
+/**
+ * Listar todos los acudientes de la institución (Coordinador)
+ * GET /coordinadores/acudientes
+ */
+export const getAcudientesCoordinador = async () => {
+  const result = await apiClient.getAcudientesCoordinador();
+  return result.data || [];
+};
+
+/**
+ * Listar todos los acudientes de la institución (Orientador)
+ * GET /orientadores/acudientes
+ */
+export const getAcudientesOrientador = async () => {
+  const result = await apiClient.getAcudientesOrientador();
+  return result.data || [];
+};
 
 /**
  * Listar acudientes de un estudiante (Backend Real)
@@ -2744,3 +1873,419 @@ export const eliminarGrado = async (id: number) => {
   const result = await apiClient.deleteGrado(id);
   return { success: result.success, error: result.message };
 };
+
+// ============================================
+// FUNCIONES FALTANTES PARA COMPATIBILIDAD
+// ============================================
+
+/**
+ * Obtener usuarios
+ */
+export const getUsuarios = async (): Promise<Usuario[]> => {
+  try {
+    const result = await apiClient.getUsuarios();
+    if (result.success && result.data) {
+      // Mapear datos del backend al formato del frontend
+      return result.data.map((user: any) => ({
+        id: user.id,
+        nombre: user.nombre || '',
+        apellidos: user.apellidos || user.apellido || '',
+        correo: user.correo || user.email || '',
+        telefono: user.telefono || '',
+        documento: user.documento || '',
+        tipoDocumento: user.tipoDocumento || user.tipo_documento || 'CC',
+        rol: user.rol || 'docente_aula',
+        activo: user.activo !== false,
+        institucionId: user.institucionId || user.institucion_id,
+        debe_cambiar_contrasena: user.debeCambiarContrasena || user.debe_cambiar_contrasena || false
+      }));
+    }
+    // Fallback a mock si falla
+    return usuariosListMock.filter(u => !u.deletedAt);
+  } catch (error) {
+    console.error('Error al obtener usuarios:', error);
+    // Fallback a mock
+    return usuariosListMock.filter(u => !u.deletedAt);
+  }
+};
+
+/**
+ * Obtener cursos
+ */
+export const getCursos = async (institucionId?: number): Promise<Curso[]> => {
+  await delay(300);
+  const cursos = cursosMock.filter(c => !c.deletedAt);
+  if (institucionId) {
+    return cursos.filter(c => c.institucionId === institucionId);
+  }
+  return cursos;
+};
+
+/**
+ * Crear usuario
+ */
+export const createUsuario = async (data: Partial<Usuario>): Promise<{ success: boolean; usuario?: Usuario; error?: string }> => {
+  await delay(500);
+  const newUser: Usuario = {
+    id: Math.max(...usuariosListMock.map(u => u.id), 0) + 1,
+    nombre: data.nombre || '',
+    apellidos: data.apellidos || '',
+    correo: data.correo || '',
+    telefono: data.telefono || '',
+    documento: data.documento || '',
+    tipoDocumento: data.tipoDocumento || 'cc',
+    rol: data.rol || 'docente_aula',
+    activo: true,
+    institucionId: data.institucionId || 1
+  };
+  usuariosListMock.push(newUser);
+  return { success: true, usuario: newUser };
+};
+
+/**
+ * Actualizar usuario
+ */
+export const updateUsuario = async (id: number, data: Partial<Usuario>): Promise<{ success: boolean; usuario?: Usuario; error?: string }> => {
+  try {
+    const result = await apiClient.updateUsuario(id, data);
+    if (result.success && result.data) {
+      return { 
+        success: true, 
+        usuario: result.data as Usuario 
+      };
+    }
+    return { 
+      success: false, 
+      error: result.message || 'Error al actualizar el usuario' 
+    };
+  } catch (error) {
+    console.error('Error al actualizar usuario:', error);
+    return { 
+      success: false, 
+      error: 'Error al actualizar el usuario' 
+    };
+  }
+};
+
+/**
+ * Eliminar usuario
+ */
+export const deleteUsuario = async (id: number): Promise<{ success: boolean; error?: string }> => {
+  console.log('🗑️ [endpoints.ts] deleteUsuario llamado con id:', id);
+  try {
+    console.log('🗑️ [endpoints.ts] Llamando apiClient.deleteUsuario...');
+    const result = await apiClient.deleteUsuario(id);
+    console.log('🗑️ [endpoints.ts] Resultado de apiClient:', result);
+    return { 
+      success: result.success, 
+      error: result.message 
+    };
+  } catch (error) {
+    console.error('🗑️ [endpoints.ts] Error al eliminar usuario:', error);
+    return { 
+      success: false, 
+      error: 'Error al eliminar el usuario' 
+    };
+  }
+};
+
+/**
+ * Actualizar institución
+ */
+export const updateInstitucion = async (id: number, data: Partial<Institucion>): Promise<{ success: boolean; institucion?: Institucion; error?: string }> => {
+  try {
+    // Transformar datos de snake_case a camelCase para el backend
+    const backendData = {
+      nombre: data.nombre,
+      codigoDane: data.codigo_dane,
+      nit: data.nit,
+      naturaleza: data.naturaleza,
+      municipioId: data.municipio_id,
+      telefonoPrincipal: data.telefono_principal,
+      correoInstitucional: data.correo_institucional,
+      direccionCompleta: data.direccion_completa,
+      rectorNombre: data.rector_nombre,
+      rectorDocumento: data.rector_documento,
+      rectorTelefono: data.rector_telefono
+    };
+    
+    const result = await apiClient.updateInstitucion(id, backendData);
+    if (result.success && result.data) {
+      return { 
+        success: true, 
+        institucion: result.data as Institucion 
+      };
+    }
+    return { 
+      success: false, 
+      error: result.message || 'Error al actualizar la institución' 
+    };
+  } catch (error) {
+    console.error('Error al actualizar institución:', error);
+    return { 
+      success: false, 
+      error: 'Error al actualizar la institución' 
+    };
+  }
+};
+
+/**
+ * Eliminar institución
+ */
+export const deleteInstitucion = async (id: number): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const result = await apiClient.deleteInstitucion(id);
+    return { 
+      success: result.success, 
+      error: result.message 
+    };
+  } catch (error) {
+    console.error('Error al eliminar institución:', error);
+    return { 
+      success: false, 
+      error: 'Error al eliminar la institución' 
+    };
+  }
+};
+
+/**
+ * Obtener mi institución (del usuario en sesión)
+ */
+export const getMiInstitucion = async (): Promise<Institucion | null> => {
+  const session = getSession();
+  if (!session?.user?.institucionId) return null;
+  return getInstitucionById(session.user.institucionId);
+};
+
+/**
+ * Obtener perfil del usuario
+ */
+export const getPerfilUsuario = async (usuarioId?: number): Promise<{ success: boolean; usuario?: Usuario; error?: string }> => {
+  await delay(300);
+  const session = getSession();
+  const id = usuarioId || session?.user?.id;
+  
+  if (!id) {
+    return { success: false, error: 'No hay usuario en sesión' };
+  }
+  
+  const usuario = usuariosListMock.find(u => u.id === id && !u.deletedAt);
+  if (!usuario) {
+    return { success: false, error: 'Usuario no encontrado' };
+  }
+  
+  return { success: true, usuario };
+};
+
+/**
+ * Obtener períodos
+ */
+export const getPeriodos = async (institucionId?: number): Promise<Periodo[]> => {
+  await delay(300);
+  const periodos = periodosMock.filter(p => !p.deletedAt);
+  if (institucionId) {
+    return periodos.filter(p => p.institucionId === institucionId);
+  }
+  return periodos;
+};
+
+/**
+ * Crear período
+ */
+export const createPeriodo = async (data: Partial<Periodo>): Promise<{ success: boolean; periodo?: Periodo; error?: string }> => {
+  await delay(500);
+  const newPeriodo: Periodo = {
+    id: Math.max(...periodosMock.map(p => p.id), 0) + 1,
+    nombre: data.nombre || '',
+    fechaInicio: data.fechaInicio || '',
+    fechaFin: data.fechaFin || '',
+    institucionId: data.institucionId || 1,
+    anio: data.anio || new Date().getFullYear(),
+    estado: data.estado || 'planificado',
+    activo: true
+  };
+  periodosMock.push(newPeriodo);
+  return { success: true, periodo: newPeriodo };
+};
+
+/**
+ * Actualizar período
+ */
+export const updatePeriodo = async (id: number, data: Partial<Periodo>): Promise<{ success: boolean; periodo?: Periodo; error?: string }> => {
+  await delay(500);
+  const periodo = periodosMock.find(p => p.id === id);
+  if (!periodo) {
+    return { success: false, error: 'Período no encontrado' };
+  }
+  Object.assign(periodo, data);
+  return { success: true, periodo };
+};
+
+/**
+ * Eliminar período
+ */
+export const deletePeriodo = async (id: number): Promise<{ success: boolean; error?: string }> => {
+  await delay(300);
+  const index = periodosMock.findIndex(p => p.id === id);
+  if (index === -1) {
+    return { success: false, error: 'Período no encontrado' };
+  }
+  periodosMock.splice(index, 1);
+  return { success: true };
+};
+
+/**
+ * Crear estudiante
+ */
+export const createEstudiante = async (data: {
+  nombre: string;
+  apellidos: string;
+  documento: string;
+  tipoDocumento?: string;
+  fechaNacimiento?: string;
+  cursoId: number;
+  institucionId: number;
+}): Promise<{ success: boolean; estudiante?: Estudiante; error?: string }> => {
+  await delay(500);
+  
+  // Validar que no exista estudiante con el mismo documento
+  if (estudiantesMock.some(e => e.documento === data.documento && !e.deletedAt)) {
+    return { success: false, error: 'Ya existe un estudiante con este documento' };
+  }
+  
+  const newEstudiante: Estudiante = {
+    id: Math.max(...estudiantesMock.map(e => e.id), 0) + 1,
+    nombre: data.nombre,
+    apellidos: data.apellidos,
+    documento: data.documento,
+    tipoDocumento: data.tipoDocumento || 'cc',
+    fechaNacimiento: data.fechaNacimiento,
+    cursoId: data.cursoId,
+    institucionId: data.institucionId,
+    activo: true
+  };
+  
+  estudiantesMock.push(newEstudiante);
+  addLogAuditoria('crear', 'Estudiante', newEstudiante.id, `Estudiante ${newEstudiante.nombre} ${newEstudiante.apellidos} creado`);
+  
+  return { success: true, estudiante: newEstudiante };
+};
+
+/**
+ * Vincular estudiante a acudiente
+ */
+export const vincularEstudianteAcudiente = async (data: {
+  estudianteId: number;
+  acudienteId: number;
+  parentesco?: string;
+  esPrincipal?: boolean;
+}): Promise<{ success: boolean; error?: string }> => {
+  await delay(300);
+  
+  // Validar que existan estudiante y acudiente
+  const estudiante = estudiantesMock.find(e => e.id === data.estudianteId);
+  const acudiente = usuariosListMock.find(u => u.id === data.acudienteId);
+  
+  if (!estudiante) {
+    return { success: false, error: 'Estudiante no encontrado' };
+  }
+  
+  if (!acudiente) {
+    return { success: false, error: 'Acudiente no encontrado' };
+  }
+  
+  // Crear vínculo en mock
+  const newVinculo: EstudianteAcudiente = {
+    id: Math.max(...estudiantesAcudientesMock.map(v => v.id), 0) + 1,
+    estudianteId: data.estudianteId,
+    acudienteId: data.acudienteId,
+    parentesco: data.parentesco || 'acudiente',
+    esPrincipal: data.esPrincipal || false,
+    activo: true
+  };
+  
+  estudiantesAcudientesMock.push(newVinculo);
+  addLogAuditoria('crear', 'EstudianteAcudiente', newVinculo.id, `Vínculo estudiante-acudiente creado`);
+  
+  return { success: true };
+};
+
+/**
+ * Obtener estudiantes
+ */
+export const getEstudiantes = async (institucionId?: number): Promise<Estudiante[]> => {
+  await delay(300);
+  const estudiantes = estudiantesMock.filter(e => !e.deletedAt);
+  if (institucionId) {
+    return estudiantes.filter(e => e.institucionId === institucionId);
+  }
+  return estudiantes;
+};
+
+/**
+ * Actualizar estudiante
+ */
+export const updateEstudiante = async (id: number, data: Partial<Estudiante>): Promise<{ success: boolean; estudiante?: Estudiante; error?: string }> => {
+  await delay(500);
+  const estudiante = estudiantesMock.find(e => e.id === id);
+  if (!estudiante) {
+    return { success: false, error: 'Estudiante no encontrado' };
+  }
+  Object.assign(estudiante, data);
+  return { success: true, estudiante };
+};
+
+/**
+ * Eliminar estudiante
+ */
+export const deleteEstudiante = async (id: number): Promise<{ success: boolean; error?: string }> => {
+  await delay(300);
+  const estudiante = estudiantesMock.find(e => e.id === id);
+  if (!estudiante) {
+    return { success: false, error: 'Estudiante no encontrado' };
+  }
+  estudiante.deletedAt = new Date().toISOString();
+  return { success: true };
+};
+
+/**
+ * Descargar plantilla de estudiantes
+ */
+export const descargarPlantillaEstudiantes = async (): Promise<{ success: boolean; data?: any; error?: string }> => {
+  await delay(200);
+  
+  const plantilla = {
+    estudiante_nombre: 'Juan',
+    estudiante_apellidos: 'Pérez García',
+    estudiante_documento: '1234567890',
+    estudiante_tipo_doc: 'cc',
+    estudiante_fecha_nacimiento: '2010-05-15',
+    curso_id: '1',
+    acudiente_nombre: 'María',
+    acudiente_apellidos: 'Pérez López',
+    acudiente_documento: '0987654321',
+    acudiente_tipo_doc: 'cc',
+    acudiente_email: 'maria@example.com',
+    acudiente_telefono: '3001234567',
+    parentesco: 'madre',
+    es_principal: 'si'
+  };
+  
+  return { success: true, data: plantilla };
+};
+
+// ============================================
+// ALIASES DE EXPORTACIÓN PARA COMPATIBILIDAD
+// ============================================
+
+// Aliases para mantener compatibilidad con imports existentes
+export const createCurso = crearCurso;
+export const updateCurso = actualizarCurso;
+export const deleteCurso = eliminarCurso;
+export const createGrado = crearGrado;
+export const updateGrado = actualizarGrado;
+export const deleteGrado = eliminarGrado;
+export const createDocente = crearDocente;
+export const updateDocente = actualizarDocente;
+export const deleteDocente = eliminarDocente;
+export const getGrados = getGradosCRUD;

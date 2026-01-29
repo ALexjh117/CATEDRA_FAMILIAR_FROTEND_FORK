@@ -107,8 +107,9 @@ export default function DashboardAdminPage() {
   const [editingGrado, setEditingGrado] = useState<Grado | null>(null);
   const [editingCurso, setEditingCurso] = useState<Curso | null>(null);
   
-  // Estados de error
+  // Estados de error y éxito
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const bypassValidations = isBypassValidationsEnabled();
   const location = useLocation();
 
@@ -451,7 +452,14 @@ export default function DashboardAdminPage() {
     if (!editingUsuario) return;
     setError(null);
     
-    const result = await updateUsuario(editingUsuario.id, formUsuario);
+    // Solo enviar campos que tienen valor (actualización parcial)
+    const dataToUpdate: Record<string, any> = {};
+    if (formUsuario.nombre) dataToUpdate.nombre = formUsuario.nombre;
+    if (formUsuario.apellidos) dataToUpdate.apellido = formUsuario.apellidos; // Backend usa 'apellido'
+    if (formUsuario.telefono) dataToUpdate.telefono = formUsuario.telefono;
+    if (formUsuario.correo) dataToUpdate.correo = formUsuario.correo;
+    
+    const result = await updateUsuario(editingUsuario.id, dataToUpdate);
     
     if (result.success) {
       await loadData();
@@ -464,13 +472,20 @@ export default function DashboardAdminPage() {
   };
 
   const handleDeleteUsuario = async (id: number) => {
-    if (!confirm('¿Está seguro de eliminar este usuario?')) return;
+    if (!confirm('¿Está seguro de eliminar este usuario permanentemente?')) {
+      return;
+    }
     
     const result = await deleteUsuario(id);
+    
     if (result.success) {
       await loadData();
+      alert('Usuario eliminado correctamente');
     } else {
-      setError(result.error || 'Error al eliminar usuario');
+      // Mostrar error claro al usuario
+      const errorMsg = result.error || 'Error al eliminar usuario';
+      alert(errorMsg);
+      setError(errorMsg);
     }
   };
 
@@ -553,12 +568,18 @@ export default function DashboardAdminPage() {
   
   const handleCreateGrado = async () => {
     setError(null);
+    setSuccess(null);
+    
     const result = await createGrado(formGrado);
     
     if (result.success) {
-      await loadData();
+      setSuccess('Grado creado exitosamente');
       setModalGrado(false);
       setFormGrado({ nombre: '', orden: 0, institucionId: 1 });
+      // Recargar datos inmediatamente
+      await loadData();
+      // Limpiar mensaje de éxito después de 3 segundos
+      setTimeout(() => setSuccess(null), 3000);
     } else {
       setError(result.error || 'Error al crear grado');
     }
@@ -567,14 +588,19 @@ export default function DashboardAdminPage() {
   const handleUpdateGrado = async () => {
     if (!editingGrado) return;
     setError(null);
+    setSuccess(null);
     
     const result = await updateGrado(editingGrado.id, formGrado);
     
     if (result.success) {
-      await loadData();
+      setSuccess('Grado actualizado exitosamente');
       setModalGrado(false);
       setEditingGrado(null);
       setFormGrado({ nombre: '', orden: 0, institucionId: 1 });
+      // Recargar datos inmediatamente
+      await loadData();
+      // Limpiar mensaje de éxito después de 3 segundos
+      setTimeout(() => setSuccess(null), 3000);
     } else {
       setError(result.error || 'Error al actualizar grado');
     }
@@ -583,9 +609,16 @@ export default function DashboardAdminPage() {
   const handleDeleteGrado = async (id: number) => {
     if (!confirm('¿Está seguro de eliminar este grado?')) return;
     
+    setError(null);
+    setSuccess(null);
+    
     const result = await deleteGrado(id);
     if (result.success) {
+      setSuccess('Grado eliminado exitosamente');
+      // Recargar datos inmediatamente
       await loadData();
+      // Limpiar mensaje de éxito después de 3 segundos
+      setTimeout(() => setSuccess(null), 3000);
     } else {
       setError(result.error || 'Error al eliminar grado');
     }
@@ -881,6 +914,25 @@ export default function DashboardAdminPage() {
                   <p className="text-sm font-medium text-red-800">{error}</p>
                 </div>
                 <button onClick={() => setError(null)} className="flex-shrink-0 text-red-400 hover:text-red-600">
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+            )}
+
+            {/* Mensaje de éxito global */}
+            {success && (
+              <div className="mb-5 p-4 bg-green-50 border border-green-200 rounded-xl flex items-start gap-3">
+                <div className="flex-shrink-0 mt-0.5">
+                  <svg className="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-green-800">{success}</p>
+                </div>
+                <button onClick={() => setSuccess(null)} className="flex-shrink-0 text-green-400 hover:text-green-600">
                   <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                   </svg>

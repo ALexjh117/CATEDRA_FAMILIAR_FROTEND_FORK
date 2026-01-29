@@ -273,6 +273,15 @@ export default function BulkUploadWizard({
         });
       }
       
+      if (!row.acudiente_apellidos) {
+        validationErrors.push({
+          fila: row.fila,
+          campo: 'acudiente_apellidos',
+          valor: row.acudiente_apellidos,
+          mensaje: 'Los apellidos del acudiente son obligatorios'
+        });
+      }
+      
       if (!row.acudiente_documento) {
         validationErrors.push({
           fila: row.fila,

@@ -1,25 +1,23 @@
 import { useState, useEffect } from 'react';
-import { getSession, getEstadisticasRector, getInstituciones, getUsuarios, getDirectivosInstitucion, getMiInstitucion } from '../api/endpoints';
-import { type Usuario, type Institucion } from '../mocks/data';
-import DashboardLayout from '../components/DashboardLayout';
-import LoadingSpinner from '../components/ui/LoadingSpinner';
-import { exportToExcel, exportToPDF, exportEstadisticasToPDF } from '../utils/exportUtils';
+import { getSession, getMiInstitucion, getDirectivosInstitucion } from '../../api/endpoints';
+import apiClient from '../../api/apiClient';
+import { type Institucion } from '../../mocks/data';
+import DashboardLayout from '../DashboardLayout';
+import LoadingSpinner from '../ui/LoadingSpinner';
+import { exportToExcel, exportToPDF, exportEstadisticasToPDF } from '../../utils/exportUtils';
 import {
   IconDownload,
   IconBarChart,
   IconUsers,
-  IconInstitution,
   IconShield,
   IconBook,
   IconGraduationCap,
-  IconCalendar,
+  IconFileText,
   IconCheckCircle,
-  IconClock,
-  IconTrendingUp,
-  IconFileText
-} from '../components/ui/Icons';
+  IconTrendingUp
+} from '../ui/Icons';
 
-type TipoReporte = 'ejecutivo' | 'directivos' | 'docentes' | 'academico' | 'asistencia' | 'personalizado';
+type TipoReporte = 'ejecutivo' | 'directivos' | 'docentes' | 'academico' | 'participacion';
 
 interface ReporteConfig {
   id: TipoReporte;
@@ -27,182 +25,91 @@ interface ReporteConfig {
   descripcion: string;
   icono: React.ComponentType<any>;
   color: string;
-  disponible: boolean;
 }
 
-export default function ReportesPage() {
+export default function ReportesRector() {
   const session = getSession();
   const user = session?.user;
-  const esRector = user?.rol === 'rector';
-  const esAdmin = user?.rol === 'admin' || user?.rol === 'admin_sistema';
 
   const [loading, setLoading] = useState(true);
   const [generando, setGenerando] = useState(false);
   const [estadisticas, setEstadisticas] = useState<any>(null);
   const [institucion, setInstitucion] = useState<Institucion | null>(null);
-  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [directivos, setDirectivos] = useState<{ coordinadores: any[]; orientadores: any[] }>({ coordinadores: [], orientadores: [] });
+  const [docentes, setDocentes] = useState<any[]>([]);
   
-  // Filtros
   const [periodoSeleccionado, setPeriodoSeleccionado] = useState('2026-1');
   const [fechaInicio, setFechaInicio] = useState('2026-01-01');
   const [fechaFin, setFechaFin] = useState('2026-12-31');
   const [reporteSeleccionado, setReporteSeleccionado] = useState<TipoReporte | null>(null);
 
-  // Función para obtener reportes permitidos según el rol
-  const getTiposReportePorRol = (): ReporteConfig[] => {
-    const todosLosReportes: ReporteConfig[] = [
-      {
-        id: 'ejecutivo',
-        nombre: 'Reporte Ejecutivo',
-        descripcion: 'Resumen general de la gestión institucional con indicadores clave de rendimiento.',
-        icono: IconBarChart,
-        color: 'indigo',
-        disponible: true
-      },
-      {
-        id: 'directivos',
-        nombre: 'Reporte de Directivos',
-        descripcion: 'Estado y gestión de coordinadores y orientadores de la institución.',
-        icono: IconShield,
-        color: 'purple',
-        disponible: true
-      },
-      {
-        id: 'docentes',
-        nombre: 'Reporte de Docentes',
-        descripcion: 'Desempeño del cuerpo docente, asignación de tareas y seguimiento.',
-        icono: IconUsers,
-        color: 'teal',
-        disponible: true
-      },
-      {
-        id: 'academico',
-        nombre: 'Reporte Académico',
-        descripcion: 'Rendimiento académico por cursos, grados y áreas de conocimiento.',
-        icono: IconBook,
-        color: 'blue',
-        disponible: true
-      },
-      {
-        id: 'asistencia',
-        nombre: 'Reporte de Participación',
-        descripcion: 'Participación de familias en las actividades del programa Cátedra de Familia.',
-        icono: IconGraduationCap,
-        color: 'pink',
-        disponible: true
-      },
-      {
-        id: 'personalizado',
-        nombre: 'Reporte Personalizado',
-        descripcion: 'Genera un reporte con los indicadores y filtros que necesites.',
-        icono: IconFileText,
-        color: 'slate',
-        disponible: true
-      }
-    ];
-
-    // Filtrar reportes según el rol del usuario
-    switch (user?.rol) {
-      case 'coordinador':
-        // Coordinador: Solo reportes académicos y de docentes de SU institución
-        return todosLosReportes.filter(r => ['academico', 'docentes'].includes(r.id));
-        
-      case 'orientador':
-        // Orientador: Solo reportes académicos y de participación
-        return todosLosReportes.filter(r => ['academico', 'asistencia'].includes(r.id));
-        
-      case 'docente_aula':
-        // Docente: Solo reportes académicos de sus cursos
-        return todosLosReportes.filter(r => ['academico'].includes(r.id));
-        
-      case 'rector':
-        // Rector: Todos los reportes institucionales
-        return todosLosReportes;
-        
-      case 'admin':
-      case 'admin_sistema':
-        // Admin: Todos los reportes + personalizados
-        return todosLosReportes;
-        
-      default:
-        return [];
+  const tiposReporte: ReporteConfig[] = [
+    {
+      id: 'ejecutivo',
+      nombre: 'Reporte Ejecutivo',
+      descripcion: 'Resumen general de la gestión institucional con indicadores clave de rendimiento.',
+      icono: IconBarChart,
+      color: 'indigo'
+    },
+    {
+      id: 'directivos',
+      nombre: 'Reporte de Directivos',
+      descripcion: 'Estado y gestión de coordinadores y orientadores de la institución.',
+      icono: IconShield,
+      color: 'purple'
+    },
+    {
+      id: 'docentes',
+      nombre: 'Reporte de Docentes',
+      descripcion: 'Desempeño del cuerpo docente, asignación de tareas y seguimiento.',
+      icono: IconUsers,
+      color: 'teal'
+    },
+    {
+      id: 'academico',
+      nombre: 'Reporte Académico',
+      descripcion: 'Rendimiento académico por cursos, grados y áreas de conocimiento.',
+      icono: IconBook,
+      color: 'blue'
+    },
+    {
+      id: 'participacion',
+      nombre: 'Reporte de Participación',
+      descripcion: 'Participación de familias en las actividades del programa Cátedra de Familia.',
+      icono: IconGraduationCap,
+      color: 'pink'
     }
-  };
-
-  const tiposReporte = getTiposReportePorRol();
-
-  // Función para obtener título específico por rol
-  const getTituloPagina = () => {
-    switch (user?.rol) {
-      case 'coordinador':
-        return 'Reportes de Coordinación';
-      case 'orientador':
-        return 'Reportes de Orientación';
-      case 'docente_aula':
-        return 'Reportes Académicos';
-      case 'rector':
-        return 'Reportes Institucionales';
-      case 'admin':
-      case 'admin_sistema':
-        return 'Reportes del Sistema';
-      default:
-        return 'Reportes';
-    }
-  };
+  ];
 
   useEffect(() => {
-    console.log('🔍 [REPORTES PAGE] Usuario actual:', user);
-    console.log('  - Rol:', user?.rol);
-    console.log('  - Es Rector:', esRector);
-    console.log('  - Es Admin:', esAdmin);
-    console.log('  - Reportes permitidos:', getTiposReportePorRol().map(r => r.id));
     loadData();
   }, []);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      console.log('🔍 [REPORTES] Cargando datos...');
-      
-      // Solo los rectores pueden acceder a estadísticas de rector
-      let estadisticasData = null;
-      if (esRector) {
-        console.log('  - Cargando estadísticas de rector');
-        estadisticasData = await getEstadisticasRector();
+      const [estadisticasRes, inst] = await Promise.all([
+        apiClient.getEstadisticasRector(),
+        getMiInstitucion()
+      ]);
+
+      if (estadisticasRes.success) {
+        setEstadisticas(estadisticasRes.data);
       }
 
-      // PROTECCIÓN: Coordinador no puede cargar usuarios globales
-      // Para coordinador, solo usar datos desde sus endpoints específicos
-      let usuariosData: Usuario[] = [];
-      if (user?.rol === 'coordinador') {
-        console.log('  - Usuario es coordinador: omitiendo getUsuarios()');
-        // Los coordinadores ven datos desde sus endpoints específicos
-        usuariosData = [];
-      } else {
-        console.log('  - Cargando usuarios globales');
-        usuariosData = await getUsuarios();
-      }
-
-      setEstadisticas(estadisticasData);
+      setInstitucion(inst);
       
-      // Cargar institución si tiene institucionId (rector o coordinador)
-      if (user?.institucionId) {
-        const inst = await getMiInstitucion();
-        setInstitucion(inst);
+      if (inst?.id) {
+        const [directivosData, docentesRes] = await Promise.all([
+          getDirectivosInstitucion(inst.id),
+          apiClient.getDocentesRector()
+        ]);
         
-        if (inst?.id) {
-          const directivosData = await getDirectivosInstitucion(inst.id);
-          setDirectivos(directivosData || { coordinadores: [], orientadores: [] });
+        setDirectivos(directivosData || { coordinadores: [], orientadores: [] });
+        
+        if (docentesRes.success && docentesRes.data) {
+          setDocentes(docentesRes.data);
         }
-      }
-
-      // Filtrar usuarios de la institución
-      const usuariosArray = Array.isArray(usuariosData) ? usuariosData : [];
-      if (user?.institucionId) {
-        setUsuarios(usuariosArray.filter(u => u.institucionId === user.institucionId));
-      } else {
-        setUsuarios(usuariosArray);
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -211,7 +118,6 @@ export default function ReportesPage() {
     }
   };
 
-  // Generar reporte ejecutivo
   const generarReporteEjecutivo = async () => {
     setGenerando(true);
     try {
@@ -219,28 +125,28 @@ export default function ReportesPage() {
         'Institución': institucion?.nombre || 'N/A',
         'Período': periodoSeleccionado,
         'Fecha del Reporte': new Date().toLocaleDateString('es-CO'),
-        '': '', // Separador
+        '': '',
         'PERSONAL DIRECTIVO': '',
         'Total Coordinadores': estadisticas?.totalCoordinadores || 0,
         'Coordinadores Activos': estadisticas?.coordinadoresActivos || 0,
         'Total Orientadores': estadisticas?.totalOrientadores || 0,
         'Orientadores Activos': estadisticas?.orientadoresActivos || 0,
-        ' ': '', // Separador
+        ' ': '',
         'PLANTA DOCENTE': '',
         'Total Docentes': estadisticas?.totalDocentes || 0,
         'Docentes Activos': estadisticas?.docentesActivos || 0,
-        '  ': '', // Separador
+        '  ': '',
         'DATOS ACADÉMICOS': '',
         'Total Cursos': estadisticas?.totalCursos || 0,
         'Total Estudiantes': estadisticas?.totalEstudiantes || 0,
-        '   ': '', // Separador
+        '   ': '',
         'INDICADORES': '',
         'Tasa de Activación (%)': estadisticas?.tasaActivacion || 0
       };
 
       exportEstadisticasToPDF(
         stats,
-        `Reporte_Ejecutivo_${institucion?.nombre?.replace(/\s+/g, '_') || 'Institucion'}_${periodoSeleccionado}`,
+        `Reporte_Ejecutivo_Rector_${institucion?.nombre?.replace(/\s+/g, '_') || 'Institucion'}_${periodoSeleccionado}`,
         `Reporte Ejecutivo - ${institucion?.nombre || 'Institución'}`
       );
     } finally {
@@ -248,7 +154,6 @@ export default function ReportesPage() {
     }
   };
 
-  // Generar reporte de directivos
   const generarReporteDirectivos = async () => {
     setGenerando(true);
     try {
@@ -282,7 +187,7 @@ export default function ReportesPage() {
 
       exportToExcel(
         data,
-        `Reporte_Directivos_${institucion?.nombre?.replace(/\s+/g, '_') || 'Institucion'}_${periodoSeleccionado}`,
+        `Reporte_Directivos_Rector_${institucion?.nombre?.replace(/\s+/g, '_') || 'Institucion'}_${periodoSeleccionado}`,
         'Directivos'
       );
     } finally {
@@ -290,17 +195,15 @@ export default function ReportesPage() {
     }
   };
 
-  // Generar reporte de docentes
   const generarReporteDocentes = async () => {
     setGenerando(true);
     try {
-      const docentes = usuarios.filter(u => u.rol === 'docente_aula');
-      
       const data = docentes.map(d => ({
-        'Nombre': `${d.nombre} ${d.apellidos || ''}`.trim(),
+        'Nombre': `${d.nombres || d.nombre} ${d.apellidos || d.apellido}`,
         'Correo': d.correo,
         'Teléfono': d.telefono || 'N/A',
-        'Estado': d.activo ? 'Activo' : 'Inactivo'
+        'Estado': d.estaActivo ? 'Activo' : 'Inactivo',
+        'Perfil Completo': d.tienePerfilCompleto ? 'Sí' : 'No'
       }));
 
       if (data.length === 0) {
@@ -308,13 +211,14 @@ export default function ReportesPage() {
           'Nombre': 'Sin docentes registrados',
           'Correo': '-',
           'Teléfono': '-',
-          'Estado': '-'
+          'Estado': '-',
+          'Perfil Completo': '-'
         });
       }
 
       exportToExcel(
         data,
-        `Reporte_Docentes_${institucion?.nombre?.replace(/\s+/g, '_') || 'Institucion'}_${periodoSeleccionado}`,
+        `Reporte_Docentes_Rector_${institucion?.nombre?.replace(/\s+/g, '_') || 'Institucion'}_${periodoSeleccionado}`,
         'Docentes'
       );
     } finally {
@@ -322,7 +226,6 @@ export default function ReportesPage() {
     }
   };
 
-  // Generar reporte académico
   const generarReporteAcademico = async () => {
     setGenerando(true);
     try {
@@ -344,7 +247,7 @@ export default function ReportesPage() {
 
       exportEstadisticasToPDF(
         stats,
-        `Reporte_Academico_${institucion?.nombre?.replace(/\s+/g, '_') || 'Institucion'}_${periodoSeleccionado}`,
+        `Reporte_Academico_Rector_${institucion?.nombre?.replace(/\s+/g, '_') || 'Institucion'}_${periodoSeleccionado}`,
         `Reporte Académico - ${institucion?.nombre || 'Institución'}`
       );
     } finally {
@@ -352,7 +255,6 @@ export default function ReportesPage() {
     }
   };
 
-  // Generar reporte de participación
   const generarReporteParticipacion = async () => {
     setGenerando(true);
     try {
@@ -375,7 +277,7 @@ export default function ReportesPage() {
 
       exportEstadisticasToPDF(
         stats,
-        `Reporte_Participacion_${institucion?.nombre?.replace(/\s+/g, '_') || 'Institucion'}_${periodoSeleccionado}`,
+        `Reporte_Participacion_Rector_${institucion?.nombre?.replace(/\s+/g, '_') || 'Institucion'}_${periodoSeleccionado}`,
         `Reporte de Participación Familiar - ${institucion?.nombre || 'Institución'}`
       );
     } finally {
@@ -397,11 +299,8 @@ export default function ReportesPage() {
       case 'academico':
         await generarReporteAcademico();
         break;
-      case 'asistencia':
+      case 'participacion':
         await generarReporteParticipacion();
-        break;
-      case 'personalizado':
-        setReporteSeleccionado('personalizado');
         break;
     }
   };
@@ -411,7 +310,7 @@ export default function ReportesPage() {
       <DashboardLayout>
         <div className="flex flex-col items-center justify-center h-64 gap-4">
           <LoadingSpinner size="lg" />
-          <p className="text-slate-500 animate-pulse">Cargando módulo de reportes...</p>
+          <p className="text-slate-500 animate-pulse">Cargando reportes del rector...</p>
         </div>
       </DashboardLayout>
     );
@@ -422,8 +321,7 @@ export default function ReportesPage() {
     purple: { bg: 'from-purple-50 to-purple-100/50', border: 'border-purple-200 hover:border-purple-400', text: 'text-purple-600', icon: 'bg-purple-500' },
     teal: { bg: 'from-teal-50 to-teal-100/50', border: 'border-teal-200 hover:border-teal-400', text: 'text-teal-600', icon: 'bg-teal-500' },
     blue: { bg: 'from-blue-50 to-blue-100/50', border: 'border-blue-200 hover:border-blue-400', text: 'text-blue-600', icon: 'bg-blue-500' },
-    pink: { bg: 'from-pink-50 to-pink-100/50', border: 'border-pink-200 hover:border-pink-400', text: 'text-pink-600', icon: 'bg-pink-500' },
-    slate: { bg: 'from-slate-50 to-slate-100/50', border: 'border-slate-200 hover:border-slate-400', text: 'text-slate-600', icon: 'bg-slate-500' }
+    pink: { bg: 'from-pink-50 to-pink-100/50', border: 'border-pink-200 hover:border-pink-400', text: 'text-pink-600', icon: 'bg-pink-500' }
   };
 
   return (
@@ -443,7 +341,7 @@ export default function ReportesPage() {
                   Centro de Reportes
                 </p>
                 <h1 className="text-2xl md:text-3xl font-display font-bold">
-                  {getTituloPagina()}
+                  Reportes Institucionales
                 </h1>
                 {institucion && (
                   <p className="text-indigo-200 mt-1">
@@ -453,7 +351,6 @@ export default function ReportesPage() {
               </div>
             </div>
             
-            {/* Filtros rápidos */}
             <div className="flex flex-wrap gap-3">
               <select
                 value={periodoSeleccionado}
@@ -524,8 +421,8 @@ export default function ReportesPage() {
         {/* Tipos de reporte */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
           <div className="p-6 border-b border-slate-100">
-            <h2 className="text-lg font-bold text-slate-800">Selecciona el Tipo de Reporte</h2>
-            <p className="text-sm text-slate-500 mt-1">Elige el informe que necesitas generar para tu gestión como rector</p>
+            <h2 className="text-lg font-bold text-slate-800">Reportes Disponibles</h2>
+            <p className="text-sm text-slate-500 mt-1">Selecciona el tipo de informe que necesitas generar</p>
           </div>
 
           <div className="p-6 grid md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -557,10 +454,10 @@ export default function ReportesPage() {
                   
                   <div className="mt-4 flex items-center justify-between">
                     <span className={`text-xs font-semibold ${colors.text} bg-white/60 px-2 py-1 rounded-full`}>
-                      {reporte.disponible ? 'Disponible' : 'Próximamente'}
+                      Disponible
                     </span>
                     <button
-                      disabled={!reporte.disponible || generando}
+                      disabled={generando}
                       className={`px-3 py-1.5 ${colors.icon} text-white text-sm font-medium rounded-lg hover:opacity-90 transition-all flex items-center gap-1 disabled:opacity-50`}
                     >
                       <IconDownload size={14} />
@@ -573,98 +470,11 @@ export default function ReportesPage() {
           </div>
         </div>
 
-        {/* Panel de reporte personalizado */}
-        {reporteSeleccionado === 'personalizado' && (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-slate-800">Reporte Personalizado</h2>
-                <p className="text-sm text-slate-500 mt-1">Configura los parámetros del informe</p>
-              </div>
-              <button
-                onClick={() => setReporteSeleccionado(null)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {/* Rango de fechas */}
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Fecha Inicio</label>
-                  <input
-                    type="date"
-                    value={fechaInicio}
-                    onChange={(e) => setFechaInicio(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Fecha Fin</label>
-                  <input
-                    type="date"
-                    value={fechaFin}
-                    onChange={(e) => setFechaFin(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  />
-                </div>
-              </div>
-
-              {/* Opciones de contenido */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-3">Incluir en el reporte:</label>
-                <div className="grid md:grid-cols-2 gap-3">
-                  {[
-                    { id: 'directivos', label: 'Información de Directivos' },
-                    { id: 'docentes', label: 'Listado de Docentes' },
-                    { id: 'cursos', label: 'Estadísticas de Cursos' },
-                    { id: 'estudiantes', label: 'Datos de Estudiantes' },
-                    { id: 'participacion', label: 'Participación Familiar' },
-                    { id: 'indicadores', label: 'Indicadores de Gestión' }
-                  ].map(opcion => (
-                    <label key={opcion.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100">
-                      <input
-                        type="checkbox"
-                        defaultChecked
-                        className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
-                      />
-                      <span className="text-sm text-slate-700">{opcion.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Formato de salida */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-3">Formato de salida:</label>
-                <div className="flex gap-3">
-                  <button
-                    onClick={generarReporteEjecutivo}
-                    className="flex-1 px-4 py-3 bg-red-500 text-white rounded-xl font-medium hover:bg-red-600 transition-all flex items-center justify-center gap-2"
-                  >
-                    <IconDownload size={18} />
-                    Descargar PDF
-                  </button>
-                  <button
-                    onClick={generarReporteDocentes}
-                    className="flex-1 px-4 py-3 bg-emerald-500 text-white rounded-xl font-medium hover:bg-emerald-600 transition-all flex items-center justify-center gap-2"
-                  >
-                    <IconDownload size={18} />
-                    Descargar Excel
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Historial de reportes recientes */}
+        {/* Reportes sugeridos */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
           <div className="p-6 border-b border-slate-100">
-            <h2 className="text-lg font-bold text-slate-800">Reportes Sugeridos para Rectores</h2>
-            <p className="text-sm text-slate-500 mt-1">Informes recomendados según tu rol administrativo</p>
+            <h2 className="text-lg font-bold text-slate-800">Reportes Sugeridos</h2>
+            <p className="text-sm text-slate-500 mt-1">Informes recomendados para la gestión institucional</p>
           </div>
 
           <div className="divide-y divide-slate-100">

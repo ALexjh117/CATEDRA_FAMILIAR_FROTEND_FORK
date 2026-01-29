@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { getCursos, getTareas, getUsuarios, getEstudiantes, getEntregas } from '../api/endpoints';
-import { type Curso, type Tarea, type Usuario, type Estudiante, type Entrega } from '../mocks/data';
-import DashboardLayout from '../components/DashboardLayout';
-import LoadingSpinner from '../components/ui/LoadingSpinner';
-import { exportToExcel, exportToPDF, exportEstadisticasToPDF } from '../utils/exportUtils';
+import { getCursos, getTareas, getEstudiantes, getEntregas, getDocentesCoordinador } from '../../api/endpoints';
+import { type Curso, type Tarea, type Usuario, type Estudiante, type Entrega } from '../../mocks/data';
+import DashboardLayout from '../DashboardLayout';
+import LoadingSpinner from '../ui/LoadingSpinner';
+import { exportToExcel, exportToPDF, exportEstadisticasToPDF } from '../../utils/exportUtils';
 import { 
   IconBook,
   IconClipboard,
@@ -15,9 +15,9 @@ import {
   IconAlert,
   IconEye,
   IconBarChart
-} from '../components/ui/Icons';
+} from '../ui/Icons';
 
-export default function ReportesAcademicosCoordinador() {
+export default function ReportesCoordinador() {
   const [loading, setLoading] = useState(true);
   const [cursos, setCursos] = useState<Curso[]>([]);
   const [tareas, setTareas] = useState<Tarea[]>([]);
@@ -34,17 +34,29 @@ export default function ReportesAcademicosCoordinador() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [cursosData, tareasData, usuariosData, estudiantesData, entregasData] = await Promise.all([
+      // Usar getDocentesCoordinador en lugar de getUsuarios (evita 403)
+      const [cursosData, tareasData, docentesData, estudiantesData, entregasData] = await Promise.all([
         getCursos(),
         getTareas(),
-        getUsuarios(),
+        getDocentesCoordinador(),
         getEstudiantes(),
         getEntregas()
       ]);
 
       setCursos(Array.isArray(cursosData) ? cursosData : []);
       setTareas(Array.isArray(tareasData) ? tareasData : []);
-      setUsuarios(Array.isArray(usuariosData) ? usuariosData : []);
+      // Mapear docentes al formato Usuario
+      const docentesArray = Array.isArray(docentesData) ? docentesData : [];
+      const usuariosMapped = docentesArray.map((d: any) => ({
+        id: d.usuarioId || d.id,
+        nombre: d.nombres || d.nombre || '',
+        apellidos: d.apellidos || d.apellido || '',
+        correo: d.correo || '',
+        telefono: d.telefono || '',
+        rol: 'docente_aula',
+        activo: d.estaActivo ?? true
+      } as Usuario));
+      setUsuarios(usuariosMapped);
       setEstudiantes(Array.isArray(estudiantesData) ? estudiantesData : []);
       setEntregas(Array.isArray(entregasData) ? entregasData : []);
     } catch (error) {
