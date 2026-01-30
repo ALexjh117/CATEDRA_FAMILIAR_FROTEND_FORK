@@ -2393,6 +2393,20 @@ class ApiClient {
   }
 
   /**
+   * Listar acudientes de un estudiante específico
+   * GET /estudiantes/:id/acudientes
+   */
+  async getAcudientesEstudiante(estudianteId: number): Promise<ApiResponse<any[]>> {
+    try {
+      const response = await httpService.get<ApiResponse<any[]>>(`/estudiantes/${estudianteId}/acudientes`);
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error GET /estudiantes/${estudianteId}/acudientes:`, error.message);
+      return { success: false, message: error.message || 'Error al obtener acudientes del estudiante', data: [] };
+    }
+  }
+
+  /**
    * Vincular acudiente a estudiante
    * POST /estudiantes/:id/acudientes
    */
