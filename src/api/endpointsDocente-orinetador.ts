@@ -73,15 +73,42 @@ export async function loginUnicoMultiRol(correo: string, contrasena: string): Pr
     const docenteRaw: any = raw?.docente ?? raw?.data?.docente;
     const acudienteRaw: any = raw?.acudiente ?? raw?.data?.acudiente;
 
-    const rolId: number | undefined =
+    const rolIdRaw: unknown =
       raw?.rolId ??
+      raw?.rol_id ??
       usuarioRaw?.rolId ??
-      usuarioRaw?.rol_id;
+      usuarioRaw?.rol_id ??
+      funcionarioRaw?.rolId ??
+      funcionarioRaw?.rol_id ??
+      docenteRaw?.rolId ??
+      docenteRaw?.rol_id;
+
+    const rolId: number | undefined =
+      typeof rolIdRaw === 'number'
+        ? rolIdRaw
+        : typeof rolIdRaw === 'string' && rolIdRaw.trim() !== '' && !Number.isNaN(Number(rolIdRaw))
+          ? Number(rolIdRaw)
+          : undefined;
 
     const rolNombre: RolUsuario | undefined =
-      (typeof rolId === 'number' ? ROLES_MAP[rolId] : undefined) ??
-      normalizeRol(raw?.rol ?? raw?.rolNombre ?? usuarioRaw?.rol ?? usuarioRaw?.rolNombre) ??
-      extractRolFromMessage(message);
+      // 1) PRIORIDAD: nombre de rol (es estable aunque cambien los IDs entre ambientes)
+      normalizeRol(
+        // estructura más común en tus respuestas
+        usuarioRaw?.rolNombre ??
+          usuarioRaw?.rol_nombre ??
+          usuarioRaw?.rol ??
+          // otros posibles
+          raw?.rolNombre ??
+          raw?.rol_nombre ??
+          raw?.rol ??
+          funcionarioRaw?.rolNombre ??
+          funcionarioRaw?.rol_nombre ??
+          funcionarioRaw?.rol
+      ) ??
+      // 2) mensaje ("Iniciaste con rol: ...")
+      extractRolFromMessage(message) ??
+      // 3) FALLBACK: rolId (solo si no viene nombre)
+      (typeof rolId === 'number' ? ROLES_MAP[rolId] : undefined);
 
     if (!token) {
       return { success: false, error: message || 'Login inválido: no se recibió token.' };
@@ -126,3 +153,4 @@ export async function loginUnicoMultiRol(correo: string, contrasena: string): Pr
     };
   }
 }
+///////////////////////////////////////////
