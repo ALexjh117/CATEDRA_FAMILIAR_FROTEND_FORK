@@ -259,8 +259,31 @@ export interface CargaMasivaResponse {
   data?: {
     totalProcesados: number;
     insertados: number;
-    rechazados: number;
     errores: Array<{ fila: number; error: string }>;
+  };
+}
+
+export interface CargaMasivaDualResponse {
+  success: boolean;
+  message: string;
+  data?: {
+    totalEstudiantes: number;
+    estudiantesCreados: number;
+    estudiantesActualizados: number;
+    totalAcudientes: number;
+    acudientesCreados: number;
+    acudientesReutilizados: number;
+    vinculosCreados: number;
+    errores?: Array<{
+      archivo: 'estudiantes' | 'acudientes';
+      fila: number;
+      campo: string;
+      valor: any;
+      mensaje: string;
+    }>;
+    detalleEstudiantes?: any[];
+    detalleAcudientes?: any[];
+    detalleReutilizados?: any[];
   };
 }
 
@@ -892,9 +915,65 @@ class ApiClient {
     }
   }
 
-  // ============================================
-  // NOTIFICACIONES FCM
-  // ============================================
+  /**
+   * Carga masiva dual (dos archivos: estudiantes + acudientes)
+   * POST /estudiantes/carga-masiva-dual
+   */
+  async cargaMasivaDual(
+    archivoEstudiantes: File, 
+    archivoAcudientes: File, 
+    institucionId: number
+  ): Promise<CargaMasivaDualResponse> {
+    try {
+      const token = this.getToken();
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3333';
+      
+      console.log('🔧 [apiClient] cargaMasivaDual iniciado');
+      console.log('🔑 Token:', token ? 'Presente' : 'FALTA TOKEN');
+      console.log('🌐 Base URL:', baseUrl);
+      console.log('📄 Archivo Estudiantes:', archivoEstudiantes.name, archivoEstudiantes.type);
+      console.log('👨‍👩‍👧 Archivo Acudientes:', archivoAcudientes.name, archivoAcudientes.type);
+      console.log('🏫 Institución ID:', institucionId);
+      
+      const formData = new FormData();
+      formData.append('archivo_estudiantes', archivoEstudiantes);
+      formData.append('archivo_acudientes', archivoAcudientes);
+      formData.append('institucionId', String(institucionId));
+      
+      console.log('📦 FormData creado, enviando a:', `${baseUrl}/estudiantes/carga-masiva-dual`);
+      
+      const response = await fetch(`${baseUrl}/estudiantes/carga-masiva-dual`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+      
+      console.log('📡 Response status:', response.status, response.statusText);
+      console.log('📡 Response headers:', Object.fromEntries(response.headers.entries()));
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Response no OK:', errorText);
+        return {
+          success: false,
+          message: `Error HTTP ${response.status}: ${errorText}`
+        };
+      }
+      
+      const data = await response.json();
+      console.log('✅ Response JSON:', data);
+      return data;
+    } catch (error: any) {
+      console.error('💥 Error en cargaMasivaDual:', error);
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+      return {
+        success: false,
+        message: error.message || 'Error en carga masiva dual'
+      };
+    }
+  }
   
   /**
    * Registrar token FCM
@@ -1175,8 +1254,19 @@ class ApiClient {
    */
   async getCursos(): Promise<ApiResponse<any[]>> {
     try {
-      const response = await httpService.get<ApiResponse<any[]>>('/cursos');
-      return response.data;
+      console.log('📡 [apiClient] Llamando GET /cursos...');
+      const response = await httpService.get<any>('/cursos');
+      console.log('📥 [apiClient] Respuesta de cursos:', response.data);
+      
+      // El backend puede devolver array directo o { data: [...] }
+      const cursos = Array.isArray(response.data) ? response.data : (response.data?.data || []);
+      console.log('🔢 [apiClient] Total cursos recibidos:', cursos.length);
+      
+      return {
+        success: true,
+        message: 'Cursos obtenidos',
+        data: cursos
+      };
     } catch (error: any) {
       console.warn('Endpoint /cursos no disponible, usando respuesta vacía');
       return { success: true, message: 'Sin datos', data: [] };
@@ -1271,6 +1361,33 @@ class ApiClient {
     }
   }
 
+  /**
+   * Crear nueva tarea en el banco
+   * POST /tareas
+   */
+  async createTarea(data: {
+    titulo: string;
+    descripcion: string;
+    categoriaId: number;
+    tema?: string;
+    enlace?: string;
+    entregableEsperado?: string;
+    gradosObjetivo?: number[];
+    esMultiGrado?: boolean;
+    tipoCalificacion?: 'cualitativa' | 'cuantitativa';
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.post<ApiResponse<any>>('/tareas', data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Error POST /tareas:', error);
+      return {
+        success: false,
+        message: error.response?.data?.message || error.message || 'Error al crear tarea'
+      };
+    }
+  }
+
   // ============================================
   // ESTUDIANTES - CRUD
   // ============================================
@@ -1281,10 +1398,25 @@ class ApiClient {
    */
   async getEstudiantes(): Promise<ApiResponse<any[]>> {
     try {
-      const response = await httpService.get<ApiResponse<any[]>>('/estudiantes');
-      return response.data;
+      console.log('📡 [apiClient] Llamando GET /estudiantes...');
+      const response = await httpService.get<any>('/estudiantes');
+      console.log('📥 [apiClient] Respuesta completa:', response);
+      console.log('📊 [apiClient] response.data:', response.data);
+      
+      // El backend devuelve array directo, no { data: [...] }
+      const estudiantes = Array.isArray(response.data) ? response.data : [];
+      console.log('🔢 [apiClient] Total estudiantes recibidos:', estudiantes.length);
+      
+      return {
+        success: true,
+        message: 'Estudiantes obtenidos',
+        data: estudiantes
+      };
     } catch (error: any) {
-      console.warn('Endpoint /estudiantes no disponible, usando respuesta vacía');
+      console.error('❌ [apiClient] Error en GET /estudiantes:', error);
+      console.error('📋 [apiClient] Error response:', error.response?.data);
+      console.error('📋 [apiClient] Error status:', error.response?.status);
+      console.warn('⚠️ [apiClient] Endpoint /estudiantes no disponible, usando respuesta vacía');
       return {
         success: true,
         message: 'Sin datos',
@@ -1367,8 +1499,19 @@ class ApiClient {
    */
   async getGrados(): Promise<ApiResponse<any[]>> {
     try {
-      const response = await httpService.get<ApiResponse<any[]>>('/grados');
-      return response.data;
+      console.log('📡 [apiClient] Llamando GET /grados...');
+      const response = await httpService.get<any>('/grados');
+      console.log('📥 [apiClient] Respuesta de grados:', response.data);
+      
+      // El backend devuelve { success: true, data: [...] }
+      const grados = response.data?.data || [];
+      console.log('🔢 [apiClient] Total grados recibidos:', grados.length);
+      
+      return {
+        success: true,
+        message: 'Grados obtenidos',
+        data: grados
+      };
     } catch (error: any) {
       console.warn('Endpoint /grados no disponible, usando respuesta vacía');
       return { success: true, message: 'Sin datos', data: [] };
@@ -1402,13 +1545,31 @@ class ApiClient {
       return response.data;
     } catch (error: any) {
       console.error('Error POST /grados:', error.message);
-      return { success: false, message: error.message || 'Error al crear grado' };
+      
+      // Detectar error de duplicado
+      if (error.message && error.message.includes('grados_nombre_key')) {
+        return { 
+          success: false, 
+          message: `El grado "${data.nombre}" ya existe. Por favor usa un nombre diferente.` 
+        };
+      }
+      
+      return { 
+        success: false, 
+        message: error.response?.data?.message || error.message || 'Error al crear grado' 
+      };
     }
   }
 
   /**
    * Actualizar un grado
    * PUT /grados/:id
+  } catch (error: any) {
+    // Si falla, intentar con endpoints específicos según el rol
+    const session = localStorage.getItem('session');
+    if (session) {
+      const parsed = JSON.parse(session);
+      const rol = parsed.user?.rol;
    */
   async updateGrado(id: number, data: {
     nombre?: string;
@@ -1792,10 +1953,24 @@ class ApiClient {
     estado?: 'activo' | 'inactivo' | 'finalizado';
   }): Promise<ApiResponse<any>> {
     try {
+      console.log('🔧 [updatePeriodoRector] Actualizando período:', id);
+      console.log('📦 Datos enviados:', JSON.stringify(data, null, 2));
+      
       const response = await httpService.put<ApiResponse<any>>(`/rectores/periodos/${id}`, data);
+      
+      console.log('✅ Respuesta del backend:', response.data);
       return response.data;
     } catch (error: any) {
-      return { success: false, message: error.message || 'Error al actualizar período' };
+      console.error('❌ Error al actualizar período:', error);
+      console.error('Error response:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || 'Error al actualizar período';
+      return { 
+        success: false, 
+        message: errorMessage,
+        data: error.response?.data 
+      };
     }
   }
 
@@ -2023,6 +2198,44 @@ class ApiClient {
   }
 
   /**
+   * Actualizar orientador en la institución del coordinador
+   * PUT /coordinadores/orientadores/:id
+   */
+  async actualizarOrientadorCoordinador(id: number, data: {
+    nombre?: string;
+    apellido?: string;
+    telefono?: string;
+    correo?: string;
+    estaActivo?: boolean;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.put<ApiResponse<any>>(`/coordinadores/orientadores/${id}`, data);
+      return response.data;
+    } catch (error: any) {
+      return { success: false, message: error.response?.data?.message || error.message || 'Error al actualizar orientador' };
+    }
+  }
+
+  /**
+   * Eliminar orientador en la institución del coordinador
+   * DELETE /coordinadores/orientadores/:id
+   */
+  async eliminarOrientadorCoordinador(id: number): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.delete<ApiResponse<any>>(`/coordinadores/orientadores/${id}`);
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error DELETE /coordinadores/orientadores/${id}:`, error);
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || 'Error al eliminar orientador';
+      return { 
+        success: false, 
+        message: errorMessage,
+        data: error.response?.data
+      };
+    }
+  }
+
+  /**
    * Obtener datos de la institución del coordinador (solo lectura)
    * GET /coordinadores/mi-institucion
    */
@@ -2151,12 +2364,36 @@ class ApiClient {
     }
   }
 
-  // ============================================
-  // VINCULACIÓN ESTUDIANTE-ACUDIENTE
-  // ============================================
+  /**
+   * Listar todos los acudientes de la institución (Coordinador)
+   * GET /coordinadores/acudientes
+   */
+  async getAcudientesCoordinador(): Promise<ApiResponse<any[]>> {
+    try {
+      const response = await httpService.get<ApiResponse<any[]>>('/coordinadores/acudientes');
+      return response.data;
+    } catch (error: any) {
+      console.error('Error GET /coordinadores/acudientes:', error.message);
+      return { success: false, message: error.message || 'Error al obtener acudientes', data: [] };
+    }
+  }
 
   /**
-   * Listar acudientes de un estudiante
+   * Listar todos los acudientes de la institución (Orientador)
+   * GET /orientadores/acudientes
+   */
+  async getAcudientesOrientador(): Promise<ApiResponse<any[]>> {
+    try {
+      const response = await httpService.get<ApiResponse<any[]>>('/orientadores/acudientes');
+      return response.data;
+    } catch (error: any) {
+      console.error('Error GET /orientadores/acudientes:', error.message);
+      return { success: false, message: error.message || 'Error al obtener acudientes', data: [] };
+    }
+  }
+
+  /**
+   * Listar acudientes de un estudiante específico
    * GET /estudiantes/:id/acudientes
    */
   async getAcudientesEstudiante(estudianteId: number): Promise<ApiResponse<any[]>> {
@@ -2165,7 +2402,7 @@ class ApiClient {
       return response.data;
     } catch (error: any) {
       console.error(`Error GET /estudiantes/${estudianteId}/acudientes:`, error.message);
-      return { success: false, message: error.message || 'Error al obtener acudientes', data: [] };
+      return { success: false, message: error.message || 'Error al obtener acudientes del estudiante', data: [] };
     }
   }
 

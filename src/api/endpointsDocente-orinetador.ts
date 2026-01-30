@@ -17,11 +17,11 @@ type LoginUnicoResult = {
 
 const ROLES_MAP: Record<number, RolUsuario> = {
   1: 'admin_sistema',
-  2: 'acudiente',
-  3: 'docente_aula',
-  4: 'coordinador',
-  5: 'orientador',
-  6: 'rector',
+  2: 'rector',
+  3: 'coordinador',
+  4: 'orientador',
+  5: 'docente_aula',
+  6: 'acudiente',
   7: 'admin'
 };
 

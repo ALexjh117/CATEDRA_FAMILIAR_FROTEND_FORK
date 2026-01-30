@@ -1,7 +1,6 @@
 // Util para modo de desarrollo: permitir desactivar validaciones localmente.
-// DESHABILITADO: Ahora siempre se usa el backend real, sin datos mock
 export function isBypassValidationsEnabled(): boolean {
-  // Siempre retorna false - usar backend real
+  // Retorna false para conectarse al backend real
   return false;
 }
 

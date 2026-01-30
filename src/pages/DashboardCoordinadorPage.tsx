@@ -1,11 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
   getSession, 
-  getEstudiantes, 
-  createEstudiante, 
-  updateEstudiante, 
-  deleteEstudiante,
-  getUsuarios,
   getCursos,
   getGrados,
   getTareas,
@@ -18,17 +13,16 @@ import {
   getOrientadoresCRUD,
   crearOrientador,
   actualizarOrientador,
-  desactivarOrientador,
-  getAcudientesDeEstudianteAPI,
-  vincularAcudienteAPI
+  desactivarOrientador
 } from '../api/endpoints';
+import apiClient from '../api/apiClient';
 import { type Estudiante, type Usuario, type Curso, type Grado, type Tarea } from '../mocks/data';
 import DashboardLayout from '../components/DashboardLayout';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
 import FormFieldInput from '../components/ui/FormFieldInput';
-import BulkUploadWizard from '../components/BulkUploadWizard';
+import BulkUploadDual from '../components/BulkUploadDual';
 import {
   IconUsers,
   IconPlus,
@@ -44,8 +38,9 @@ import {
   IconClipboard,
   IconCheckCircle,
   IconClock,
-  IconTrendingUp,
+  IconAlertCircle,
   IconAlertTriangle,
+  IconTrendingUp,
   IconBarChart,
   IconEye
 } from '../components/ui/Icons';
@@ -53,6 +48,10 @@ import {
 export default function DashboardCoordinadorPage() {
   const session = getSession();
   const user = session?.user;
+  const userRole = user?.rol;
+  
+  // Solo Coordinador y Admin pueden crear/editar
+  const canManage = userRole === 'coordinador' || userRole === 'admin' || userRole === 'admin_sistema';
   
   const [loading, setLoading] = useState(true);
   const [estudiantes, setEstudiantes] = useState<Estudiante[]>([]);
@@ -61,7 +60,8 @@ export default function DashboardCoordinadorPage() {
   const [cursos, setCursos] = useState<Curso[]>([]);
   const [grados, setGrados] = useState<Grado[]>([]);
   const [institucion, setInstitucion] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'resumen' | 'cursos' | 'docentes' | 'orientadores' | 'estudiantes' | 'carga-masiva'>('resumen');
+  const [activeTab, setActiveTab] = useState<'resumen' | 'grados' | 'cursos' | 'orientacion' | 'estudiantes' | 'carga-masiva'>('resumen');
+  const [subTab, setSubTab] = useState<'docentes' | 'orientadores'>('docentes');
   
   // Filtros y búsqueda
   const [busqueda, setBusqueda] = useState('');
@@ -73,6 +73,9 @@ export default function DashboardCoordinadorPage() {
   const [modalCargaMasiva, setModalCargaMasiva] = useState(false);
   const [modalOrientador, setModalOrientador] = useState(false);
   const [modalVinculacion, setModalVinculacion] = useState(false);
+  const [modalEditarGrado, setModalEditarGrado] = useState(false);
+  const [gradoEditando, setGradoEditando] = useState<any>(null);
+  const [formGrado, setFormGrado] = useState({ nombre: '', descripcion: '' });
   
   // Estados de edición
   const [editingEstudiante, setEditingEstudiante] = useState<Estudiante | null>(null);
@@ -117,6 +120,7 @@ export default function DashboardCoordinadorPage() {
     setLoading(true);
     try {
       const institucionId = user?.institucionId;
+      console.log('🔄 [DashboardCoordinador] Cargando datos para institución:', institucionId);
       
       // Cargar datos de la institución
       const instData = await getMiInstitucion();
@@ -129,39 +133,103 @@ export default function DashboardCoordinadorPage() {
         alertasData,
         docentesCoordData,
         orientadoresData,
-        estudiantesData,
-        docentesData,
+        estudiantesResponse,
         tareasData,
-        cursosData,
-        gradosData
+        cursosResponse,
+        gradosResponse
       ] = await Promise.all([
         getEstadisticasCoordinador(),
         getCursosCoordinador(),
         getAlertasCoordinador(),
         getDocentesCoordinador(),
         getOrientadoresCoordinador(),
-        getEstudiantes(institucionId),
-        getUsuarios(institucionId, 'docente_aula'),
+        apiClient.getEstudiantes(),
         getTareas(),
-        getCursos(institucionId),
-        getGrados(institucionId)
+        apiClient.getCursos(),
+        apiClient.getGrados()
       ]);
+
+      console.log('📥 [DashboardCoordinador] Respuesta de estudiantes:', estudiantesResponse);
+      console.log('📊 [DashboardCoordinador] Datos de estudiantes:', estudiantesResponse?.data);
+      console.log('🔢 [DashboardCoordinador] Total estudiantes:', Array.isArray(estudiantesResponse?.data) ? estudiantesResponse.data.length : 0);
 
       setEstadisticasCoord(estadisticasData || null);
       setCursosCoord(Array.isArray(cursosCoordData) ? cursosCoordData : []);
       setAlertasCoord(alertasData || null);
       setDocentesCoord(Array.isArray(docentesCoordData) ? docentesCoordData : []);
       setOrientadoresCoord(Array.isArray(orientadoresData) ? orientadoresData : []);
-      setEstudiantes(Array.isArray(estudiantesData) ? estudiantesData : []);
-      setDocentes(Array.isArray(docentesData) ? docentesData : []);
+      setEstudiantes(Array.isArray(estudiantesResponse?.data) ? estudiantesResponse.data : []);
+      
+      console.log('✅ [DashboardCoordinador] Estado de estudiantes actualizado:', Array.isArray(estudiantesResponse?.data) ? estudiantesResponse.data.length : 0, 'estudiantes');
+      console.log('🔍 [DashboardCoordinador] Primer estudiante (estructura):', estudiantesResponse?.data?.[0]);
+      // Usar docentesCoordData como fuente de docentes (ya viene de getDocentesCoordinador)
+      setDocentes(Array.isArray(docentesCoordData) ? docentesCoordData : []);
       setTareas(Array.isArray(tareasData) ? tareasData : []);
-      setCursos(Array.isArray(cursosData) ? cursosData : []);
-      setGrados(Array.isArray(gradosData) ? gradosData : []);
+      setCursos(Array.isArray(cursosResponse?.data) ? cursosResponse.data : []);
+      setGrados(Array.isArray(gradosResponse?.data) ? gradosResponse.data : []);
+      
+      console.log('📚 [DashboardCoordinador] Cursos cargados:', Array.isArray(cursosResponse?.data) ? cursosResponse.data.length : 0);
+      console.log('📋 [DashboardCoordinador] Lista de cursos:', cursosResponse?.data);
     } catch (err) {
       console.error('Error loading data:', err);
       setError('Error al cargar los datos');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Funciones para gestión de grados
+  const handleEditarGrado = (grado: any) => {
+    setGradoEditando(grado);
+    setFormGrado({
+      nombre: grado.nombre,
+      descripcion: grado.descripcion || ''
+    });
+    setModalEditarGrado(true);
+  };
+
+  const handleGuardarGrado = async () => {
+    if (!gradoEditando || !formGrado.nombre.trim()) {
+      setError('El nombre del grado es obligatorio');
+      return;
+    }
+
+    try {
+      const response = await apiClient.updateGrado(gradoEditando.id, {
+        nombre: formGrado.nombre.trim(),
+        descripcion: formGrado.descripcion.trim()
+      });
+
+      if (response.success) {
+        setSuccess('Grado actualizado correctamente');
+        setModalEditarGrado(false);
+        setGradoEditando(null);
+        setFormGrado({ nombre: '', descripcion: '' });
+        loadData();
+      } else {
+        setError(response.message || 'Error al actualizar el grado');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Error al actualizar el grado');
+    }
+  };
+
+  const handleEliminarGrado = async (grado: any) => {
+    if (!confirm(`¿Estás seguro de eliminar el grado "${grado.nombre}"?\n\nEsto eliminará también todos los cursos asociados y puede afectar a los estudiantes.`)) {
+      return;
+    }
+
+    try {
+      const response = await apiClient.deleteGrado(grado.id);
+
+      if (response.success) {
+        setSuccess('Grado eliminado correctamente');
+        loadData();
+      } else {
+        setError(response.message || 'Error al eliminar el grado');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Error al eliminar el grado');
     }
   };
 
@@ -231,49 +299,44 @@ export default function DashboardCoordinadorPage() {
   // HANDLERS ESTUDIANTES
   // ============================================
   
-  const handleCreateEstudiante = async () => {
+  const handleSaveEstudiante = async () => {
+    setSaving(true);
     setError(null);
-    const result = await createEstudiante(formEstudiante);
-    
-    if (result.success) {
-      setSuccess(`✅ Estudiante ${formEstudiante.nombre} creado correctamente`);
-      await loadData();
-      setModalEstudiante(false);
-      resetFormEstudiante();
-      setTimeout(() => setSuccess(null), 3000);
-    } else {
-      setError(result.error || 'Error al crear estudiante');
-    }
-  };
+    try {
+      let res;
+      if (editingEstudiante) {
+        res = await apiClient.updateEstudiante(editingEstudiante.id, formEstudiante);
+      } else {
+        res = await apiClient.createEstudiante(formEstudiante);
+      }
 
-  const handleUpdateEstudiante = async () => {
-    if (!editingEstudiante) return;
-    setError(null);
-    
-    const result = await updateEstudiante(editingEstudiante.id, formEstudiante);
-    
-    if (result.success) {
-      setSuccess(`✅ Estudiante actualizado correctamente`);
-      await loadData();
-      setModalEstudiante(false);
-      setEditingEstudiante(null);
-      resetFormEstudiante();
-      setTimeout(() => setSuccess(null), 3000);
-    } else {
-      setError(result.error || 'Error al actualizar estudiante');
+      if (res.success) {
+        setSuccess(editingEstudiante ? 'Estudiante actualizado exitosamente' : 'Estudiante creado exitosamente');
+        setModalEstudiante(false);
+        setEditingEstudiante(null);
+        resetFormEstudiante();
+        await loadData();
+        setTimeout(() => setSuccess(null), 3000);
+      } else {
+        setError(res.message || 'Error al guardar estudiante');
+      }
+    } catch (error) {
+      setError('Error al guardar estudiante');
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleDeleteEstudiante = async (id: number, nombre: string) => {
     if (!confirm(`¿Está seguro de retirar al estudiante ${nombre}?`)) return;
     
-    const result = await deleteEstudiante(id);
+    const result = await apiClient.deleteEstudiante(id);
     if (result.success) {
-      setSuccess(`✅ Estudiante retirado correctamente`);
+      setSuccess('Estudiante retirado correctamente');
       await loadData();
       setTimeout(() => setSuccess(null), 3000);
     } else {
-      setError(result.error || 'Error al retirar estudiante');
+      setError(result.message || 'Error al retirar estudiante');
     }
   };
 
@@ -429,7 +492,7 @@ export default function DashboardCoordinadorPage() {
   const openVinculacion = async (est: Estudiante) => {
     setEstudianteVincular(est);
     // Cargar acudientes actuales del estudiante
-    const result = await getAcudientesDeEstudianteAPI(est.id);
+    const result = await apiClient.getAcudientesEstudiante(est.id);
     setAcudientesEstudiante(result.data || []);
     setModalVinculacion(true);
   };
@@ -439,14 +502,19 @@ export default function DashboardCoordinadorPage() {
   // ============================================
   
   const estudiantesFiltrados = estudiantes.filter(est => {
+    const nombre = est.nombres || est.nombre || '';
+    const apellidos = est.apellidos || '';
+    const documento = est.numeroDocumento || est.numero_documento || est.documento || '';
+    
     const matchBusqueda = busqueda === '' || 
-      est.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-      est.apellidos?.toLowerCase().includes(busqueda.toLowerCase()) ||
-      est.documento.includes(busqueda);
+      nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
+      apellidos.toLowerCase().includes(busqueda.toLowerCase()) ||
+      documento.includes(busqueda);
     
-    const matchCurso = filtroCurso === '' || est.cursoId === filtroCurso;
+    const cursoId = est.cursoId || est.curso_id;
+    const matchCurso = filtroCurso === '' || cursoId === filtroCurso;
     
-    const curso = cursos.find(c => c.id === est.cursoId);
+    const curso = cursos.find(c => c.id === cursoId);
     const matchGrado = filtroGrado === '' || curso?.gradoId === filtroGrado;
     
     return matchBusqueda && matchCurso && matchGrado;
@@ -609,9 +677,9 @@ export default function DashboardCoordinadorPage() {
             <nav className="flex gap-1 p-1.5 overflow-x-auto">
               {[
                 { id: 'resumen', label: 'Resumen', Icon: IconBarChart },
+                { id: 'grados', label: 'Grados', Icon: IconBook },
                 { id: 'cursos', label: 'Cursos', Icon: IconFilter },
-                { id: 'docentes', label: 'Docentes', Icon: IconUsers },
-                { id: 'orientadores', label: 'Orientadores', Icon: IconUserPlus },
+                { id: 'orientacion', label: 'Gestión de Orientación', Icon: IconUsers },
                 { id: 'estudiantes', label: 'Estudiantes', Icon: IconBook },
                 { id: 'carga-masiva', label: 'Carga Masiva', Icon: IconFileUpload },
               ].map(tab => (
@@ -733,7 +801,8 @@ export default function DashboardCoordinadorPage() {
                   <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
                     {grados.map(grado => {
                       const estudiantesGrado = estudiantes.filter(e => {
-                        const curso = cursos.find(c => c.id === e.cursoId);
+                        const cursoId = e.cursoId || e.curso_id;
+                        const curso = cursos.find(c => c.id === cursoId);
                         return curso?.gradoId === grado.id;
                       }).length;
                       return (
@@ -776,6 +845,133 @@ export default function DashboardCoordinadorPage() {
               </div>
             )}
 
+            {/* Tab: Grados - Vista de Grados y Cursos */}
+            {activeTab === 'grados' && (
+              <div className="space-y-5">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold text-slate-800">Grados de la Institución</h2>
+                  <span className="text-sm text-slate-500">{grados.length} grado(s)</span>
+                </div>
+
+                {/* Mensaje informativo para usuarios no admin */}
+                {user?.rol !== 'admin' && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <IconAlertCircle className="text-blue-600 flex-shrink-0 mt-0.5" size={20} />
+                      <div className="text-sm text-blue-800">
+                        <p className="font-medium mb-1">Vista de solo lectura</p>
+                        <p>Los grados son datos maestros del sistema. Solo el Administrador del Sistema puede crear, editar o eliminar grados. Puedes ver los grados disponibles y crear cursos dentro de ellos.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {grados.length === 0 ? (
+                  <div className="py-12 text-center text-slate-500">
+                    <IconBook className="mx-auto mb-3 text-slate-400" size={48} />
+                    <p className="font-medium">No hay grados registrados</p>
+                    <p className="text-sm text-slate-400 mt-1">Los grados aparecerán aquí cuando se creen</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {grados.map((grado: any) => (
+                      <div key={grado.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden hover:shadow-md transition-shadow">
+                        {/* Header del Grado */}
+                        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-4 border-b border-slate-200">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3 flex-1">
+                              <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center">
+                                <span className="text-white font-bold text-lg">{grado.orden}</span>
+                              </div>
+                              <div className="flex-1">
+                                <h3 className="font-bold text-slate-800 text-lg">{grado.nombre}</h3>
+                                <p className="text-sm text-slate-600">
+                                  {grado.totalCursos || 0} curso(s) • {grado.totalEstudiantes || 0} estudiante(s)
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <div className="text-right">
+                                <div className="text-2xl font-bold text-indigo-600">{grado.totalEstudiantes || 0}</div>
+                                <div className="text-xs text-slate-500">Estudiantes</div>
+                              </div>
+                              {/* Solo Admin Sistema puede editar/eliminar grados */}
+                              {user?.rol === 'admin' && (
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => handleEditarGrado(grado)}
+                                    className="p-2 hover:bg-indigo-100 rounded-lg transition-colors"
+                                    title="Editar grado"
+                                  >
+                                    <IconEdit className="text-indigo-600" size={20} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleEliminarGrado(grado)}
+                                    className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                                    title="Eliminar grado"
+                                  >
+                                    <IconTrash className="text-red-600" size={20} />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Cursos del Grado */}
+                        <div className="p-4">
+                          {!grado.cursos || grado.cursos.length === 0 ? (
+                            <div className="text-center py-6 text-slate-400">
+                              <IconFilter className="mx-auto mb-2" size={32} />
+                              <p className="text-sm">Sin cursos creados para este grado</p>
+                            </div>
+                          ) : (
+                            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {grado.cursos.map((curso: any) => (
+                                <div key={curso.id} className="border border-slate-200 rounded-lg p-3 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all">
+                                  <div className="flex items-start justify-between mb-2">
+                                    <div>
+                                      <h4 className="font-semibold text-slate-800">{curso.nombre}</h4>
+                                      <p className="text-xs text-slate-500">{curso.jornada}</p>
+                                    </div>
+                                    <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                                      ID: {curso.id}
+                                    </span>
+                                  </div>
+                                  
+                                  {curso.docente ? (
+                                    <div className="flex items-center gap-2 text-xs text-slate-600 mb-2">
+                                      <IconUsers size={14} />
+                                      <span>{curso.docente.nombre} {curso.docente.apellidos}</span>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2 text-xs text-amber-600 mb-2">
+                                      <IconAlertTriangle size={14} />
+                                      <span>Sin docente asignado</span>
+                                    </div>
+                                  )}
+                                  
+                                  <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                                    <div className="flex items-center gap-1 text-xs text-slate-600">
+                                      <IconBook size={14} />
+                                      <span>{curso.totalEstudiantes || 0} estudiantes</span>
+                                    </div>
+                                    {curso.totalEstudiantes === 0 && (
+                                      <span className="text-xs text-amber-600">Vacío</span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Tab: Cursos - Vista Académica */}
             {activeTab === 'cursos' && (() => {
               console.log('🔍 [TAB CURSOS] Renderizando...');
@@ -801,7 +997,7 @@ export default function DashboardCoordinadorPage() {
                   ) : (
                     ((cursosCoord?.length || 0) > 0 ? cursosCoord : cursos).map((curso: any) => {
                       // Datos del curso (del backend o calculados localmente) - con protección contra null
-                      const totalEst = curso?.totalEstudiantes ?? estudiantes.filter(e => e.cursoId === curso?.id).length;
+                      const totalEst = curso?.totalEstudiantes ?? estudiantes.filter(e => (e.cursoId || e.curso_id) === curso?.id).length;
                       const promedio = Number(curso?.promedioGeneral) || 0;
                       const distribucion = curso?.distribucionRendimiento || { superior: 0, alto: 0, basico: 0, bajo: 0 };
                       const tieneAlertas = curso?.tieneAlertas ?? false;
@@ -923,19 +1119,53 @@ export default function DashboardCoordinadorPage() {
             );
             })()}
             
-            {/* Tab: Docentes - Seguimiento */}
-            {activeTab === 'docentes' && (() => {
-              console.log('🔍 [TAB DOCENTES] Renderizando...');
-              console.log('  - docentesCoord:', docentesCoord);
-              console.log('  - docentes (fallback):', docentes);
-              console.log('  - docentesCoord?.length:', docentesCoord?.length);
-              console.log('  - Array.isArray(docentesCoord):', Array.isArray(docentesCoord));
-              return (
+            {/* Tab: Gestión de Orientación - Docentes y Orientadores */}
+            {activeTab === 'orientacion' && (
               <div className="space-y-5">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-slate-800">Seguimiento de Docentes</h2>
-                  <span className="text-sm text-slate-500">{(docentesCoord?.length || 0) || docentes.length} docente(s)</span>
+                  <h2 className="text-xl font-bold text-slate-800">Gestión de Orientación</h2>
+                  {canManage && (
+                    <Button
+                      onClick={() => {
+                        setEditingOrientador(null);
+                        resetFormOrientador();
+                        setModalOrientador(true);
+                      }}
+                      className="flex items-center gap-2"
+                    >
+                      <IconPlus size={16} />
+                      Nuevo Orientador
+                    </Button>
+                  )}
                 </div>
+                
+                {/* Sub-tabs para Docentes y Orientadores */}
+                <div className="flex gap-2 border-b border-slate-200">
+                  <button
+                    onClick={() => setSubTab('docentes')}
+                    className={`px-4 py-2 font-medium transition-colors ${
+                      subTab === 'docentes'
+                        ? 'text-indigo-600 border-b-2 border-indigo-600'
+                        : 'text-slate-600 hover:text-slate-800'
+                    }`}
+                  >
+                    Docentes ({(docentesCoord?.length || 0) || docentes.length})
+                  </button>
+                  <button
+                    onClick={() => setSubTab('orientadores')}
+                    className={`px-4 py-2 font-medium transition-colors ${
+                      subTab === 'orientadores'
+                        ? 'text-indigo-600 border-b-2 border-indigo-600'
+                        : 'text-slate-600 hover:text-slate-800'
+                    }`}
+                  >
+                    Orientadores ({orientadoresCoord?.length || 0})
+                  </button>
+                </div>
+
+                {/* Contenido de Docentes */}
+                {subTab === 'docentes' && (
+                  <div className="space-y-5">
                 
                 {/* Tabla de docentes */}
                 <div className="overflow-x-auto rounded-xl border border-slate-200">
@@ -1027,27 +1257,12 @@ export default function DashboardCoordinadorPage() {
                     </tbody>
                   </table>
                 </div>
-              </div>
-            );
-            })()}
+                  </div>
+                )}
 
-            {/* Tab: Orientadores */}
-            {activeTab === 'orientadores' && (
-              <div className="space-y-5">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-slate-800">Gestión de Orientadores</h2>
-                  <Button
-                    onClick={() => {
-                      setEditingOrientador(null);
-                      resetFormOrientador();
-                      setModalOrientador(true);
-                    }}
-                    className="flex items-center gap-2"
-                  >
-                    <IconPlus size={16} />
-                    Nuevo Orientador
-                  </Button>
-                </div>
+                {/* Contenido de Orientadores */}
+                {subTab === 'orientadores' && (
+                  <div className="space-y-5">
                 
                 {/* Tabla de orientadores */}
                 <div className="overflow-x-auto rounded-xl border border-slate-200">
@@ -1134,22 +1349,26 @@ export default function DashboardCoordinadorPage() {
                                 )}
                               </td>
                               <td className="text-center py-4 px-4">
-                                <div className="flex justify-center gap-1">
-                                  <button
-                                    onClick={() => openEditOrientador(orientador)}
-                                    className="p-2 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
-                                    title="Editar"
-                                  >
-                                    <IconEdit size={18} />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteOrientador(orientador.id, `${nombre} ${apellido}`)}
-                                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                    title="Desactivar"
-                                  >
-                                    <IconTrash size={18} />
-                                  </button>
-                                </div>
+                                {canManage ? (
+                                  <div className="flex justify-center gap-1">
+                                    <button
+                                      onClick={() => openEditOrientador(orientador)}
+                                      className="p-2 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
+                                      title="Editar"
+                                    >
+                                      <IconEdit size={18} />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteOrientador(orientador.id, `${nombre} ${apellido}`)}
+                                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                      title="Desactivar"
+                                    >
+                                      <IconTrash size={18} />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400 text-sm">-</span>
+                                )}
                               </td>
                             </tr>
                           );
@@ -1163,6 +1382,8 @@ export default function DashboardCoordinadorPage() {
                 <div className="text-sm text-slate-600">
                   Total: <span className="font-semibold text-teal-600">{orientadoresCoord?.length || 0}</span> orientador(es)
                 </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1242,9 +1463,11 @@ export default function DashboardCoordinadorPage() {
                         </tr>
                       ) : (
                         estudiantesFiltrados.map(est => {
-                          const curso = cursos.find(c => c.id === est.cursoId);
-                          const edad = est.fechaNacimiento 
-                            ? new Date().getFullYear() - new Date(est.fechaNacimiento).getFullYear()
+                          const cursoId = est.cursoId || est.curso_id;
+                          const curso = cursos.find(c => c.id === cursoId);
+                          const fechaNac = est.fechaNacimiento || est.fecha_nacimiento;
+                          const edad = fechaNac 
+                            ? new Date().getFullYear() - new Date(fechaNac).getFullYear()
                             : '-';
                           
                           return (
@@ -1252,16 +1475,16 @@ export default function DashboardCoordinadorPage() {
                               <td className="py-4 px-5">
                                 <div className="flex items-center gap-3">
                                   <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
-                                    {est.nombre[0]}{est.apellidos?.[0] || ''}
+                                    {(est.nombres || est.nombre)?.[0] || '?'}{est.apellidos?.[0] || ''}
                                   </div>
                                   <div>
-                                    <div className="font-medium text-slate-800">{est.nombre} {est.apellidos}</div>
-                                    <div className="text-sm text-slate-500">{est.tipoDocumento?.toUpperCase()}: {est.documento}</div>
+                                    <div className="font-medium text-slate-800">{est.nombres || est.nombre || 'Sin nombre'} {est.apellidos || ''}</div>
+                                    <div className="text-sm text-slate-500">{(est.tipoDocumento || est.tipo_documento)?.toUpperCase() || 'TI'}: {est.numeroDocumento || est.numero_documento || est.documento}</div>
                                   </div>
                                 </div>
                               </td>
                               <td className="text-center py-4 px-4 text-slate-600 font-medium">
-                                {est.documento}
+                                {est.numeroDocumento || est.numero_documento || est.documento}
                               </td>
                               <td className="text-center py-4 px-4">
                                 <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-semibold">
@@ -1314,10 +1537,12 @@ export default function DashboardCoordinadorPage() {
             {/* Tab: Carga Masiva */}
             {activeTab === 'carga-masiva' && (
               <div className="max-w-3xl mx-auto">
-                <BulkUploadWizard 
+                <BulkUploadDual 
                   institucionId={user?.institucionId || 1}
                   onClose={() => {
-                    setModalCargaMasiva(false);
+                    setActiveTab('estudiantes');
+                  }}
+                  onSuccess={() => {
                     loadData(); // Recargar datos después de la carga masiva
                   }}
                 />
@@ -1394,15 +1619,21 @@ export default function DashboardCoordinadorPage() {
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">Curso</label>
-            <select
-              className="w-full px-4 py-2.5 border border-slate-200 rounded-xl bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-all"
-              value={formEstudiante.cursoId}
-              onChange={(e) => setFormEstudiante({ ...formEstudiante, cursoId: parseInt(e.target.value) })}
-            >
-              {cursos.map(c => (
-                <option key={c.id} value={c.id}>{c.nombre}</option>
-              ))}
-            </select>
+            {cursos.length === 0 ? (
+              <div className="w-full px-4 py-2.5 border border-amber-200 rounded-xl bg-amber-50 text-amber-700 text-sm">
+                ⚠️ No hay cursos disponibles. Crea un curso primero.
+              </div>
+            ) : (
+              <select
+                className="w-full px-4 py-2.5 border border-slate-200 rounded-xl bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-all"
+                value={formEstudiante.cursoId}
+                onChange={(e) => setFormEstudiante({ ...formEstudiante, cursoId: parseInt(e.target.value) })}
+              >
+                {cursos.map(c => (
+                  <option key={c.id} value={c.id}>{c.nombre}</option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div className="flex justify-end gap-3 pt-4">
@@ -1417,7 +1648,7 @@ export default function DashboardCoordinadorPage() {
             >
               Cancelar
             </Button>
-            <Button onClick={editingEstudiante ? handleUpdateEstudiante : handleCreateEstudiante}>
+            <Button onClick={handleSaveEstudiante}>
               {editingEstudiante ? 'Actualizar' : 'Crear'} Estudiante
             </Button>
           </div>
@@ -1573,6 +1804,63 @@ export default function DashboardCoordinadorPage() {
               }}
             >
               Cerrar
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal Editar Grado */}
+      <Modal
+        isOpen={modalEditarGrado}
+        onClose={() => {
+          setModalEditarGrado(false);
+          setGradoEditando(null);
+          setFormGrado({ nombre: '', descripcion: '' });
+        }}
+        title="Editar Grado"
+        size="md"
+      >
+        <div className="space-y-4">
+          <FormFieldInput
+            label="Nombre del Grado"
+            type="text"
+            value={formGrado.nombre}
+            onChange={(e) => setFormGrado({ ...formGrado, nombre: e.target.value })}
+            placeholder="Ej: Grado 1, Preescolar, Sexto"
+            required
+          />
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Descripción (opcional)
+            </label>
+            <textarea
+              value={formGrado.descripcion}
+              onChange={(e) => setFormGrado({ ...formGrado, descripcion: e.target.value })}
+              placeholder="Descripción del grado"
+              className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+              rows={3}
+            />
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setModalEditarGrado(false);
+                setGradoEditando(null);
+                setFormGrado({ nombre: '', descripcion: '' });
+              }}
+              className="flex-1"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleGuardarGrado}
+              disabled={!formGrado.nombre.trim()}
+              className="flex-1"
+            >
+              Guardar Cambios
             </Button>
           </div>
         </div>

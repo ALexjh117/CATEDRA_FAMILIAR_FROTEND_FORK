@@ -131,49 +131,35 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           { type: 'link', path: '/tareas/crear', label: 'Crear Tarea', icon: 'plus' },
           { type: 'link', path: '/entregas', label: 'Entregas', icon: 'inbox' },
           { type: 'link', path: '/estudiantes', label: 'Estudiantes', icon: 'users' },
+          { type: 'link', path: '/reportes/docente', label: 'Reportes', icon: 'reports' },
           profileItem,
         ];
       case 'orientador':
         return [
           ...commonItems,
           { type: 'link', path: '/dashboard/orientador', label: 'Mi Panel', icon: 'dashboard' },
+          { type: 'link', path: '/tareas', label: 'Tareas', icon: 'tasks' },
+          { type: 'link', path: '/padres-familia', label: 'Padres de Familia', icon: 'family' },
           {
             type: 'group',
             key: 'mi-institucion',
             label: 'Mi institución',
             icon: 'institutions',
             children: [
-              {
-                type: 'group',
-                key: 'mi-institucion-estudiantes',
-                label: 'Estudiantes',
-                icon: 'users',
-                children: [
-                  { type: 'link', path: '/estudiantes', label: 'Ver todos los estudiantes', icon: 'users' },
-                  { type: 'link', path: '/cursos', label: 'Ver cursos', icon: 'courses' },
-                ],
-              },
-              {
-                type: 'group',
-                key: 'mi-institucion-padres',
-                label: 'Padres de familia',
-                icon: 'family',
-                children: [
-                  { type: 'link', path: '/padres-familia', label: 'Ver todos los padres de familia', icon: 'family' },
-                ],
-              },
+              { type: 'link', path: '/estudiantes', label: 'Estudiantes', icon: 'users' },
+              { type: 'link', path: '/cursos', label: 'Cursos', icon: 'courses' },
             ],
           },
-          { type: 'link', path: '/reportes', label: 'Reportes', icon: 'reports' },
+          { type: 'link', path: '/reportes/orientador', label: 'Reportes', icon: 'reports' },
           profileItem,
         ];
       case 'coordinador':
         return [
           ...commonItems,
           { type: 'link', path: '/dashboard/coordinador', label: 'Mi Panel', icon: 'dashboard' },
-          { type: 'link', path: '/docentes', label: 'Docentes', icon: 'teachers' },
+          { type: 'link', path: '/gestion-orientacion', label: 'Gestión de Orientación', icon: 'teachers' },
           { type: 'link', path: '/cursos', label: 'Cursos', icon: 'courses' },
-          { type: 'link', path: '/reportes', label: 'Reportes', icon: 'reports' },
+          { type: 'link', path: '/reportes/coordinador', label: 'Reportes', icon: 'reports' },
           profileItem,
         ];
       case 'rector':
@@ -181,7 +167,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           ...commonItems,
           { type: 'link', path: '/dashboard/rector', label: 'Mi Panel', icon: 'dashboard' },
           { type: 'link', path: '/directivos', label: 'Directivos', icon: 'users' },
-          { type: 'link', path: '/reportes', label: 'Reportes', icon: 'reports' },
+          { type: 'link', path: '/reportes/rector', label: 'Reportes', icon: 'reports' },
           { type: 'link', path: '/configuracion', label: 'Configuración', icon: 'settings' },
           profileItem,
         ];
@@ -192,6 +178,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           { type: 'link', path: '/dashboard/admin', label: 'Mi Panel', icon: 'dashboard' },
           { type: 'link', path: '/dashboard/admin/manage?tab=instituciones', label: 'Instituciones', icon: 'institutions' },
           { type: 'link', path: '/dashboard/admin/manage?tab=usuarios', label: 'Usuarios', icon: 'users' },
+          { type: 'link', path: '/reportes/admin', label: 'Reportes', icon: 'reports' },
           { type: 'link', path: '/dashboard/admin/manage?tab=configuracion', label: 'Sistema', icon: 'settings' },
           // Admin no tiene perfil - solo gestiona sistema e invita admins
         ];

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getSession, getEstadisticasRector, getInstituciones, getUsuarios, getMiInstitucion, getInstitucionById } from '../api/endpoints';
+import { getSession, getEstadisticasRector, getMiInstitucion, getInstitucionById } from '../api/endpoints';
+import apiClient from '../api/apiClient';
 import { type Usuario, type Institucion } from '../mocks/data';
 import DashboardLayout from '../components/DashboardLayout';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -46,24 +47,70 @@ export default function DashboardRectorPage() {
         setMiInstitucion(institucionRector);
       }
 
-      const [estadisticasData, institucionesData, usuariosData] = await Promise.all([
+      // Usar endpoints específicos del rector (no /admin/usuarios)
+      const [estadisticasData, coordinadoresRes, orientadoresRes, docentesRes, cursosRes] = await Promise.all([
         getEstadisticasRector(),
-        getInstituciones(),
-        getUsuarios()
+        apiClient.getCoordinadoresRector(),
+        apiClient.getOrientadoresRector(),
+        apiClient.getDocentesRector(),
+        apiClient.getCursosRector()
       ]);
 
       setEstadisticas(estadisticasData || null);
       
-      // Si el rector tiene institución asignada, filtrar solo esa
+      // Combinar coordinadores, orientadores y docentes como "usuarios" para mostrar
+      const todosUsuarios: Usuario[] = [];
+      
+      if (coordinadoresRes.success && coordinadoresRes.data) {
+        coordinadoresRes.data.forEach((c: any) => {
+          todosUsuarios.push({
+            id: c.usuarioId || c.id,
+            nombre: c.nombre || '',
+            apellidos: c.apellido || '',
+            correo: c.correo || '',
+            telefono: c.telefono || '',
+            rol: 'coordinador',
+            activo: c.estaActivo ?? false,
+            institucionId: c.institucionId
+          } as Usuario);
+        });
+      }
+      
+      if (orientadoresRes.success && orientadoresRes.data) {
+        orientadoresRes.data.forEach((o: any) => {
+          todosUsuarios.push({
+            id: o.usuarioId || o.id,
+            nombre: o.nombre || '',
+            apellidos: o.apellido || '',
+            correo: o.correo || '',
+            telefono: o.telefono || '',
+            rol: 'orientador',
+            activo: o.estaActivo ?? false,
+            institucionId: o.institucionId
+          } as Usuario);
+        });
+      }
+      
+      if (docentesRes.success && docentesRes.data) {
+        docentesRes.data.forEach((d: any) => {
+          todosUsuarios.push({
+            id: d.usuarioId || d.id,
+            nombre: d.nombres || d.nombre || '',
+            apellidos: d.apellidos || d.apellido || '',
+            correo: d.correo || '',
+            telefono: d.telefono || '',
+            rol: 'docente_aula',
+            activo: d.estaActivo ?? false,
+            institucionId: d.institucionId
+          } as Usuario);
+        });
+      }
+      
+      setUsuarios(todosUsuarios);
+      
+      // Establecer la institución del rector
       if (institucionRector) {
         setInstituciones([institucionRector]);
-        // Filtrar usuarios solo de la institución del rector
-        const usuariosFiltrados = (Array.isArray(usuariosData) ? usuariosData : []).filter((u: Usuario) => u.institucionId === institucionRector!.id);
-        setUsuarios(usuariosFiltrados);
-      } else {
-        // Si no tiene institución (admin viendo como rector), mostrar todas
-        setInstituciones(Array.isArray(institucionesData) ? institucionesData : []);
-        setUsuarios(Array.isArray(usuariosData) ? usuariosData : []);
       }
     } catch (error) {
       console.error('Error loading data:', error);

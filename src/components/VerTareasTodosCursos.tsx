@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getTareas, getCursos, getUsuarios } from '../api/endpoints';
+import { getTareas, getCursos, getDocentesCoordinador } from '../api/endpoints';
 import { type Tarea, type Curso, type Usuario } from '../mocks/data';
 import DashboardLayout from '../components/DashboardLayout';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -42,15 +42,25 @@ export default function VerTareasTodosCursos() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [tareasData, cursosData, usuariosData] = await Promise.all([
+      // Usar getDocentesCoordinador en lugar de getUsuarios (evita 403)
+      const [tareasData, cursosData, docentesData] = await Promise.all([
         getTareas(),
         getCursos(),
-        getUsuarios()
+        getDocentesCoordinador()
       ]);
 
       setTareas(Array.isArray(tareasData) ? tareasData : []);
       setCursos(Array.isArray(cursosData) ? cursosData : []);
-      setUsuarios(Array.isArray(usuariosData) ? usuariosData : []);
+      // Mapear docentes al formato Usuario
+      const docentesArray = Array.isArray(docentesData) ? docentesData : [];
+      const usuariosMapped = docentesArray.map((d: any) => ({
+        id: d.usuarioId || d.id,
+        nombre: d.nombres || d.nombre || '',
+        apellidos: d.apellidos || d.apellido || '',
+        rol: 'docente_aula',
+        activo: d.estaActivo ?? true
+      } as Usuario));
+      setUsuarios(usuariosMapped);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {

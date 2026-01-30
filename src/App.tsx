@@ -15,10 +15,16 @@ import DashboardCoordinadorPage from './pages/DashboardCoordinadorPage'
 import DashboardAcudientePage from './pages/DashboardAcudientePage'
 import DirectivosPage from './pages/DirectivosPage'
 import ProfilePage from './pages/ProfilePage'
-import ReportesPage from './pages/ReportesPage'
-import DocentesPage from './pages/DocentesPage'
+import ReportesRector from './components/reportes/ReportesRector'
+import ReportesCoordinador from './components/reportes/ReportesCoordinador'
+import ReportesOrientador from './components/reportes/ReportesOrientador'
+import ReportesDocente from './components/reportes/ReportesDocente'
+import ReportesAdmin from './components/reportes/ReportesAdmin'
+import GestionOrientacionPage from './pages/GestionOrientacionPage'
 import CursosPage from './pages/CursosPage'
 import ConfiguracionRectorPage from './pages/ConfiguracionRectorPage'
+import PadresFamiliaPage from './pages/PadresFamiliaPage'
+import TareasPage from './pages/TareasPage'
 
 // Legacy
 import DashboardPage from './pages/DashboardPage'
@@ -139,7 +145,7 @@ export default function App(){
           
           <Route path="/dashboard/orientador" element={
             <ProtectedRoute allowedRoles={['orientador', 'coordinador', 'rector', 'admin']}>
-              <DashboardSupervisorPage />
+              <PagePlaceholder title="Dashboard Orientador" description="Panel de control para orientadores." />
             </ProtectedRoute>
           } />
           
@@ -174,15 +180,19 @@ export default function App(){
           } />
 
           {/* Placeholder routes for sidebar items to avoid redirect to / when missing */}
-          <Route path="/tareas" element={<ProtectedRoute allowedRoles={['docente','docente_aula','orientador','coordinador','rector','admin']}><PagePlaceholder title="Tareas" description="Gestión de tareas."/></ProtectedRoute>} />
-          <Route path="/tareas/crear" element={<ProtectedRoute allowedRoles={['docente','docente_aula']}><PagePlaceholder title="Crear Tarea" description="Formulario temporal para crear tareas."/></ProtectedRoute>} />
+          <Route path="/tareas" element={<ProtectedRoute allowedRoles={['docente','docente_aula','orientador','coordinador','rector','admin']}><TareasPage /></ProtectedRoute>} />
+          <Route path="/tareas/crear" element={<ProtectedRoute allowedRoles={['docente','docente_aula','orientador']}><PagePlaceholder title="Crear Tarea" description="Formulario temporal para crear tareas."/></ProtectedRoute>} />
           <Route path="/entregas" element={<ProtectedRoute allowedRoles={['docente','docente_aula']}><PagePlaceholder title="Entregas" description="Listado de entregas pendientes."/></ProtectedRoute>} />
           <Route path="/estudiantes" element={<ProtectedRoute allowedRoles={['docente','orientador','coordinador','rector','admin']}><PagePlaceholder title="Estudiantes" description="Listado y seguimiento de estudiantes."/></ProtectedRoute>} />
-          <Route path="/docentes" element={<ProtectedRoute allowedRoles={['coordinador','rector','admin']}><DocentesPage /></ProtectedRoute>} />
+          <Route path="/gestion-orientacion" element={<ProtectedRoute allowedRoles={['coordinador','rector','admin']}><GestionOrientacionPage /></ProtectedRoute>} />
           <Route path="/directivos" element={<ProtectedRoute allowedRoles={['rector','admin']}><DirectivosPage /></ProtectedRoute>} />
           <Route path="/cursos" element={<ProtectedRoute allowedRoles={['orientador','coordinador','rector','admin']}><CursosPage /></ProtectedRoute>} />
-          <Route path="/padres-familia" element={<ProtectedRoute allowedRoles={['orientador','coordinador','rector','admin']}><PagePlaceholder title="Padres de familia" description="Listado de padres de familia."/></ProtectedRoute>} />
-          <Route path="/reportes" element={<ProtectedRoute allowedRoles={['orientador','coordinador','rector','admin']}><ReportesPage /></ProtectedRoute>} />
+          <Route path="/padres-familia" element={<ProtectedRoute allowedRoles={['orientador','coordinador','rector','admin']}><PadresFamiliaPage /></ProtectedRoute>} />
+          <Route path="/reportes/rector" element={<ProtectedRoute allowedRoles={['rector']}><ReportesRector /></ProtectedRoute>} />
+          <Route path="/reportes/coordinador" element={<ProtectedRoute allowedRoles={['coordinador']}><ReportesCoordinador /></ProtectedRoute>} />
+          <Route path="/reportes/orientador" element={<ProtectedRoute allowedRoles={['orientador']}><ReportesOrientador /></ProtectedRoute>} />
+          <Route path="/reportes/docente" element={<ProtectedRoute allowedRoles={['docente','docente_aula']}><ReportesDocente /></ProtectedRoute>} />
+          <Route path="/reportes/admin" element={<ProtectedRoute allowedRoles={['admin']}><ReportesAdmin /></ProtectedRoute>} />
           <Route path="/configuracion" element={<ProtectedRoute allowedRoles={['rector','admin']}><ConfiguracionRectorPage /></ProtectedRoute>} />
           <Route path="/instituciones" element={<ProtectedRoute allowedRoles={['admin']}><PagePlaceholder title="Instituciones" description="Gestión de instituciones."/></ProtectedRoute>} />
           <Route path="/usuarios" element={<ProtectedRoute allowedRoles={['admin']}><PagePlaceholder title="Usuarios" description="Gestión de usuarios."/></ProtectedRoute>} />

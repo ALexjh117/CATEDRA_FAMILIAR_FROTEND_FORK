@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getSession, getUsuarios, updateUsuario } from '../api/endpoints';
+import apiClient from '../api/apiClient';
 import { type Usuario } from '../mocks/data';
 import DashboardLayout from '../components/DashboardLayout';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -40,13 +41,54 @@ export default function PanelAprobarDocentes() {
   const loadUsuarios = async () => {
     setLoading(true);
     try {
-      const data = await getUsuarios();
-      // Asegurar que data es un array
-      const usuariosArray = Array.isArray(data) ? data : [];
+      const userRol = session?.user?.rol;
+      const esAdmin = userRol === 'admin' || userRol === 'admin_sistema';
+      const esRector = userRol === 'rector';
+      
+      let docentesData: Usuario[] = [];
+      
+      if (esAdmin) {
+        // Admin usa /admin/usuarios
+        const data = await getUsuarios();
+        const usuariosArray = Array.isArray(data) ? data : [];
+        docentesData = usuariosArray.filter(user => user.rol === 'docente_aula');
+      } else if (esRector) {
+        // Rector usa /rectores/docentes
+        const res = await apiClient.getDocentesRector();
+        if (res.success && res.data) {
+          docentesData = res.data.map((d: any) => ({
+            id: d.usuarioId || d.id,
+            nombre: d.nombres || d.nombre || '',
+            apellidos: d.apellidos || d.apellido || '',
+            correo: d.correo || '',
+            telefono: d.telefono || '',
+            rol: 'docente_aula',
+            activo: d.estaActivo ?? false,
+            aprobado: d.aprobado,
+            requiere_revision: d.requiere_revision
+          } as Usuario));
+        }
+      } else {
+        // Coordinador usa /coordinadores/docentes
+        const res = await apiClient.getDocentesCoordinador();
+        if (res.success && res.data) {
+          docentesData = res.data.map((d: any) => ({
+            id: d.usuarioId || d.id,
+            nombre: d.nombres || d.nombre || '',
+            apellidos: d.apellidos || d.apellido || '',
+            correo: d.correo || '',
+            telefono: d.telefono || '',
+            rol: 'docente_aula',
+            activo: d.estaActivo ?? false,
+            aprobado: d.aprobado,
+            requiere_revision: d.requiere_revision
+          } as Usuario));
+        }
+      }
+      
       // Solo mostrar docentes pendientes de aprobación o que requieren revisión
-      const docentes = usuariosArray.filter(user => 
-        user.rol === 'docente_aula' && 
-        (!user.aprobado || user.requiere_revision)
+      const docentes = docentesData.filter(user => 
+        !user.aprobado || user.requiere_revision
       );
       setUsuarios(docentes);
     } catch (error) {

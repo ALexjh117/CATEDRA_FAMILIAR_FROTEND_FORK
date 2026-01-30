@@ -147,7 +147,16 @@ export default function ConfiguracionRectorPage() {
     try {
       let res;
       if (editingPeriodo) {
-        res = await apiClient.updatePeriodoRector(editingPeriodo.id, formPeriodo);
+        // Asegurar que todos los campos necesarios estén presentes
+        const dataToUpdate = {
+          nombre: formPeriodo.nombre,
+          fechaInicio: formPeriodo.fechaInicio,
+          fechaFin: formPeriodo.fechaFin,
+          anio: formPeriodo.anio || new Date().getFullYear(),
+          estado: formPeriodo.estado || 'activo'
+        };
+        console.log('📤 Datos a enviar para actualización:', dataToUpdate);
+        res = await apiClient.updatePeriodoRector(editingPeriodo.id, dataToUpdate);
       } else {
         res = await apiClient.createPeriodoRector(formPeriodo);
       }
