@@ -3,14 +3,19 @@ import { getSession } from '../../api/endpoints';
 import apiClient from '../../api/apiClient';
 import DashboardLayout from '../DashboardLayout';
 import LoadingSpinner from '../ui/LoadingSpinner';
+import { ErrorBoundary } from '../ui/ErrorBoundary';
+import { PageLoading, StatsCardSkeleton, ChartSkeleton, ButtonLoading } from '../ui/LoadingStates';
+import { ErrorState, EmptyState } from '../ui/ErrorStates';
 import { exportToExcel, exportEstadisticasToPDF } from '../../utils/exportUtils';
+import DashboardCharts from '../charts/DashboardCharts';
 import {
   IconDownload,
   IconBarChart,
   IconInstitution,
   IconUsers,
   IconTrendingUp,
-  IconFileText
+  IconFileText,
+  IconRefresh
 } from '../ui/Icons';
 
 type TipoReporte = 'sistema' | 'instituciones' | 'usuarios' | 'actividad';
@@ -28,7 +33,8 @@ export default function ReportesAdmin() {
   const user = session?.user;
 
   const [loading, setLoading] = useState(true);
-  const [generando, setGenerando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [generando, setGenerando] = useState<string | null>(null);
   const [instituciones, setInstituciones] = useState<any[]>([]);
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [periodoSeleccionado, setPeriodoSeleccionado] = useState('2026-1');
@@ -71,6 +77,7 @@ export default function ReportesAdmin() {
 
   const loadData = async () => {
     setLoading(true);
+    setError(null);
     try {
       const [instRes, usersRes] = await Promise.all([
         apiClient.getInstituciones(),
@@ -79,20 +86,29 @@ export default function ReportesAdmin() {
 
       if (instRes.success && instRes.data) {
         setInstituciones(Array.isArray(instRes.data) ? instRes.data : []);
+      } else {
+        throw new Error('Error al cargar instituciones');
       }
 
       if (usersRes.success && usersRes.data) {
         setUsuarios(Array.isArray(usersRes.data) ? usersRes.data : []);
+      } else {
+        throw new Error('Error al cargar usuarios');
       }
     } catch (error) {
       console.error('Error loading data:', error);
+      setError(error instanceof Error ? error.message : 'Error desconocido');
     } finally {
       setLoading(false);
     }
   };
 
+  const retryLoad = () => {
+    loadData();
+  };
+
   const generarReporteSistema = async () => {
-    setGenerando(true);
+    setGenerando('sistema');
     try {
       const stats = {
         'PLATAFORMA CÁTEDRA DE FAMILIA': '',
@@ -123,12 +139,12 @@ export default function ReportesAdmin() {
         'Reporte Global del Sistema - Cátedra de Familia'
       );
     } finally {
-      setGenerando(false);
+      setGenerando(null);
     }
   };
 
   const generarReporteInstituciones = async () => {
-    setGenerando(true);
+    setGenerando('instituciones');
     try {
       const data = instituciones.map(inst => ({
         'Nombre': inst.nombre,
@@ -158,12 +174,12 @@ export default function ReportesAdmin() {
         'Instituciones'
       );
     } finally {
-      setGenerando(false);
+      setGenerando(null);
     }
   };
 
   const generarReporteUsuarios = async () => {
-    setGenerando(true);
+    setGenerando('usuarios');
     try {
       const data = usuarios.map(user => ({
         'Nombre': `${user.nombre} ${user.apellidos || ''}`,
@@ -196,12 +212,12 @@ export default function ReportesAdmin() {
         'Usuarios por Rol'
       );
     } finally {
-      setGenerando(false);
+      setGenerando(null);
     }
   };
 
   const generarReporteActividad = async () => {
-    setGenerando(true);
+    setGenerando('actividad');
     try {
       const stats = {
         'ACTIVIDAD DEL SISTEMA': '',
@@ -234,7 +250,7 @@ export default function ReportesAdmin() {
         'Reporte de Actividad del Sistema'
       );
     } finally {
-      setGenerando(false);
+      setGenerando(null);
     }
   };
 
@@ -260,10 +276,15 @@ export default function ReportesAdmin() {
   if (loading) {
     return (
       <DashboardLayout>
-        <div className="flex flex-col items-center justify-center h-64 gap-4">
-          <LoadingSpinner size="lg" />
-          <p className="text-slate-500 animate-pulse">Cargando reportes del sistema...</p>
-        </div>
+        <PageLoading message="Cargando reportes del sistema..." />
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout>
+        <ErrorState message={error} onRetry={retryLoad} />
       </DashboardLayout>
     );
   }
@@ -316,58 +337,79 @@ export default function ReportesAdmin() {
 
         {/* Estadísticas rápidas */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-indigo-100 rounded-lg">
-                <IconInstitution className="text-indigo-600" size={20} />
+          {loading ? (
+            Array.from({ length: 4 }).map((_, index) => (
+              <StatsCardSkeleton key={index} />
+            ))
+          ) : (
+            <>
+              <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-indigo-100 rounded-lg">
+                    <IconInstitution className="text-indigo-600" size={20} />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-slate-800">{instituciones.length}</p>
+                    <p className="text-xs text-slate-500">Instituciones</p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <p className="text-2xl font-bold text-slate-800">{instituciones.length}</p>
-                <p className="text-xs text-slate-500">Instituciones</p>
+              
+              <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <IconUsers className="text-blue-600" size={20} />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-slate-800">{usuarios.length}</p>
+                    <p className="text-xs text-slate-500">Usuarios</p>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <IconUsers className="text-blue-600" size={20} />
+              
+              <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-emerald-100 rounded-lg">
+                    <IconTrendingUp className="text-emerald-600" size={20} />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-slate-800">
+                      {usuarios.filter(u => u.activo).length}
+                    </p>
+                    <p className="text-xs text-slate-500">Activos</p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <p className="text-2xl font-bold text-slate-800">{usuarios.length}</p>
-                <p className="text-xs text-slate-500">Usuarios</p>
+              
+              <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <IconFileText className="text-purple-600" size={20} />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-slate-800">
+                      {new Set(instituciones.map(i => i.departamentoId)).size}
+                    </p>
+                    <p className="text-xs text-slate-500">Departamentos</p>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-emerald-100 rounded-lg">
-                <IconTrendingUp className="text-emerald-600" size={20} />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-slate-800">
-                  {usuarios.filter(u => u.activo).length}
-                </p>
-                <p className="text-xs text-slate-500">Activos</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <IconFileText className="text-purple-600" size={20} />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-slate-800">
-                  {new Set(instituciones.map(i => i.departamentoId)).size}
-                </p>
-                <p className="text-xs text-slate-500">Departamentos</p>
-              </div>
-            </div>
-          </div>
+            </>
+          )}
         </div>
+
+        {/* Charts Estadísticos */}
+        <ErrorBoundary>
+          {loading ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <ChartSkeleton key={index} />
+              ))}
+            </div>
+          ) : (
+            <DashboardCharts instituciones={instituciones} usuarios={usuarios} />
+          )}
+        </ErrorBoundary>
 
         {/* Tipos de reporte */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
@@ -407,13 +449,13 @@ export default function ReportesAdmin() {
                     <span className={`text-xs font-semibold ${colors.text} bg-white/60 px-2 py-1 rounded-full`}>
                       Disponible
                     </span>
-                    <button
-                      disabled={generando}
+                    <ButtonLoading
+                      loading={generando === reporte.id}
                       className={`px-3 py-1.5 ${colors.icon} text-white text-sm font-medium rounded-lg hover:opacity-90 transition-all flex items-center gap-1 disabled:opacity-50`}
                     >
                       <IconDownload size={14} />
-                      Generar
-                    </button>
+                      {generando === reporte.id ? 'Generando...' : 'Generar'}
+                    </ButtonLoading>
                   </div>
                 </div>
               );

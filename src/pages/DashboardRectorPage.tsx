@@ -5,7 +5,10 @@ import apiClient from '../api/apiClient';
 import { type Usuario, type Institucion } from '../mocks/data';
 import DashboardLayout from '../components/DashboardLayout';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import { PageLoading, StatsCardSkeleton, ButtonLoading } from '../components/ui/LoadingStates';
+import { ErrorState, EmptyState } from '../components/ui/ErrorStates';
 import { exportToExcel, exportToPDF, exportEstadisticasToPDF } from '../utils/exportUtils';
+import RectorDashboardEnhanced from '../components/rector/RectorDashboardEnhanced';
 import {
   IconUsers,
   IconTrendingUp,
@@ -15,7 +18,9 @@ import {
   IconBarChart,
   IconArrowRight,
   IconBook,
-  IconGraduationCap
+  IconGraduationCap,
+  IconRefresh,
+  IconInfo
 } from '../components/ui/Icons';
 
 export default function DashboardRectorPage() {
@@ -23,7 +28,15 @@ export default function DashboardRectorPage() {
   const user = session?.user;
   const navigate = useNavigate();
   
+  const [useEnhanced, setUseEnhanced] = useState(true); // Por defecto usar versión mejorada
+
+  // Si useEnhanced es true, mostrar el dashboard mejorado
+  if (useEnhanced) {
+    return <RectorDashboardEnhanced />;
+  }
+  
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [estadisticas, setEstadisticas] = useState<any>(null);
   const [instituciones, setInstituciones] = useState<Institucion[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
@@ -35,19 +48,38 @@ export default function DashboardRectorPage() {
 
   const loadData = async () => {
     setLoading(true);
+    setError(null);
     try {
+      // Validar sesión
+      if (!session || !user) {
+        throw new Error('Sesión no válida o expirada');
+      }
+
       // Cargar la institución del rector primero
       let institucionRector: Institucion | null = null;
       
       if (user?.institucionId) {
-        institucionRector = await getMiInstitucion();
-        if (!institucionRector) {
-          institucionRector = await getInstitucionById(user.institucionId);
+        try {
+          institucionRector = await getMiInstitucion();
+          if (!institucionRector) {
+            institucionRector = await getInstitucionById(user.institucionId);
+          }
+          
+          // Validar que la institución se cargó correctamente
+          if (!institucionRector) {
+            throw new Error('No se pudo cargar la información de la institución');
+          }
+          
+          setMiInstitucion(institucionRector);
+        } catch (instError) {
+          console.error('Error cargando institución:', instError);
+          throw new Error('Error al cargar datos de la institución');
         }
-        setMiInstitucion(institucionRector);
+      } else {
+        throw new Error('El rector debe estar asignado a una institución');
       }
 
-      // Usar endpoints específicos del rector (no /admin/usuarios)
+      // Usar endpoints específicos del rector
       const [estadisticasData, coordinadoresRes, orientadoresRes, docentesRes, cursosRes] = await Promise.all([
         getEstadisticasRector(),
         apiClient.getCoordinadoresRector(),
@@ -56,53 +88,63 @@ export default function DashboardRectorPage() {
         apiClient.getCursosRector()
       ]);
 
-      setEstadisticas(estadisticasData || null);
+      // Validar y procesar estadísticas
+      if (!estadisticasData) {
+        throw new Error('No se pudieron cargar las estadísticas');
+      }
+      setEstadisticas(estadisticasData);
       
-      // Combinar coordinadores, orientadores y docentes como "usuarios" para mostrar
+      // Procesar usuarios con validación
       const todosUsuarios: Usuario[] = [];
       
-      if (coordinadoresRes.success && coordinadoresRes.data) {
+      if (coordinadoresRes?.success && Array.isArray(coordinadoresRes.data)) {
         coordinadoresRes.data.forEach((c: any) => {
-          todosUsuarios.push({
-            id: c.usuarioId || c.id,
-            nombre: c.nombre || '',
-            apellidos: c.apellido || '',
-            correo: c.correo || '',
-            telefono: c.telefono || '',
-            rol: 'coordinador',
-            activo: c.estaActivo ?? false,
-            institucionId: c.institucionId
-          } as Usuario);
+          if (c && typeof c === 'object') {
+            todosUsuarios.push({
+              id: c.usuarioId || c.id || Math.random().toString(),
+              nombre: c.nombre || '',
+              apellidos: c.apellido || '',
+              correo: c.correo || '',
+              telefono: c.telefono || '',
+              rol: 'coordinador',
+              activo: c.estaActivo ?? false,
+              institucionId: c.institucionId
+            } as Usuario);
+          }
         });
       }
       
-      if (orientadoresRes.success && orientadoresRes.data) {
+      if (orientadoresRes?.success && Array.isArray(orientadoresRes.data)) {
         orientadoresRes.data.forEach((o: any) => {
-          todosUsuarios.push({
-            id: o.usuarioId || o.id,
-            nombre: o.nombre || '',
-            apellidos: o.apellido || '',
-            correo: o.correo || '',
-            telefono: o.telefono || '',
-            rol: 'orientador',
-            activo: o.estaActivo ?? false,
-            institucionId: o.institucionId
-          } as Usuario);
+          if (o && typeof o === 'object') {
+            todosUsuarios.push({
+              id: o.usuarioId || o.id || Math.random().toString(),
+              nombre: o.nombre || '',
+              apellidos: o.apellido || '',
+              correo: o.correo || '',
+              telefono: o.telefono || '',
+              rol: 'orientador',
+              activo: o.estaActivo ?? false,
+              institucionId: o.institucionId
+            } as Usuario);
+          }
         });
       }
       
-      if (docentesRes.success && docentesRes.data) {
+      if (docentesRes?.success && Array.isArray(docentesRes.data)) {
         docentesRes.data.forEach((d: any) => {
-          todosUsuarios.push({
-            id: d.usuarioId || d.id,
-            nombre: d.nombres || d.nombre || '',
-            apellidos: d.apellidos || d.apellido || '',
-            correo: d.correo || '',
-            telefono: d.telefono || '',
-            rol: 'docente_aula',
-            activo: d.estaActivo ?? false,
-            institucionId: d.institucionId
-          } as Usuario);
+          if (d && typeof d === 'object') {
+            todosUsuarios.push({
+              id: d.usuarioId || d.id || Math.random().toString(),
+              nombre: d.nombres || d.nombre || '',
+              apellidos: d.apellidos || d.apellido || '',
+              correo: d.correo || '',
+              telefono: d.telefono || '',
+              rol: 'docente_aula',
+              activo: d.estaActivo ?? false,
+              institucionId: d.institucionId
+            } as Usuario);
+          }
         });
       }
       
@@ -114,18 +156,28 @@ export default function DashboardRectorPage() {
       }
     } catch (error) {
       console.error('Error loading data:', error);
+      setError(error instanceof Error ? error.message : 'Error al cargar datos del panel');
     } finally {
       setLoading(false);
     }
   };
 
+  const retryLoad = () => {
+    loadData();
+  };
+
   if (loading) {
     return (
       <DashboardLayout>
-        <div className="flex flex-col items-center justify-center h-64 gap-4">
-          <LoadingSpinner size="lg" />
-          <p className="text-slate-500 animate-pulse">Cargando panel de rectoría...</p>
-        </div>
+        <PageLoading message="Cargando panel de rectoría..." />
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout>
+        <ErrorState message={error} onRetry={retryLoad} />
       </DashboardLayout>
     );
   }
