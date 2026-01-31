@@ -23,6 +23,7 @@ import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
 import FormFieldInput from '../components/ui/FormFieldInput';
 import BulkUploadDual from '../components/BulkUploadDual';
+import CoordinadorDashboardEnhanced from '../components/coordinador/CoordinadorDashboardEnhanced';
 import {
   IconUsers,
   IconPlus,
@@ -49,6 +50,14 @@ export default function DashboardCoordinadorPage() {
   const session = getSession();
   const user = session?.user;
   const userRole = user?.rol;
+  
+  // Toggle para usar versión mejorada
+  const [useEnhanced, setUseEnhanced] = useState(true); // Por defecto usar versión mejorada
+
+  // Si useEnhanced es true, mostrar el dashboard mejorado
+  if (useEnhanced) {
+    return <CoordinadorDashboardEnhanced />;
+  }
   
   // Solo Coordinador y Admin pueden crear/editar
   const canManage = userRole === 'coordinador' || userRole === 'admin' || userRole === 'admin_sistema';
@@ -1822,26 +1831,23 @@ export default function DashboardCoordinadorPage() {
       >
         <div className="space-y-4">
           <FormFieldInput
+            name="nombreGrado"
             label="Nombre del Grado"
             type="text"
             value={formGrado.nombre}
             onChange={(e) => setFormGrado({ ...formGrado, nombre: e.target.value })}
-            placeholder="Ej: Grado 1, Preescolar, Sexto"
+            placeholder="Ej: Primero, Segundo, Tercero..."
             required
           />
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Descripción (opcional)
-            </label>
-            <textarea
-              value={formGrado.descripcion}
-              onChange={(e) => setFormGrado({ ...formGrado, descripcion: e.target.value })}
-              placeholder="Descripción del grado"
-              className="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
-              rows={3}
-            />
-          </div>
+          <FormFieldInput
+            name="descripcionGrado"
+            label="Descripción (opcional)"
+            type="text"
+            value={formGrado.descripcion}
+            onChange={(e) => setFormGrado({ ...formGrado, descripcion: e.target.value })}
+            placeholder="Descripción del grado..."
+          />
 
           <div className="flex gap-3 pt-4">
             <Button
