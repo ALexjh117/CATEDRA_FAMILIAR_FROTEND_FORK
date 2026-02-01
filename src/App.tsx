@@ -25,6 +25,10 @@ import CursosPage from './pages/CursosPage'
 import ConfiguracionRectorPage from './pages/ConfiguracionRectorPage'
 import PadresFamiliaPage from './pages/PadresFamiliaPage'
 import TareasPage from './pages/TareasPage'
+import EstudiantesPage from './pages/EstudiantesPage'
+import EditarEstudiantePage from './pages/EditarEstudiantePage'
+import OrientadorLayout from './components/orientador-acudiente/OrientadorLayout'
+import DashboardLayout from './components/DashboardLayout'
 
 // Legacy
 import DashboardPage from './pages/DashboardPage'
@@ -51,6 +55,19 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactEleme
   }
   
   return children;
+}
+
+function RoleAwareLayout({ children }: { children: React.ReactNode }) {
+  const session = getSession();
+  const currentRole = (session as any)?.isPreview && (session as any)?.previewRole
+    ? (session as any).previewRole
+    : session?.user?.rol;
+
+  if (currentRole === 'orientador') {
+    return <OrientadorLayout>{children}</OrientadorLayout>;
+  }
+
+  return <DashboardLayout>{children}</DashboardLayout>;
 }
 
 // Redirect based on role
@@ -145,7 +162,9 @@ export default function App(){
           
           <Route path="/dashboard/orientador" element={
             <ProtectedRoute allowedRoles={['orientador', 'coordinador', 'rector', 'admin']}>
-              <PagePlaceholder title="Dashboard Orientador" description="Panel de control para orientadores." />
+              <RoleAwareLayout>
+                <PagePlaceholder title="Dashboard Orientador" description="Panel de control para orientadores." />
+              </RoleAwareLayout>
             </ProtectedRoute>
           } />
           
@@ -181,10 +200,12 @@ export default function App(){
 
           {/* Placeholder routes for sidebar items to avoid redirect to / when missing */}
           <Route path="/tareas" element={<ProtectedRoute allowedRoles={['docente','docente_aula','orientador','coordinador','rector','admin']}><TareasPage /></ProtectedRoute>} />
-          <Route path="/tareas/crear" element={<ProtectedRoute allowedRoles={['docente','docente_aula','orientador']}><PagePlaceholder title="Crear Tarea" description="Formulario temporal para crear tareas."/></ProtectedRoute>} />
-          <Route path="/entregas" element={<ProtectedRoute allowedRoles={['docente','docente_aula']}><PagePlaceholder title="Entregas" description="Listado de entregas pendientes."/></ProtectedRoute>} />
-          <Route path="/estudiantes" element={<ProtectedRoute allowedRoles={['docente','orientador','coordinador','rector','admin']}><PagePlaceholder title="Estudiantes" description="Listado y seguimiento de estudiantes."/></ProtectedRoute>} />
-          <Route path="/gestion-orientacion" element={<ProtectedRoute allowedRoles={['coordinador','rector','admin']}><GestionOrientacionPage /></ProtectedRoute>} />
+          <Route path="/tareas/crear" element={<ProtectedRoute allowedRoles={['docente','docente_aula','orientador']}><RoleAwareLayout><PagePlaceholder title="Crear Tarea" description="Formulario temporal para crear tareas."/></RoleAwareLayout></ProtectedRoute>} />
+          <Route path="/entregas" element={<ProtectedRoute allowedRoles={['docente','docente_aula']}><RoleAwareLayout><PagePlaceholder title="Entregas" description="Listado de entregas pendientes."/></RoleAwareLayout></ProtectedRoute>} />
+          <Route path="/estudiantes" element={<ProtectedRoute allowedRoles={['docente','orientador','coordinador','rector','admin']}><RoleAwareLayout><EstudiantesPage /></RoleAwareLayout></ProtectedRoute>} />
+          <Route path="/estudiantes/:id/editar" element={<ProtectedRoute allowedRoles={['docente','orientador','coordinador','rector','admin']}><RoleAwareLayout><EditarEstudiantePage /></RoleAwareLayout></ProtectedRoute>} />
+          
+          <Route path="/gestion-orientacion" element={<ProtectedRoute allowedRoles={['orientador','coordinador','rector','admin']}><GestionOrientacionPage /></ProtectedRoute>} />
           <Route path="/directivos" element={<ProtectedRoute allowedRoles={['rector','admin']}><DirectivosPage /></ProtectedRoute>} />
           <Route path="/cursos" element={<ProtectedRoute allowedRoles={['orientador','coordinador','rector','admin']}><CursosPage /></ProtectedRoute>} />
           <Route path="/padres-familia" element={<ProtectedRoute allowedRoles={['orientador','coordinador','rector','admin']}><PadresFamiliaPage /></ProtectedRoute>} />

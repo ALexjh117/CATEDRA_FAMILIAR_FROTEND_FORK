@@ -153,4 +153,82 @@ export async function loginUnicoMultiRol(correo: string, contrasena: string): Pr
     };
   }
 }
+
+export async function updateEstudianteOrientador(estudianteId: number, data: Record<string, any>): Promise<{ success: boolean; data?: any; message?: string }> {
+  try {
+    const response = await httpService.put<any>(`/estudiantes/${estudianteId}`, data);
+    const raw = response.data as any;
+
+    if (raw?.success === false) {
+      return { success: false, message: raw?.message || 'Error al actualizar estudiante' };
+    }
+
+    return { success: true, data: raw?.data, message: raw?.message };
+  } catch (error: any) {
+    return { success: false, message: error?.message || 'Error de conexión' };
+  }
+}
+ 
+export async function patchEstudiante(estudianteId: number, data: Record<string, any>): Promise<{ success: boolean; data?: any; message?: string }> {
+  try {
+    const response = await httpService.patch<any>(`/estudiantes/${estudianteId}`, data);
+    const raw = response.data as any;
+
+    if (raw?.success === false) {
+      return { success: false, message: raw?.message || 'Error al actualizar estudiante' };
+    }
+
+    return { success: true, data: raw?.data ?? raw, message: raw?.message };
+  } catch (error: any) {
+    return { success: false, message: error?.message || 'Error de conexión' };
+  }
+}
+
+export async function getEstudianteById(estudianteId: number): Promise<{ success: boolean; data?: any; message?: string }> {
+  try {
+    const response = await httpService.get<any>(`/estudiantes/${estudianteId}`);
+    const raw = response.data as any;
+
+    if (raw?.success === false) {
+      return { success: false, message: raw?.message || 'Error al obtener estudiante' };
+    }
+
+    const data = raw?.data ?? raw?.estudiante ?? raw;
+    return { success: true, data, message: raw?.message };
+  } catch (error: any) {
+    return { success: false, message: error?.message || 'Error de conexión' };
+  }
+}
+
+export async function getCursosPorInstitucion(institucionId: number): Promise<{ success: boolean; data: any[]; message?: string }> {
+  try {
+    const response = await httpService.get<any>(`/cursos/institucion/${institucionId}`);
+    const raw = response.data as any;
+
+    if (raw?.success === false) {
+      return { success: false, data: [], message: raw?.message || 'Error al obtener cursos' };
+    }
+
+    const data = raw?.cursos ?? raw?.data ?? [];
+    return { success: true, data: Array.isArray(data) ? data : [], message: raw?.message };
+  } catch (error: any) {
+    return { success: false, data: [], message: error?.message || 'Error de conexión' };
+  }
+}
 ///////////////////////////////////////////
+
+export async function getEstudiantesInstitucionOrientador(): Promise<any[]> {
+  try {
+    const response = await httpService.get<any>('/orientadores/estudiantes');
+    const raw = response.data as any;
+
+    if (raw?.success === false) {
+      throw new Error(raw?.message || 'Error al obtener estudiantes');
+    }
+
+    const data = raw?.data ?? raw?.estudiantes ?? [];
+    return Array.isArray(data) ? data : [];
+  } catch (error: any) {
+    throw new Error(error?.message || 'Error de conexión');
+  }
+}
