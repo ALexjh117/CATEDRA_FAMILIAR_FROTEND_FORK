@@ -9,6 +9,7 @@ import {
   getDocentesCRUD
 } from '../api/endpoints';
 import DashboardLayout from '../components/DashboardLayout';
+import OrientadorLayout from '../components/orientador-acudiente/OrientadorLayout';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
@@ -50,6 +51,8 @@ interface Docente {
 export default function CursosPage() {
   const session = getSession();
   const user = session?.user;
+
+  const Layout = user?.rol === 'orientador' ? OrientadorLayout : DashboardLayout;
   
   const [loading, setLoading] = useState(true);
   const [cursos, setCursos] = useState<Curso[]>([]);
@@ -224,16 +227,16 @@ export default function CursosPage() {
 
   if (loading) {
     return (
-      <DashboardLayout>
+      <Layout>
         <div className="flex items-center justify-center h-64">
           <LoadingSpinner size="lg" />
         </div>
-      </DashboardLayout>
+      </Layout>
     );
   }
 
   return (
-    <DashboardLayout>
+    <Layout>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -382,6 +385,7 @@ export default function CursosPage() {
       >
         <div className="p-6 space-y-4">
           <FormFieldInput
+            name="nombre"
             label="Nombre del Curso"
             value={formCurso.nombre}
             onChange={(e) => setFormCurso(prev => ({ ...prev, nombre: e.target.value }))}
@@ -490,6 +494,6 @@ export default function CursosPage() {
           {toast.message}
         </div>
       )}
-    </DashboardLayout>
+    </Layout>
   );
 }

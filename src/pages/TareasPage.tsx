@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { getSession } from '../api/endpoints';
 import apiClient from '../api/apiClient';
 import DashboardLayout from '../components/DashboardLayout';
+import OrientadorLayout from '../components/orientador-acudiente/OrientadorLayout';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { IconPlus, IconFileText, IconUsers, IconBook, IconEdit, IconTrash } from '../components/ui/Icons';
+ import Swal from 'sweetalert2';
 
 // ⚠️ DATOS HARDCODEADOS TEMPORALES - Mientras el backend configura las categorías
 const CATEGORIAS_MOCK = [
@@ -45,13 +47,25 @@ export default function TareasPage() {
   const user = session?.user;
   const userRole = user?.rol;
 
+  const Layout = userRole === 'orientador' ? OrientadorLayout : DashboardLayout;
+
   const [loading, setLoading] = useState(true);
   const [tareas, setTareas] = useState<BancoTarea[]>([]);
   const [busqueda, setBusqueda] = useState('');
   const [categoriaFiltro, setCategoriaFiltro] = useState<number | null>(null);
   const [modalCrear, setModalCrear] = useState(false);
+  const [modalCategoria, setModalCategoria] = useState(false);
   const [modalAsignar, setModalAsignar] = useState(false);
   const [tareaSeleccionada, setTareaSeleccionada] = useState<BancoTarea | null>(null);
+
+  const [categorias, setCategorias] = useState<{ id: number; nombre: string }[]>(CATEGORIAS_MOCK);
+
+  const [savingCategoria, setSavingCategoria] = useState(false);
+  const [formCategoria, setFormCategoria] = useState({
+    nombre: '',
+    descripcion: '',
+    icono: '',
+  });
 
   // Formulario para crear tarea
   const [formTarea, setFormTarea] = useState({
@@ -68,7 +82,25 @@ export default function TareasPage() {
 
   useEffect(() => {
     loadTareas();
+    loadCategorias();
   }, []);
+
+  const loadCategorias = async () => {
+    try {
+      const result = await apiClient.getCategorias();
+      if (result.success && Array.isArray(result.data) && result.data.length > 0) {
+        const mapped = result.data.map((c: any) => ({
+          id: Number(c.id),
+          nombre: c.nombre || ''
+        })).filter((c: any) => !!c.nombre);
+        setCategorias(mapped.length > 0 ? mapped : CATEGORIAS_MOCK);
+      } else {
+        setCategorias(CATEGORIAS_MOCK);
+      }
+    } catch (e) {
+      setCategorias(CATEGORIAS_MOCK);
+    }
+  };
 
   const loadTareas = async () => {
     try {
@@ -134,6 +166,79 @@ export default function TareasPage() {
     });
   };
 
+  const resetFormCategoria = () => {
+    setFormCategoria({
+      nombre: '',
+      descripcion: '',
+      icono: '',
+    });
+  };
+
+  const handleCrearCategoria = async () => {
+    const nombre = formCategoria.nombre.trim();
+    if (!nombre || nombre.length < 2) {
+      alert('El nombre de la categoría es obligatorio (mínimo 2 caracteres)');
+      return;
+    }
+
+    const nombreLower = nombre.toLowerCase();
+    const existeLocal = categorias.some((c) => (c?.nombre || '').trim().toLowerCase() === nombreLower);
+    if (existeLocal) {
+      alert('Ya existe una categoría con ese nombre');
+      return;
+    }
+
+    setSavingCategoria(true);
+    try {
+      const result = await apiClient.createCategoria({
+        nombre,
+        descripcion: formCategoria.descripcion.trim() ? formCategoria.descripcion.trim() : null,
+        icono: formCategoria.icono.trim() ? formCategoria.icono.trim() : null,
+      });
+
+      if (result.success) {
+        await Swal.fire({
+          title: 'Categoría creada',
+          text: 'Ya se creó la categoría.',
+          icon: 'success',
+          confirmButtonText: 'OK',
+          confirmButtonColor: '#4f46e5'
+        });
+        setModalCategoria(false);
+        resetFormCategoria();
+        await loadCategorias();
+      } else {
+        const msg = result.message || 'No se pudo crear la categoría';
+        const isDuplicada =
+          msg.toLowerCase().includes('categorias_nombre_key') ||
+          msg.toLowerCase().includes('llave duplicada') ||
+          msg.toLowerCase().includes('duplicate key') ||
+          msg.toLowerCase().includes('unique') ||
+          msg.toLowerCase().includes('unicidad');
+        if (isDuplicada) {
+          alert('Ya existe una categoría con ese nombre');
+        } else {
+          alert(`❌ Error: ${msg}`);
+        }
+      }
+    } catch (e: any) {
+      const msg = e?.message || 'Error al crear la categoría';
+      const isDuplicada =
+        String(msg).toLowerCase().includes('categorias_nombre_key') ||
+        String(msg).toLowerCase().includes('llave duplicada') ||
+        String(msg).toLowerCase().includes('duplicate key') ||
+        String(msg).toLowerCase().includes('unique') ||
+        String(msg).toLowerCase().includes('unicidad');
+      if (isDuplicada) {
+        alert('Ya existe una categoría con ese nombre');
+      } else {
+        alert(msg);
+      }
+    } finally {
+      setSavingCategoria(false);
+    }
+  };
+
   const handleAsignarTarea = (tarea: BancoTarea) => {
     setTareaSeleccionada(tarea);
     setModalAsignar(true);
@@ -160,24 +265,25 @@ export default function TareasPage() {
 
   if (loading) {
     return (
-      <DashboardLayout>
+      <Layout>
         <div className="flex items-center justify-center h-64">
           <LoadingSpinner size="lg" text="Cargando tareas..." />
         </div>
-      </DashboardLayout>
+      </Layout>
     );
   }
 
   return (
-    <DashboardLayout>
+    <Layout>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-800">Banco de Tareas</h1>
-            <p className="text-slate-600 mt-1">Gestiona las tareas de Cátedra de Familia</p>
-          </div>
-          {(userRole === 'orientador' || userRole === 'docente' || userRole === 'docente_aula') && (
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Banco de Tareas</h1>
+          <p className="text-slate-600 mt-1">Gestiona las tareas de Cátedra de Familia</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {(userRole === 'orientador' || userRole === 'docente_aula') && (
             <button
               onClick={() => setModalCrear(true)}
               className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors shadow-md"
@@ -186,6 +292,15 @@ export default function TareasPage() {
               Nueva Tarea
             </button>
           )}
+
+          <button
+            onClick={() => setModalCategoria(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-md"
+          >
+            <IconPlus size={20} />
+            Más categoría
+          </button>
+        </div>
         </div>
 
         {/* Filtros */}
@@ -211,7 +326,7 @@ export default function TareasPage() {
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
               >
                 <option value="">Todas las categorías</option>
-                {CATEGORIAS_MOCK.map(cat => (
+                {categorias.map((cat) => (
                   <option key={cat.id} value={cat.id}>{cat.nombre}</option>
                 ))}
               </select>
@@ -310,7 +425,7 @@ export default function TareasPage() {
                   >
                     Asignar
                   </button>
-                  {(userRole === 'orientador' || userRole === 'docente' || userRole === 'docente_aula') && (
+                  {(userRole === 'orientador' || userRole === 'docente_aula') && (
                     <>
                       <button className="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors">
                         <IconEdit size={16} />
@@ -475,6 +590,72 @@ export default function TareasPage() {
           </div>
         )}
 
+        {/* Modal Crear Categoría */}
+        {modalCategoria && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-slate-800">Nueva Categoría</h2>
+                <button onClick={() => { setModalCategoria(false); resetFormCategoria(); }} className="text-slate-400 hover:text-slate-600">✕</button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Nombre *</label>
+                  <input
+                    type="text"
+                    value={formCategoria.nombre}
+                    onChange={(e) => setFormCategoria({ ...formCategoria, nombre: e.target.value })}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Ej: Matemáticas"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Descripción</label>
+                  <textarea
+                    value={formCategoria.descripcion}
+                    onChange={(e) => setFormCategoria({ ...formCategoria, descripcion: e.target.value })}
+                    rows={3}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Descripción opcional..."
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Icono</label>
+                    <input
+                      type="text"
+                      value={formCategoria.icono}
+                      onChange={(e) => setFormCategoria({ ...formCategoria, icono: e.target.value })}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="calculator"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="sticky bottom-0 bg-slate-50 border-t border-slate-200 px-6 py-4 flex gap-3">
+                <button
+                  onClick={() => { setModalCategoria(false); resetFormCategoria(); }}
+                  className="flex-1 px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors font-medium"
+                  disabled={savingCategoria}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleCrearCategoria}
+                  className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium disabled:opacity-50"
+                  disabled={savingCategoria}
+                >
+                  {savingCategoria ? 'Creando...' : 'Crear Categoría'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Modal Asignar (Placeholder) */}
         {modalAsignar && tareaSeleccionada && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -504,6 +685,6 @@ export default function TareasPage() {
           </div>
         )}
       </div>
-    </DashboardLayout>
+    </Layout>
   );
 }

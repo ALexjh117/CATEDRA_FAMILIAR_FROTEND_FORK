@@ -1601,7 +1601,6 @@ class ApiClient {
   // ============================================
   // PERIODOS
   // ============================================
-  
   /**
    * Obtener todos los periodos
    * GET /periodos
@@ -1623,7 +1622,7 @@ class ApiClient {
   // ============================================
   // CATEGORÍAS
   // ============================================
-  
+
   /**
    * Obtener todas las categorías
    * GET /categorias
@@ -1642,26 +1641,79 @@ class ApiClient {
     }
   }
 
+  /**
+   * Crear categoría
+   * POST /categorias
+   */
+  async createCategoria(data: {
+    nombre: string;
+    descripcion?: string | null;
+    color?: string | null;
+    icono?: string | null;
+  }): Promise<ApiResponse<any>> {
+    try {
+      const response = await httpService.post<any>('/categorias', data);
+      const raw = response.data as any;
+
+      if (typeof raw?.success === 'boolean') {
+        return raw as ApiResponse<any>;
+      }
+
+      if (raw && (raw.id || raw.nombre)) {
+        return {
+          success: true,
+          message: 'Categoría creada',
+          data: raw
+        };
+      }
+
+      return {
+        success: true,
+        message: 'Categoría creada',
+        data: raw
+      };
+    } catch (error: any) {
+      console.error('Error POST /categorias:', error);
+
+      const rawMsg =
+        error?.message ||
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        'Error al crear categoría';
+
+      const msgLower = String(rawMsg).toLowerCase();
+      const isDuplicada =
+        msgLower.includes('categorias_nombre_key') ||
+        msgLower.includes('llave duplicada') ||
+        msgLower.includes('duplicate key') ||
+        msgLower.includes('unique') ||
+        msgLower.includes('unicidad');
+
+      return {
+        success: false,
+        message: isDuplicada ? 'Ya existe una categoría con ese nombre' : rawMsg
+      };
+    }
+  }
+
   // ============================================
   // PERFIL DE USUARIO
   // ============================================
-  
+
   /**
    * Obtener perfil completo del usuario autenticado
    * GET /usuarios/me (o /rectores/me, /coordinadores/me según el rol)
    */
   async getPerfilUsuario(): Promise<ApiResponse<any>> {
     try {
-      // Intentar endpoint genérico primero
       const response = await httpService.get<ApiResponse<any>>('/usuarios/me');
       return response.data;
     } catch (error: any) {
-      // Si falla, intentar con endpoints específicos según el rol
       const session = localStorage.getItem('session');
       if (session) {
         const parsed = JSON.parse(session);
         const rol = parsed.user?.rol;
-        
+
         if (rol === 'rector') {
           try {
             const resp = await httpService.get<ApiResponse<any>>('/rectores/me');
@@ -1675,7 +1727,7 @@ class ApiClient {
           } catch (e) { /* continuar */ }
         }
       }
-      
+
       console.warn('Endpoint de perfil no disponible');
       return {
         success: false,
@@ -2315,7 +2367,7 @@ class ApiClient {
    * Crear orientador
    * POST /orientadores
    */
-  async createOrientador(data: {
+  async createOrientadorCoordinador(data: {
     firstName: string;
     lastName: string;
     email: string;
