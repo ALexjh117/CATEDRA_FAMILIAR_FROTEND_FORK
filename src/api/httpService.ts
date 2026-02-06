@@ -151,14 +151,21 @@ class HttpService {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
 
+    const isFormData = typeof FormData !== 'undefined' && data instanceof FormData;
+    const headers = this.getHeaders();
+    if (isFormData) {
+      // Let the browser set the correct multipart boundary
+      delete (headers as any)['Content-Type'];
+    }
+
     const options: RequestInit = {
       method,
-      headers: this.getHeaders(),
+      headers,
       signal: controller.signal
     };
 
     if (data && method !== 'GET' && method !== 'DELETE') {
-      options.body = JSON.stringify(data);
+      options.body = isFormData ? data : JSON.stringify(data);
     }
 
     try {

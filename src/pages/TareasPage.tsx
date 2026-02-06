@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getSession } from '../api/endpoints';
-import apiClient from '../api/apiClient';
+import { createCategoria, createTarea, getCategorias, getTareaById, getTareas } from '../api/endpointsDocente-orinetador';
 import DashboardLayout from '../components/DashboardLayout';
 import OrientadorLayout from '../components/orientador-acudiente/OrientadorLayout';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-import { IconPlus, IconFileText, IconUsers, IconBook, IconEdit, IconTrash } from '../components/ui/Icons';
+import { IconPlus, IconFileText, IconUsers, IconBook, IconEdit, IconTrash, IconEye, IconUpload } from '../components/ui/Icons';
  import Swal from 'sweetalert2';
 
 // ⚠️ DATOS HARDCODEADOS TEMPORALES - Mientras el backend configura las categorías
@@ -17,6 +17,11 @@ const CATEGORIAS_MOCK = [
 ];
 
 const GRADOS = [
+  { id: 1, nombre: 'Primero' },
+  { id: 2, nombre: 'Segundo' },
+  { id: 3, nombre: 'Tercero' },
+  { id: 4, nombre: 'Cuarto' },
+  { id: 5, nombre: 'Quinto' },
   { id: 6, nombre: 'Sexto' },
   { id: 7, nombre: 'Séptimo' },
   { id: 8, nombre: 'Octavo' },
@@ -40,6 +45,9 @@ interface BancoTarea {
   vecesUtilizada: number;
   creadoEn: string;
   actualizadoEn: string;
+  archivoUrl?: string | null;
+  archivo_url?: string | null;
+  archivo?: string | null;
 }
 
 export default function TareasPage() {
@@ -57,10 +65,16 @@ export default function TareasPage() {
   const [modalCategoria, setModalCategoria] = useState(false);
   const [modalAsignar, setModalAsignar] = useState(false);
   const [tareaSeleccionada, setTareaSeleccionada] = useState<BancoTarea | null>(null);
+  const [modalDetalle, setModalDetalle] = useState(false);
+  const [tareaDetalle, setTareaDetalle] = useState<BancoTarea | null>(null);
+  const [loadingDetalle, setLoadingDetalle] = useState(false);
+  const [fileBlobUrl, setFileBlobUrl] = useState<string | null>(null);
+  const [loadingFile, setLoadingFile] = useState(false);
 
   const [categorias, setCategorias] = useState<{ id: number; nombre: string }[]>(CATEGORIAS_MOCK);
 
   const [savingCategoria, setSavingCategoria] = useState(false);
+  const [savingTarea, setSavingTarea] = useState(false);
   const [formCategoria, setFormCategoria] = useState({
     nombre: '',
     descripcion: '',
@@ -71,32 +85,85 @@ export default function TareasPage() {
   const [formTarea, setFormTarea] = useState({
     titulo: '',
     descripcion: '',
-    categoriaId: 1, // ⚠️ Hardcoded temporal
-    tema: '',
+    categoriaId: '',
     enlace: '',
     entregableEsperado: '',
     gradosObjetivo: [] as number[],
     esMultiGrado: false,
-    tipoCalificacion: 'cualitativa' as 'cualitativa' | 'cuantitativa'
+    tipoCalificacion: 'cualitativa' as 'cualitativa' | 'cuantitativa',
   });
+
+  const [archivoTarea, setArchivoTarea] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     loadTareas();
     loadCategorias();
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (fileBlobUrl) URL.revokeObjectURL(fileBlobUrl);
+    };
+  }, [fileBlobUrl]);
+
+  const normalizeTarea = (raw: any): BancoTarea => {
+    const categoriaId = Number(raw?.categoriaId ?? raw?.categoria_id ?? 0);
+
+    const gradosRaw = raw?.gradosObjetivo ?? raw?.grados_objetivo;
+    const gradosObjetivo: number[] | null =
+      Array.isArray(gradosRaw)
+        ? gradosRaw.map((x: any) => Number(x)).filter((x: any) => Number.isFinite(x))
+        : typeof gradosRaw === 'string' && gradosRaw.trim() !== ''
+          ? (() => {
+              try {
+                const parsed = JSON.parse(gradosRaw);
+                return Array.isArray(parsed) ? parsed.map((x: any) => Number(x)).filter((x: any) => Number.isFinite(x)) : null;
+              } catch {
+                return null;
+              }
+            })()
+          : null;
+
+    const esMultiRaw = raw?.esMultiGrado ?? raw?.es_multi_grado;
+    const esMultiGrado = typeof esMultiRaw === 'boolean' ? esMultiRaw : String(esMultiRaw) === 'true';
+
+    return {
+      id: Number(raw?.id),
+      titulo: raw?.titulo ?? '',
+      descripcion: raw?.descripcion ?? '',
+      enlace: raw?.enlace ?? null,
+      categoriaId,
+      tema: raw?.tema ?? null,
+      entregableEsperado: raw?.entregableEsperado ?? raw?.entregable_esperado ?? null,
+      gradosObjetivo,
+      esMultiGrado,
+      tipoCalificacion: (raw?.tipoCalificacion ?? raw?.tipo_calificacion ?? 'cualitativa') as any,
+      criteriosAutomaticos: raw?.criteriosAutomaticos ?? raw?.criterios_automaticos ?? null,
+      vecesUtilizada: Number(raw?.vecesUtilizada ?? raw?.veces_utilizada ?? 0),
+      creadoEn: raw?.creadoEn ?? raw?.creado_en ?? '',
+      actualizadoEn: raw?.actualizadoEn ?? raw?.actualizado_en ?? '',
+      archivoUrl: raw?.archivoUrl ?? raw?.archivo_url ?? raw?.archivo ?? null,
+      archivo_url: raw?.archivo_url ?? null,
+      archivo: raw?.archivo ?? null,
+    };
+  };
+
   const loadCategorias = async () => {
     try {
-      const result = await apiClient.getCategorias();
+      const result = await getCategorias();
       if (result.success && Array.isArray(result.data) && result.data.length > 0) {
-        const mapped = result.data.map((c: any) => ({
-          id: Number(c.id),
-          nombre: c.nombre || ''
-        })).filter((c: any) => !!c.nombre);
+        const mapped = result.data
+          .map((c: any) => ({
+            id: Number(c.id),
+            nombre: c.nombre || ''
+          }))
+          .filter((c: any) => !!c.nombre);
         setCategorias(mapped.length > 0 ? mapped : CATEGORIAS_MOCK);
-      } else {
-        setCategorias(CATEGORIAS_MOCK);
+        return;
       }
+
+      setCategorias(CATEGORIAS_MOCK);
     } catch (e) {
       setCategorias(CATEGORIAS_MOCK);
     }
@@ -107,12 +174,13 @@ export default function TareasPage() {
       setLoading(true);
       console.log('📞 [Tareas] Cargando tareas del banco...');
       
-      const result = await apiClient.getTareas();
+      const result = await getTareas();
       console.log('📥 [Tareas] Respuesta:', result);
       
       if (result.success && result.data) {
-        setTareas(result.data);
-        console.log('✅ [Tareas] Tareas cargadas:', result.data.length);
+        const normalized = (result.data || []).map((t: any) => normalizeTarea(t));
+        setTareas(normalized);
+        console.log('✅ [Tareas] Tareas cargadas:', normalized.length);
       } else {
         console.warn('⚠️ [Tareas] No se pudieron cargar las tareas');
         setTareas([]);
@@ -127,28 +195,134 @@ export default function TareasPage() {
 
   const handleCrearTarea = async () => {
     try {
+      if (savingTarea) return;
       console.log('📤 [Tareas] Creando tarea:', formTarea);
       
       // Validaciones básicas
       if (!formTarea.titulo.trim() || !formTarea.descripcion.trim()) {
-        alert('El título y la descripción son obligatorios');
+        await Swal.fire({
+          title: 'Datos incompletos',
+          text: 'El título y la descripción son obligatorios',
+          icon: 'warning',
+          confirmButtonText: 'OK',
+          confirmButtonColor: '#4f46e5'
+        });
         return;
       }
 
-      const result = await apiClient.createTarea(formTarea);
+      const categoriaIdNum = Number(formTarea.categoriaId);
+      if (!Number.isFinite(categoriaIdNum) || categoriaIdNum <= 0) {
+        await Swal.fire({
+          title: 'Datos incompletos',
+          text: 'Debes seleccionar una categoría',
+          icon: 'warning',
+          confirmButtonText: 'OK',
+          confirmButtonColor: '#4f46e5'
+        });
+        return;
+      }
+
+      setSavingTarea(true);
+
+      const enlaceTrim = formTarea.enlace.trim();
+      const hasFile = Boolean(archivoTarea);
+      const hasLink = Boolean(enlaceTrim);
+      const isExternalLink = /^https?:\/\//i.test(enlaceTrim);
+
+      if (hasFile && hasLink) {
+        await Swal.fire({
+          title: 'Adjunto inválido',
+          text: 'Debes elegir SOLO uno: enlace externo o archivo.',
+          icon: 'warning',
+          confirmButtonText: 'OK',
+          confirmButtonColor: '#4f46e5'
+        });
+        return;
+      }
+
+      let payload: Record<string, any> | FormData;
+
+      // Caso A: LINK externo -> JSON
+      if (hasLink && isExternalLink && !hasFile) {
+        payload = {
+          titulo: formTarea.titulo.trim(),
+          descripcion: formTarea.descripcion.trim(),
+          categoriaId: categoriaIdNum,
+          enlace: enlaceTrim,
+          entregableEsperado: formTarea.entregableEsperado.trim() ? formTarea.entregableEsperado.trim() : undefined,
+          gradosObjetivo: formTarea.gradosObjetivo.length > 0 ? formTarea.gradosObjetivo : undefined,
+          esMultiGrado: Boolean(formTarea.esMultiGrado),
+          tipoCalificacion: formTarea.tipoCalificacion,
+        };
+      } else {
+        // Caso B: ARCHIVO real (multipart) o enlace interno/otro string (también multipart para mantener compatibilidad)
+        const fd = new FormData();
+        fd.append('titulo', formTarea.titulo.trim());
+        fd.append('descripcion', formTarea.descripcion.trim());
+        fd.append('categoriaId', String(categoriaIdNum));
+
+        if (hasLink) fd.append('enlace', enlaceTrim);
+        if (formTarea.entregableEsperado.trim()) fd.append('entregableEsperado', formTarea.entregableEsperado.trim());
+        if (formTarea.gradosObjetivo.length > 0) fd.append('gradosObjetivo', JSON.stringify(formTarea.gradosObjetivo));
+        fd.append('esMultiGrado', String(Boolean(formTarea.esMultiGrado)));
+        fd.append('tipoCalificacion', formTarea.tipoCalificacion);
+
+        if (archivoTarea) {
+          fd.append('archivo', archivoTarea);
+        }
+
+        payload = fd;
+      }
+
+      const result = await createTarea(payload);
       console.log('📥 [Tareas] Respuesta crear:', result);
 
       if (result.success) {
-        alert('✅ Tarea creada exitosamente');
+        await Swal.fire({
+          title: 'Tarea creada correctamente',
+          icon: 'success',
+          confirmButtonText: 'OK',
+          confirmButtonColor: '#4f46e5'
+        });
         setModalCrear(false);
         resetForm();
         loadTareas();
       } else {
-        alert(`❌ Error: ${result.message}`);
+        const status = (result as any)?.status;
+        const msg = result.message || 'Error al crear la tarea';
+
+        if (status === 401) {
+          await Swal.fire({
+            title: 'Sesión expirada',
+            text: 'Debes iniciar sesión nuevamente',
+            icon: 'warning',
+            confirmButtonText: 'Ir a login',
+            confirmButtonColor: '#4f46e5'
+          });
+          window.location.href = '/login';
+          return;
+        }
+
+        await Swal.fire({
+          title: 'No se pudo crear la tarea',
+          text: msg,
+          icon: status === 403 ? 'info' : 'error',
+          confirmButtonText: 'OK',
+          confirmButtonColor: '#4f46e5'
+        });
       }
     } catch (error) {
       console.error('❌ [Tareas] Error al crear tarea:', error);
-      alert('Error al crear la tarea');
+      const msg = (error as any)?.message || 'Error al crear la tarea';
+      await Swal.fire({
+        title: 'Error',
+        text: msg,
+        icon: 'error',
+        confirmButtonText: 'OK',
+        confirmButtonColor: '#4f46e5'
+      });
+    } finally {
+      setSavingTarea(false);
     }
   };
 
@@ -156,14 +330,15 @@ export default function TareasPage() {
     setFormTarea({
       titulo: '',
       descripcion: '',
-      categoriaId: 1,
-      tema: '',
+      categoriaId: '',
       enlace: '',
       entregableEsperado: '',
       gradosObjetivo: [],
       esMultiGrado: false,
-      tipoCalificacion: 'cualitativa'
+      tipoCalificacion: 'cualitativa',
     });
+    setArchivoTarea(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const resetFormCategoria = () => {
@@ -190,7 +365,7 @@ export default function TareasPage() {
 
     setSavingCategoria(true);
     try {
-      const result = await apiClient.createCategoria({
+      const result = await createCategoria({
         nombre,
         descripcion: formCategoria.descripcion.trim() ? formCategoria.descripcion.trim() : null,
         icono: formCategoria.icono.trim() ? formCategoria.icono.trim() : null,
@@ -244,6 +419,55 @@ export default function TareasPage() {
     setModalAsignar(true);
   };
 
+  const handleVerDetalleTarea = async (tarea: BancoTarea) => {
+    setModalDetalle(true);
+    setLoadingDetalle(true);
+    setTareaDetalle(null);
+
+    const res = await getTareaById(tarea.id);
+    if (!res.success) {
+      const status = (res as any)?.status;
+      const msg = res.message || 'No se pudo cargar el detalle de la tarea';
+
+      if (status === 401) {
+        await Swal.fire({
+          title: 'Sesión expirada',
+          text: 'Debes iniciar sesión nuevamente',
+          icon: 'warning',
+          confirmButtonText: 'Ir a login',
+          confirmButtonColor: '#4f46e5'
+        });
+        window.location.href = '/login';
+        return;
+      }
+
+      if (status === 404) {
+        await Swal.fire({
+          title: 'Tarea no encontrada',
+          text: msg,
+          icon: 'info',
+          confirmButtonText: 'OK',
+          confirmButtonColor: '#4f46e5'
+        });
+        setModalDetalle(false);
+        return;
+      }
+
+      await Swal.fire({
+        title: 'Error',
+        text: msg,
+        icon: 'error',
+        confirmButtonText: 'OK',
+        confirmButtonColor: '#4f46e5'
+      });
+      setModalDetalle(false);
+      return;
+    }
+
+    setTareaDetalle(normalizeTarea(res.data));
+    setLoadingDetalle(false);
+  };
+
   const tareasFiltradas = tareas.filter(tarea => {
     const matchBusqueda = !busqueda || 
       tarea.titulo.toLowerCase().includes(busqueda.toLowerCase()) ||
@@ -255,7 +479,127 @@ export default function TareasPage() {
   });
 
   const getCategoriaName = (id: number) => {
-    return CATEGORIAS_MOCK.find(c => c.id === id)?.nombre || 'Sin categoría';
+    return categorias.find(c => c.id === id)?.nombre || CATEGORIAS_MOCK.find(c => c.id === id)?.nombre || 'Sin categoría';
+  };
+
+  const buildFileUrl = (pathOrUrl: string) => {
+    if (!pathOrUrl) return '';
+    if (pathOrUrl.startsWith('http')) return pathOrUrl;
+    const base = import.meta.env.VITE_API_URL || 'http://localhost:3333';
+    const baseUrl = new URL(base);
+    const origin = baseUrl.origin;
+    const normalizedPath = pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`;
+    return `${origin}${normalizedPath}`;
+  };
+
+  const isExternalUrl = (value: string) => /^https?:\/\//i.test(value);
+
+  const isBackendStoredUploadPath = (value: string) => {
+    const v = (value || '').trim().toLowerCase();
+    return v.startsWith('/uploads/') || v.startsWith('uploads/');
+  };
+
+  const getToken = (): string | null => {
+    try {
+      const sessionRaw = localStorage.getItem('session');
+      if (!sessionRaw) return null;
+      const parsed = JSON.parse(sessionRaw);
+      return parsed?.token || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const getFileNameFromPath = (path: string) => {
+    try {
+      const clean = path.split('?')[0];
+      const parts = clean.split('/').filter(Boolean);
+      return parts[parts.length - 1] || 'archivo';
+    } catch {
+      return 'archivo';
+    }
+  };
+
+  const fetchFileBlobUrl = async (url: string): Promise<string | null> => {
+    const token = getToken();
+    if (!token) {
+      await Swal.fire({
+        title: 'Sesión requerida',
+        text: 'Debes iniciar sesión nuevamente',
+        icon: 'warning',
+        confirmButtonText: 'Ir a login',
+        confirmButtonColor: '#4f46e5'
+      });
+      window.location.href = '/login';
+      return null;
+    }
+
+    setLoadingFile(true);
+    try {
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (res.status === 401) {
+        await Swal.fire({
+          title: 'Sesión expirada',
+          text: 'Debes iniciar sesión nuevamente',
+          icon: 'warning',
+          confirmButtonText: 'Ir a login',
+          confirmButtonColor: '#4f46e5'
+        });
+        window.location.href = '/login';
+        return null;
+      }
+
+      if (!res.ok) {
+        const msg = res.status === 404
+          ? 'Archivo no existe o fue eliminado'
+          : `Error ${res.status}`;
+        await Swal.fire({
+          title: 'No se pudo abrir el archivo',
+          text: `${msg}\n${url}`,
+          icon: 'error',
+          confirmButtonText: 'OK',
+          confirmButtonColor: '#4f46e5'
+        });
+        return null;
+      }
+
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      if (fileBlobUrl) URL.revokeObjectURL(fileBlobUrl);
+      setFileBlobUrl(blobUrl);
+      return blobUrl;
+    } finally {
+      setLoadingFile(false);
+    }
+  };
+
+  const handleViewInternalFileByTareaId = async (tareaId: number) => {
+    const base = import.meta.env.VITE_API_URL || 'http://localhost:3333';
+    const origin = new URL(base).origin;
+    const url = `${origin}/tareas/${tareaId}/archivo`;
+    const blobUrl = await fetchFileBlobUrl(url);
+    if (!blobUrl) return;
+    window.open(blobUrl, '_blank', 'noreferrer');
+  };
+
+  const handleDownloadInternalFileByTareaId = async (tareaId: number, fileNameHint?: string) => {
+    const base = import.meta.env.VITE_API_URL || 'http://localhost:3333';
+    const origin = new URL(base).origin;
+    const url = `${origin}/tareas/${tareaId}/archivo`;
+    const blobUrl = await fetchFileBlobUrl(url);
+    if (!blobUrl) return;
+
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = fileNameHint || `tarea_${tareaId}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   };
 
   const getGradosText = (gradosIds: number[] | null) => {
@@ -420,6 +764,13 @@ export default function TareasPage() {
 
                 <div className="flex gap-2">
                   <button
+                    onClick={() => handleVerDetalleTarea(tarea)}
+                    className="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
+                    title="Ver detalle"
+                  >
+                    <IconEye size={16} />
+                  </button>
+                  <button
                     onClick={() => handleAsignarTarea(tarea)}
                     className="flex-1 px-3 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium"
                   >
@@ -451,10 +802,6 @@ export default function TareasPage() {
               </div>
               
               <div className="p-6 space-y-4">
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
-                  ⚠️ <strong>Nota temporal:</strong> La categoría está fija en "Valores y Convivencia" mientras el backend configura las categorías.
-                </div>
-
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">Título *</label>
                   <input
@@ -477,38 +824,87 @@ export default function TareasPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Tema</label>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Categoría *</label>
+                  <select
+                    value={formTarea.categoriaId}
+                    onChange={(e) => setFormTarea({ ...formTarea, categoriaId: e.target.value })}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  >
+                    <option value="">Seleccionar...</option>
+                    {categorias.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Enlace (URL o archivo)</label>
+                  <div className="flex gap-2">
                     <input
                       type="text"
-                      value={formTarea.tema}
-                      onChange={(e) => setFormTarea({...formTarea, tema: e.target.value})}
-                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-                      placeholder="Ej: Comunicación"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Enlace</label>
-                    <input
-                      type="url"
                       value={formTarea.enlace}
-                      onChange={(e) => setFormTarea({...formTarea, enlace: e.target.value})}
+                      onChange={(e) => setFormTarea({ ...formTarea, enlace: e.target.value })}
                       className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                       placeholder="https://..."
                     />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
+                      title="Subir archivo"
+                    >
+                      <IconUpload size={16} />
+                    </button>
                   </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx"
+                    onChange={(e) => setArchivoTarea(e.target.files?.[0] || null)}
+                  />
+                  {archivoTarea && (
+                    <div className="text-xs text-slate-600 mt-2">
+                      Archivo seleccionado: <span className="font-medium">{archivoTarea.name}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Tipo de Calificación</label>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="radio"
+                          checked={formTarea.tipoCalificacion === 'cualitativa'}
+                          onChange={() => setFormTarea({ ...formTarea, tipoCalificacion: 'cualitativa' })}
+                          className="border-slate-300 text-teal-600 focus:ring-teal-500"
+                        />
+                        Cualitativa
+                      </label>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="radio"
+                          checked={formTarea.tipoCalificacion === 'cuantitativa'}
+                          onChange={() => setFormTarea({ ...formTarea, tipoCalificacion: 'cuantitativa' })}
+                          className="border-slate-300 text-teal-600 focus:ring-teal-500"
+                        />
+                        Cuantitativa
+                      </label>
+                    </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">Entregable Esperado</label>
                   <textarea
                     value={formTarea.entregableEsperado}
-                    onChange={(e) => setFormTarea({...formTarea, entregableEsperado: e.target.value})}
+                    onChange={(e) => setFormTarea({ ...formTarea, entregableEsperado: e.target.value })}
                     rows={2}
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    placeholder="Ej: Reflexión escrita (1 página)"
+                    placeholder="Ej: Resumen de 1 página"
                   />
                 </div>
 
@@ -522,9 +918,9 @@ export default function TareasPage() {
                           checked={formTarea.gradosObjetivo.includes(grado.id)}
                           onChange={(e) => {
                             if (e.target.checked) {
-                              setFormTarea({...formTarea, gradosObjetivo: [...formTarea.gradosObjetivo, grado.id]});
+                              setFormTarea({ ...formTarea, gradosObjetivo: [...formTarea.gradosObjetivo, grado.id] });
                             } else {
-                              setFormTarea({...formTarea, gradosObjetivo: formTarea.gradosObjetivo.filter(id => id !== grado.id)});
+                              setFormTarea({ ...formTarea, gradosObjetivo: formTarea.gradosObjetivo.filter(id => id !== grado.id) });
                             }
                           }}
                           className="rounded border-slate-300 text-teal-600 focus:ring-teal-500"
@@ -540,50 +936,29 @@ export default function TareasPage() {
                     <input
                       type="checkbox"
                       checked={formTarea.esMultiGrado}
-                      onChange={(e) => setFormTarea({...formTarea, esMultiGrado: e.target.checked})}
+                      onChange={(e) => setFormTarea({ ...formTarea, esMultiGrado: e.target.checked })}
                       className="rounded border-slate-300 text-teal-600 focus:ring-teal-500"
                     />
                     Es multi-grado
                   </label>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Tipo de Calificación</label>
-                  <div className="flex gap-4">
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="radio"
-                        checked={formTarea.tipoCalificacion === 'cualitativa'}
-                        onChange={() => setFormTarea({...formTarea, tipoCalificacion: 'cualitativa'})}
-                        className="border-slate-300 text-teal-600 focus:ring-teal-500"
-                      />
-                      Cualitativa
-                    </label>
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="radio"
-                        checked={formTarea.tipoCalificacion === 'cuantitativa'}
-                        onChange={() => setFormTarea({...formTarea, tipoCalificacion: 'cuantitativa'})}
-                        className="border-slate-300 text-teal-600 focus:ring-teal-500"
-                      />
-                      Cuantitativa
-                    </label>
-                  </div>
-                </div>
               </div>
 
               <div className="sticky bottom-0 bg-slate-50 border-t border-slate-200 px-6 py-4 flex gap-3">
                 <button
                   onClick={() => { setModalCrear(false); resetForm(); }}
                   className="flex-1 px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors font-medium"
+                  disabled={savingTarea}
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleCrearTarea}
-                  className="flex-1 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors font-medium"
+                  className="flex-1 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors font-medium disabled:opacity-50"
+                  disabled={savingTarea}
                 >
-                  Crear Tarea
+                  {savingTarea ? 'Creando...' : 'Crear Tarea'}
                 </button>
               </div>
             </div>
@@ -676,6 +1051,130 @@ export default function TareasPage() {
               <div className="bg-slate-50 border-t border-slate-200 px-6 py-4 rounded-b-2xl">
                 <button
                   onClick={() => { setModalAsignar(false); setTareaSeleccionada(null); }}
+                  className="w-full px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors font-medium"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Detalle Tarea */}
+        {modalDetalle && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-slate-800">Detalle de tarea</h2>
+                <button
+                  onClick={() => {
+                    setModalDetalle(false);
+                    setTareaDetalle(null);
+                    if (fileBlobUrl) URL.revokeObjectURL(fileBlobUrl);
+                    setFileBlobUrl(null);
+                  }}
+                  className="text-slate-400 hover:text-slate-600"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                {loadingDetalle || !tareaDetalle ? (
+                  <div className="flex items-center justify-center h-40">
+                    <LoadingSpinner size="md" text="Cargando detalle..." />
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <h3 className="text-lg font-semibold text-slate-800">{tareaDetalle.titulo}</h3>
+                      <p className="text-slate-600 mt-1 whitespace-pre-wrap">{tareaDetalle.descripcion}</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                        <div className="text-xs text-slate-500">Categoría</div>
+                        <div className="font-medium text-slate-800">{getCategoriaName(tareaDetalle.categoriaId)}</div>
+                      </div>
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                        <div className="text-xs text-slate-500">Tipo de calificación</div>
+                        <div className="font-medium text-slate-800">{tareaDetalle.tipoCalificacion}</div>
+                      </div>
+                    </div>
+
+                    {tareaDetalle.enlace && (
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                        <div className="text-xs text-slate-500">Enlace / Archivo</div>
+                        <div className="space-y-3">
+                          <div className="text-slate-700 break-all text-sm">{tareaDetalle.enlace}</div>
+
+                          {isExternalUrl(tareaDetalle.enlace) ? (
+                            <button
+                              type="button"
+                              onClick={() => window.open(tareaDetalle.enlace as string, '_blank', 'noreferrer')}
+                              className="inline-flex px-3 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium"
+                            >
+                              Ver enlace
+                            </button>
+                          ) : isBackendStoredUploadPath(tareaDetalle.enlace) ? (
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleViewInternalFileByTareaId(tareaDetalle.id)}
+                                className="px-3 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium disabled:opacity-50"
+                                disabled={loadingFile}
+                              >
+                                {loadingFile ? 'Cargando...' : 'Ver archivo'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDownloadInternalFileByTareaId(tareaDetalle.id, getFileNameFromPath(tareaDetalle.enlace as string))}
+                                className="px-3 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors text-sm font-medium disabled:opacity-50"
+                                disabled={loadingFile}
+                              >
+                                Descargar archivo
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="text-sm text-slate-600">
+                              Este adjunto no es un enlace externo válido.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {tareaDetalle.entregableEsperado && (
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                        <div className="text-xs text-slate-500">Entregable esperado</div>
+                        <div className="font-medium text-slate-800 whitespace-pre-wrap">{tareaDetalle.entregableEsperado}</div>
+                      </div>
+                    )}
+
+                    {tareaDetalle.gradosObjetivo && tareaDetalle.gradosObjetivo.length > 0 && (
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                        <div className="text-xs text-slate-500">Grados objetivo</div>
+                        <div className="font-medium text-slate-800">{getGradosText(tareaDetalle.gradosObjetivo)}</div>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                        <div className="text-xs text-slate-500">Es multi-grado</div>
+                        <div className="font-medium text-slate-800">{tareaDetalle.esMultiGrado ? 'Sí' : 'No'}</div>
+                      </div>
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                        <div className="text-xs text-slate-500">Veces utilizada</div>
+                        <div className="font-medium text-slate-800">{tareaDetalle.vecesUtilizada || 0}</div>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="bg-slate-50 border-t border-slate-200 px-6 py-4">
+                <button
+                  onClick={() => { setModalDetalle(false); setTareaDetalle(null); }}
                   className="w-full px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors font-medium"
                 >
                   Cerrar

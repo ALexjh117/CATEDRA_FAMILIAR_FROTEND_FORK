@@ -154,6 +154,21 @@ export async function loginUnicoMultiRol(correo: string, contrasena: string): Pr
   }
 }
 
+export async function getTareaById(tareaId: number): Promise<{ success: boolean; data?: any; message?: string; status?: number }> {
+  try {
+    const response = await httpService.get<any>(`/tareas/${tareaId}`);
+    const raw = response.data as any;
+
+    if (raw?.success === false) {
+      return { success: false, message: raw?.message || 'Error al obtener tarea', status: response.status };
+    }
+
+    return { success: true, data: raw?.data ?? raw, message: raw?.message, status: response.status };
+  } catch (error: any) {
+    return { success: false, message: error?.message || 'Error de conexión', status: error?.status };
+  }
+}
+
 export async function updateEstudianteOrientador(estudianteId: number, data: Record<string, any>): Promise<{ success: boolean; data?: any; message?: string }> {
   try {
     const response = await httpService.put<any>(`/estudiantes/${estudianteId}`, data);
@@ -230,5 +245,82 @@ export async function getEstudiantesInstitucionOrientador(): Promise<any[]> {
     return Array.isArray(data) ? data : [];
   } catch (error: any) {
     throw new Error(error?.message || 'Error de conexión');
+  }
+}
+
+export async function getCategorias(): Promise<{ success: boolean; data: any[]; message?: string; status?: number }> {
+  try {
+    const response = await httpService.get<any>('/categorias');
+    const raw = response.data as any;
+
+    if (raw?.success === false) {
+      return { success: false, data: [], message: raw?.message || 'Error al obtener categorías' };
+    }
+
+    const data = raw?.data ?? raw?.categorias ?? raw;
+    return { success: true, data: Array.isArray(data) ? data : [], message: raw?.message };
+  } catch (error: any) {
+    return {
+      success: false,
+      data: [],
+      status: error?.status,
+      message: error?.message || 'Error de conexión'
+    };
+  }
+}
+
+export async function getTareas(): Promise<{ success: boolean; data: any[]; message?: string; status?: number }> {
+  try {
+    const response = await httpService.get<any>('/tareas');
+    const raw = response.data as any;
+
+    if (raw?.success === false) {
+      return { success: false, data: [], message: raw?.message || 'Error al obtener tareas' };
+    }
+
+    const data = raw?.data ?? raw?.tareas ?? raw;
+    return { success: true, data: Array.isArray(data) ? data : [], message: raw?.message };
+  } catch (error: any) {
+    return {
+      success: false,
+      data: [],
+      status: error?.status,
+      message: error?.message || 'Error de conexión'
+    };
+  }
+}
+
+export async function createTarea(data: Record<string, any> | FormData): Promise<{ success: boolean; data?: any; message?: string; status?: number }> {
+  try {
+    const response = await httpService.post<any>('/tareas', data);
+    const raw = response.data as any;
+
+    if (raw?.success === false) {
+      return { success: false, message: raw?.message || 'Error al crear tarea', status: response.status };
+    }
+
+    return { success: true, data: raw?.data ?? raw, message: raw?.message, status: response.status };
+  } catch (error: any) {
+    return { success: false, message: error?.message || 'Error de conexión', status: error?.status };
+  }
+}
+
+export async function createCategoria(data: {
+  nombre: string;
+  descripcion?: string | null;
+  color?: string | null;
+  icono?: string | null;
+}): Promise<{ success: boolean; data?: any; message?: string; status?: number }> {
+  try {
+    const response = await httpService.post<any>('/categorias', data);
+    const raw = response.data as any;
+
+    if (raw?.success === false) {
+      return { success: false, message: raw?.message || 'Error al crear categoría', status: response.status };
+    }
+
+    return { success: true, data: raw?.data ?? raw, message: raw?.message, status: response.status };
+  } catch (error: any) {
+    return { success: false, message: error?.message || 'Error de conexión', status: error?.status };
   }
 }
