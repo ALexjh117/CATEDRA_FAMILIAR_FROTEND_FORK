@@ -62,7 +62,25 @@ export async function listarTareasEstudiante(estudianteId: number, opts: { perio
   const res = await httpService.get(`/estudiantes/${estudianteId}/tareas`, params);
   const body: any = res.data;
   const data = (body && typeof body === 'object' && 'data' in body) ? (body as any).data : body;
-  if (Array.isArray(data) && data.length > 0) return data as TareaAsignadaMovil[];
+  if (Array.isArray(data) && data.length > 0) {
+    // Normalizar campos posibles del backend
+    return data.map((a: any) => {
+      const estadoRaw = a.estado || a.status || 'pendiente';
+      const estadoNorm: TareaAsignadaMovil['estado'] = (
+        ['pendiente','entregada','calificada','vencida','entregada_tardia'] as const
+      ).includes(estadoRaw) ? estadoRaw : 'pendiente';
+      return {
+        id: Number(a.id),
+        titulo: a.titulo || a.nombre || 'Tarea',
+        descripcion: a.descripcion || a.detalle || '',
+        fechaInicio: a.fechaInicio || a.fecha_inicio,
+        fechaVencimiento: a.fechaVencimiento || a.fecha_vencimiento,
+        estado: estadoNorm,
+        cursoId: a.cursoId || a.curso_id,
+        cursoNombre: a.cursoNombre || a.curso?.nombre,
+      } as TareaAsignadaMovil;
+    });
+  }
   // Fallback: usar historial para mostrar tareas ya entregadas/calificadas
   try {
     const hist = await listarHistorialEstudiante(estudianteId, opts);
