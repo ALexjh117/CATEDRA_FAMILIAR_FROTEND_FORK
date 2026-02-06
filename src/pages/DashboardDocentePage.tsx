@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getSession, getTareasByDocente, getEntregasPendientesCalificar, getEstadisticasDocente, getCursos } from '../api/endpoints';
 import { type Tarea, type Entrega, type Curso } from '../mocks/data';
-import DashboardLayout from '../components/DashboardLayout';
+import TeacherLayout from '../components/TeacherLayout';
 import TareaCard from '../components/TareaCard';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import EmptyState from '../components/ui/EmptyState';
@@ -18,13 +19,13 @@ import {
   IconUsers, 
   IconClock,
   IconFileText,
-  IconPlus,
   IconDownload
 } from '../components/ui/Icons';
 
 export default function DashboardDocentePage() {
   const session = getSession();
   const user = session?.user;
+  const navigate = useNavigate();
   
   const [loading, setLoading] = useState(true);
   const [tareas, setTareas] = useState<Tarea[]>([]);
@@ -32,7 +33,6 @@ export default function DashboardDocentePage() {
   const [cursos, setCursos] = useState<Curso[]>([]);
   const [estadisticas, setEstadisticas] = useState<any>(null);
   const [filtroEstado, setFiltroEstado] = useState<'todas' | 'activas' | 'cerradas'>('todas');
-  const [modalNuevaTarea, setModalNuevaTarea] = useState(false);
   const [modalCalificar, setModalCalificar] = useState<{ open: boolean; entrega: Entrega | null }>({ open: false, entrega: null });
   const [galleryOpen, setGalleryOpen] = useState<{ open: boolean; images: string[]; initialIndex: number }>({ 
     open: false, 
@@ -40,14 +40,7 @@ export default function DashboardDocentePage() {
     initialIndex: 0 
   });
 
-  // Form states
-  const [nuevaTarea, setNuevaTarea] = useState({
-    titulo: '',
-    descripcion: '',
-    categoriaId: 1,
-    cursoId: 1,
-    fechaLimite: '',
-  });
+  // Form states removidos: creación de tareas no disponible para docente
 
   useEffect(() => {
     loadData();
@@ -76,118 +69,7 @@ export default function DashboardDocentePage() {
     }
   };
 
-  const handleCrearTarea = async () => {
-    if (!nuevaTarea.titulo || !nuevaTarea.descripcion) {
-      console.error('Título y descripción son obligatorios');
-      return;
-    }
-
-    try {
-      // Crear la tarea
-      const tareaData = {
-        id: Date.now(),
-        titulo: nuevaTarea.titulo,
-        descripcion: nuevaTarea.descripcion,
-        cursoId: nuevaTarea.cursoId,
-        docenteId: session?.user?.id || 1,
-        fechaCreacion: new Date().toISOString(),
-        fechaLimite: nuevaTarea.fechaLimite || undefined,
-        estado: 'activa' as const,
-        categoriaId: nuevaTarea.categoriaId
-      };
-
-      console.log('Crear tarea:', tareaData);
-      
-      // Enviar notificaciones automáticas
-      await enviarNotificacionesNuevaTarea(tareaData);
-      
-      setModalNuevaTarea(false);
-      setNuevaTarea({
-        titulo: '',
-        descripcion: '',
-        categoriaId: 1,
-        cursoId: 1,
-        fechaLimite: '',
-      });
-      
-      // Reload data
-      loadData();
-    } catch (error) {
-      console.error('Error creando tarea:', error);
-    }
-  };
-
-  const enviarNotificacionesNuevaTarea = async (tarea: any) => {
-    try {
-      const curso = cursos.find(c => c.id === tarea.cursoId);
-      if (!curso) return;
-
-      // Simular obtención de estudiantes del curso
-      const estudiantesCurso = estudiantesMock.slice(0, 3); // Mock data
-      
-      let notificacionesEnviadas = 0;
-
-      // Crear notificaciones para estudiantes
-      for (const estudiante of estudiantesCurso) {
-        const notificacionEstudiante = {
-          id: Date.now() + Math.random(),
-          usuarioId: estudiante.id,
-          titulo: `📚 Nueva tarea: ${tarea.titulo}`,
-          mensaje: `Se ha asignado una nueva tarea en ${curso.nombre}: ${tarea.titulo}`,
-          tipo: 'tarea_nueva' as const,
-          fecha: new Date().toISOString(),
-          leido: false,
-          datos: {
-            tareaId: tarea.id,
-            cursoId: tarea.cursoId,
-            docenteNombre: session?.user?.nombre || 'Docente'
-          }
-        };
-
-        console.log('📧 Notificación enviada a estudiante:', notificacionEstudiante);
-        notificacionesEnviadas++;
-
-        // Notificar a acudientes del estudiante
-        const acudientesEstudiante = Object.values(usuariosMock).filter((user: any) => 
-          user.rol === 'acudiente'
-        ).slice(0, 2); // Mock: máximo 2 acudientes por estudiante
-
-        for (const acudiente of acudientesEstudiante) {
-          const notificacionAcudiente = {
-            id: Date.now() + Math.random(),
-            usuarioId: acudiente.id,
-            titulo: `👨‍👩‍👧‍👦 Nueva tarea para ${estudiante.nombre}`,
-            mensaje: `Su hijo/a ${estudiante.nombre} ${estudiante.apellidos} tiene una nueva tarea en ${curso.nombre}: ${tarea.titulo}. Fecha límite: ${tarea.fechaLimite ? new Date(tarea.fechaLimite).toLocaleDateString() : 'Sin límite'}`,
-            tipo: 'tarea_nueva' as const,
-            fecha: new Date().toISOString(),
-            leido: false,
-            datos: {
-              tareaId: tarea.id,
-              cursoId: tarea.cursoId,
-              estudianteId: estudiante.id,
-              estudianteNombre: `${estudiante.nombre} ${estudiante.apellidos}`,
-              docenteNombre: session?.user?.nombre || 'Docente'
-            }
-          };
-
-          console.log('📧 Notificación enviada a acudiente:', notificacionAcudiente);
-          notificacionesEnviadas++;
-        }
-      }
-
-      // Mostrar confirmación al docente
-      console.log(`✅ ${notificacionesEnviadas} notificaciones enviadas exitosamente`);
-      console.log(`📊 Resumen: ${estudiantesCurso.length} estudiantes y sus acudientes notificados`);
-      
-      // Simular notificación al docente de confirmación
-      setTimeout(() => {
-        console.log('🔔 Notificación de confirmación: Las notificaciones se enviaron correctamente');
-      }, 1000);
-      
-    } catch (error) {
-      console.error('❌ Error enviando notificaciones:', error);
-    }
-  };
+  // Lógica de creación eliminada: el docente solo asigna desde Banco de Tareas
 
   const handleCalificar = async (entregaId: number, calificacion: number, retroalimentacion: string) => {
     // TODO: Implement calificar API call
@@ -206,16 +88,16 @@ export default function DashboardDocentePage() {
 
   if (loading) {
     return (
-      <DashboardLayout>
+      <TeacherLayout>
         <div className="flex items-center justify-center h-64">
           <LoadingSpinner size="lg" text="Cargando tu panel..." />
         </div>
-      </DashboardLayout>
+      </TeacherLayout>
     );
   }
 
   return (
-    <DashboardLayout>
+    <TeacherLayout>
       <div className="max-w-6xl mx-auto space-y-8">
         {/* Header con gradiente sutil */}
         <div className="relative overflow-hidden bg-gradient-to-br from-slate-50 via-teal-50/40 to-emerald-50/30 rounded-2xl p-6 border border-teal-100/50">
@@ -248,10 +130,7 @@ export default function DashboardDocentePage() {
                 <IconDownload size={16} />
                 Exportar
               </Button>
-              <Button onClick={() => setModalNuevaTarea(true)} className="flex items-center gap-2">
-                <IconPlus size={18} />
-                Nueva Tarea
-              </Button>
+              
             </div>
           </div>
         </div>
@@ -359,14 +238,14 @@ export default function DashboardDocentePage() {
                     stroke="#10b981"
                     strokeWidth="8"
                     fill="transparent"
-                    strokeDasharray={`${(75 * 251) / 100} 251`}
+                    strokeDasharray={`${(((estadisticas?.porcentajeParticipacion || 0) * 251) / 100)} 251`}
                     strokeLinecap="round"
                     className="transition-all duration-1000"
                   />
                 </svg>
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-gray-800">75%</div>
+                    <div className="text-3xl font-bold text-gray-800">{estadisticas?.porcentajeParticipacion ?? 0}%</div>
                     <div className="text-sm text-gray-600">Participación</div>
                   </div>
                 </div>
@@ -508,12 +387,12 @@ export default function DashboardDocentePage() {
           
           {tareasFiltradas.length === 0 ? (
             <EmptyState
-              title="No hay tareas"
-              description="Crea tu primera tarea familiar para comenzar"
+              title="No hay tareas asignadas"
+              description="Asigna actividades desde el Banco de Tareas para comenzar"
               icon={<IconFileText className="text-slate-400" size={56} />}
               action={{
-                label: "Crear primera tarea",
-                onClick: () => setModalNuevaTarea(true)
+                label: "Ir a Banco de Tareas",
+                onClick: () => navigate('/docente/banco-tareas')
               }}
             />
           ) : (
@@ -530,86 +409,7 @@ export default function DashboardDocentePage() {
         </div>
       </div>
 
-      {/* Modal Nueva Tarea */}
-      <Modal
-        isOpen={modalNuevaTarea}
-        onClose={() => setModalNuevaTarea(false)}
-        title="Nueva Tarea Familiar"
-        size="lg"
-      >
-        <div className="space-y-4">
-          <FormFieldInput
-            name="titulo"
-            label="Título de la tarea"
-            placeholder="Ej: Lectura en familia"
-            value={nuevaTarea.titulo}
-            onChange={(e) => setNuevaTarea({ ...nuevaTarea, titulo: e.target.value })}
-            required
-          />
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Descripción
-            </label>
-            <textarea
-              className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-teal-500 outline-none min-h-[100px]"
-              placeholder="Describe la actividad que la familia debe realizar..."
-              value={nuevaTarea.descripcion}
-              onChange={(e) => setNuevaTarea({ ...nuevaTarea, descripcion: e.target.value })}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Categoría
-              </label>
-              <select
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-teal-500 outline-none"
-                value={nuevaTarea.categoriaId}
-                onChange={(e) => setNuevaTarea({ ...nuevaTarea, categoriaId: Number(e.target.value) })}
-              >
-                {categoriasMock.map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.nombre}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Curso
-              </label>
-              <select
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-teal-500 outline-none"
-                value={nuevaTarea.cursoId}
-                onChange={(e) => setNuevaTarea({ ...nuevaTarea, cursoId: Number(e.target.value) })}
-              >
-                {cursos.map(curso => (
-                  <option key={curso.id} value={curso.id}>{curso.nombre}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <FormFieldInput
-            name="fechaLimite"
-            label="Fecha límite"
-            type="date"
-            value={nuevaTarea.fechaLimite}
-            onChange={(e) => setNuevaTarea({ ...nuevaTarea, fechaLimite: e.target.value })}
-            required
-          />
-
-          <div className="flex justify-end gap-3 pt-4">
-            <Button variant="ghost" onClick={() => setModalNuevaTarea(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleCrearTarea}>
-              Crear Tarea
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      {/* Modal Nueva Tarea removido: el docente solo asigna desde Banco de Tareas */}
 
       {/* Modal Calificar */}
       <Modal
@@ -638,7 +438,7 @@ export default function DashboardDocentePage() {
           onClose={() => setGalleryOpen({ open: false, images: [], initialIndex: 0 })}
         />
       )}
-    </DashboardLayout>
+    </TeacherLayout>
   );
 }
 

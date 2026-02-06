@@ -48,14 +48,20 @@ function extractRolFromMessage(message?: unknown): RolUsuario | undefined {
   return normalizeRol(match?.[1]);
 }
 
-export async function loginUnicoMultiRol(correo: string, contrasena: string): Promise<LoginUnicoResult> {
+export async function loginUnicoMultiRol(correo: string, contrasena: string, captchaToken?: string | null): Promise<LoginUnicoResult> {
   try {
     const response = await httpService.post<any>('/login', {
       correo,
       email: correo,
       usuario: correo,
       contrasena,
-      password: contrasena
+      password: contrasena,
+      // Enviar token de reCAPTCHA usando claves comunes para maximizar compatibilidad
+      recaptcha: captchaToken,
+      reCaptcha: captchaToken,
+      recaptchaToken: captchaToken,
+      token_captcha: captchaToken,
+      captchaToken: captchaToken
     });
 
     const raw = response.data as any;

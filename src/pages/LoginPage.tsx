@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import ReCAPTCHA from 'react-google-recaptcha';
 import { useNavigate, Link } from 'react-router-dom';
 import { setPreviewRole } from '../api/endpoints';
 import { loginUnicoMultiRol } from '../api/endpointsDocente-orinetador';
@@ -53,6 +54,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const siteKey = (import.meta as any).env?.VITE_RECAPTCHA_SITE_KEY as string | undefined;
   const [formData, setFormData] = useState({
     correo: '',
     password: '',
@@ -98,7 +100,7 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const result = await loginUnicoMultiRol(formData.correo, formData.password);
+      const result = await loginUnicoMultiRol(formData.correo, formData.password, captchaToken);
 
       if (result.success && result.user) {
         // Verificar si debe cambiar contraseña
@@ -248,7 +250,13 @@ export default function LoginPage() {
             )}
 
             {/* reCAPTCHA - Obligatorio según HU-05 */}
-            <ReCAPTCHAMock onChange={setCaptchaToken} />
+            {siteKey ? (
+              <div className="flex justify-center">
+                <ReCAPTCHA sitekey={siteKey} onChange={(token) => setCaptchaToken(token)} />
+              </div>
+            ) : (
+              <ReCAPTCHAMock onChange={setCaptchaToken} />
+            )}
 
             <Button 
               type="submit" 
