@@ -935,13 +935,44 @@ export const getEstadisticasDocente = async (docenteId: number) => {
   try {
     const tareas = await getTareas();
     const tareasDocente = tareas.filter(t => t.docenteId === docenteId);
-    
+
+    // Cursos asociados a las tareas del docente
+    const cursoIds = Array.from(new Set(tareasDocente.map(t => t.cursoId).filter(Boolean)));
+
+    // Entregas relacionadas a las tareas del docente (mock)
+    const entregasDocente = entregasMock.filter(e => tareasDocente.some(t => t.id === e.tareaId));
+    const entregasPorRevisar = entregasDocente.filter(e => e.estado === 'enviada').length;
+    const entregasCalificadas = entregasDocente.filter(e => e.estado === 'calificada').length;
+
+    // Estudiantes de los cursos involucrados
+    const estudiantesCursos = estudiantesMock.filter(est => cursoIds.includes(est.cursoId as any));
+    const estudiantesIds = new Set(estudiantesCursos.map(e => e.id));
+
+    // Familias (acudientes) vinculadas a esos estudiantes
+    const familiasIds = new Set<number>();
+    estudiantesAcudientesMock.forEach(v => {
+      if (estudiantesIds.has(v.estudianteId)) familiasIds.add(v.acudienteId);
+    });
+    const familiasTotales = familiasIds.size;
+
+    // Participación: % de estudiantes con al menos una entrega entre sus tareas activas
+    const tareasActivas = tareasDocente.filter(t => t.estado === 'activa');
+    const tareasActivasIds = new Set(tareasActivas.map(t => t.id));
+    const entregasActivas = entregasDocente.filter(e => tareasActivasIds.has(e.tareaId));
+    const estudiantesConEntrega = new Set<number>();
+    entregasActivas.forEach(e => estudiantesConEntrega.add(e.estudianteId));
+    const totalEstudiantes = estudiantesCursos.length;
+    const porcentajeParticipacion = totalEstudiantes > 0
+      ? Math.round((estudiantesConEntrega.size / totalEstudiantes) * 100)
+      : 0;
+
     return {
-      tareasActivas: tareasDocente.filter(t => t.estado === 'activa').length,
-      entregasPorRevisar: 0, // Se calculará cuando el endpoint de entregas esté disponible
-      entregasCalificadas: 0,
-      familiasTotales: 0,
-      porcentajeParticipacion: 0
+      tareasActivas: tareasActivas.length,
+      entregasPorRevisar,
+      entregasCalificadas,
+      familiasTotales,
+      porcentajeParticipacion,
+      totalEstudiantes
     };
   } catch (error) {
     console.error('Error al obtener estadísticas del docente:', error);
@@ -950,7 +981,8 @@ export const getEstadisticasDocente = async (docenteId: number) => {
       entregasPorRevisar: 0,
       entregasCalificadas: 0,
       familiasTotales: 0,
-      porcentajeParticipacion: 0
+      porcentajeParticipacion: 0,
+      totalEstudiantes: 0
     };
   }
 };

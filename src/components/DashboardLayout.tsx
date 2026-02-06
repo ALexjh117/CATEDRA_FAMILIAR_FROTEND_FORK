@@ -127,10 +127,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         return [
           ...commonItems,
           { type: 'link', path: '/dashboard/docente', label: 'Mi Panel', icon: 'dashboard' },
-          { type: 'link', path: '/tareas', label: 'Tareas', icon: 'tasks' },
-          { type: 'link', path: '/tareas/crear', label: 'Crear Tarea', icon: 'plus' },
+          { type: 'link', path: '/docente/banco-tareas', label: 'Banco de Tareas', icon: 'tasks' },
           { type: 'link', path: '/entregas', label: 'Entregas', icon: 'inbox' },
-          { type: 'link', path: '/estudiantes', label: 'Estudiantes', icon: 'users' },
+          { type: 'link', path: '/docente/estudiantes', label: 'Estudiantes', icon: 'users' },
+          { type: 'link', path: '/docente/acudientes', label: 'Acudientes', icon: 'users' },
           { type: 'link', path: '/reportes/docente', label: 'Reportes', icon: 'reports' },
           profileItem,
         ];

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getSession, getTareas, getEntregas, getCursos } from '../../api/endpoints';
-import { type Tarea, type Entrega, type Curso } from '../../mocks/data';
+import { listarCursos, type CursoBackend } from '../../api/docentes';
+import { type Tarea, type Entrega } from '../../mocks/data';
 import DashboardLayout from '../DashboardLayout';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import { exportToExcel, exportEstadisticasToPDF } from '../../utils/exportUtils';
@@ -30,7 +31,7 @@ export default function ReportesDocente() {
   const [generando, setGenerando] = useState(false);
   const [tareas, setTareas] = useState<Tarea[]>([]);
   const [entregas, setEntregas] = useState<Entrega[]>([]);
-  const [cursos, setCursos] = useState<Curso[]>([]);
+  const [cursos, setCursos] = useState<CursoBackend[]>([]);
   const [periodoSeleccionado, setPeriodoSeleccionado] = useState('2026-1');
   const [reporteSeleccionado, setReporteSeleccionado] = useState<TipoReporte | null>(null);
 
@@ -72,10 +73,9 @@ export default function ReportesDocente() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [tareasData, entregasData, cursosData] = await Promise.all([
+      const [tareasData, entregasData] = await Promise.all([
         getTareas(),
-        getEntregas(),
-        getCursos()
+        getEntregas()
       ]);
 
       const misTareas = Array.isArray(tareasData) 
@@ -90,11 +90,21 @@ export default function ReportesDocente() {
       
       setEntregas(misEntregas);
       
-      const misCursos = Array.isArray(cursosData)
-        ? cursosData.filter(c => misTareas.some(t => t.cursoId === c.id))
-        : [];
-      
-      setCursos(misCursos);
+      // Cursos: intentar endpoints.getCursos primero, luego fallback a docentes.listarCursos
+      let cursosReal: any = [];
+      try {
+        const resCursos = await getCursos() as any;
+        const body = resCursos?.data || resCursos;
+        if (Array.isArray(body?.cursos)) cursosReal = body.cursos;
+        else if (Array.isArray(body?.data?.data)) cursosReal = body.data.data;
+        else if (Array.isArray(body?.data)) cursosReal = body.data;
+        else if (Array.isArray(body?.items)) cursosReal = body.items;
+        else if (Array.isArray(body)) cursosReal = body;
+      } catch {}
+      if (!Array.isArray(cursosReal) || cursosReal.length === 0) {
+        try { cursosReal = await listarCursos(); } catch { cursosReal = []; }
+      }
+      setCursos(Array.isArray(cursosReal) ? cursosReal : []);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -149,35 +159,30 @@ export default function ReportesDocente() {
   const generarReporteCursos = async () => {
     setGenerando(true);
     try {
-      const data = cursos.map(curso => {
-        const tareasCurso = tareas.filter(t => t.cursoId === curso.id);
-        const entregasCurso = entregas.filter(e => tareasCurso.some(t => t.id === e.tareaId));
-        
-        return {
-          'Curso': curso.nombre,
-          'Grado': curso.grado,
-          'Total Tareas': tareasCurso.length,
-          'Tareas Activas': tareasCurso.filter(t => t.estado === 'activa').length,
-          'Total Entregas': entregasCurso.length,
-          'Promedio Calificaciones': entregasCurso.length > 0
-            ? (entregasCurso.reduce((sum, e) => sum + Number(e.calificacion || 0), 0) / entregasCurso.length).toFixed(1)
-            : 'N/A'
-        };
-      });
-
-      if (data.length === 0) {
-        data.push({
-          'Curso': 'Sin cursos asignados',
-          'Grado': '-',
-          'Total Tareas': '-',
-          'Tareas Activas': '-',
-          'Total Entregas': '-',
-          'Promedio Calificaciones': '-'
-        });
+      // Reutilizar misma estrategia de carga de cursos para exportar
+      let cursosExport: any = [];
+      try {
+        const resCursos = await getCursos() as any;
+        const body = resCursos?.data || resCursos;
+        if (Array.isArray(body?.cursos)) cursosExport = body.cursos;
+        else if (Array.isArray(body?.data?.data)) cursosExport = body.data.data;
+        else if (Array.isArray(body?.data)) cursosExport = body.data;
+        else if (Array.isArray(body?.items)) cursosExport = body.items;
+        else if (Array.isArray(body)) cursosExport = body;
+      } catch {}
+      if (!Array.isArray(cursosExport) || cursosExport.length === 0) {
+        try { cursosExport = await listarCursos(); } catch { cursosExport = []; }
       }
 
+      const data = (cursosExport || []).map((curso: any) => ({
+        'Curso': curso.nombre || `Curso #${curso.id}`,
+        'GradoId': curso.gradoId ?? '-',
+        'Jornada': curso.jornada ?? '-',
+        'InstitucionId': curso.institucionId ?? '-',
+      }));
+
       exportToExcel(
-        data,
+        data.length > 0 ? data : [{ 'Curso': 'Sin cursos asignados', 'GradoId': '-', 'Jornada': '-', 'InstitucionId': '-' }],
         `Reporte_Cursos_Docente_${periodoSeleccionado}`,
         'Mis Cursos'
       );
