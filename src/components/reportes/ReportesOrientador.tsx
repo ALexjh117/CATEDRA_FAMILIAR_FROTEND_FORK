@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { getSession } from '../../api/endpoints';
 import apiClient from '../../api/apiClient';
 import DashboardLayout from '../DashboardLayout';
+import OrientadorLayout from '../orientador-acudiente/OrientadorLayout';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import { exportToExcel, exportEstadisticasToPDF } from '../../utils/exportUtils';
 import {
@@ -26,6 +27,8 @@ interface ReporteConfig {
 export default function ReportesOrientador() {
   const session = getSession();
   const user = session?.user;
+
+  const Layout = user?.rol === 'orientador' ? OrientadorLayout : DashboardLayout;
 
   const [loading, setLoading] = useState(true);
   const [generando, setGenerando] = useState(false);
@@ -208,12 +211,12 @@ export default function ReportesOrientador() {
 
   if (loading) {
     return (
-      <DashboardLayout>
+      <Layout>
         <div className="flex flex-col items-center justify-center h-64 gap-4">
           <LoadingSpinner size="lg" />
           <p className="text-slate-500 animate-pulse">Cargando reportes de orientación...</p>
         </div>
-      </DashboardLayout>
+      </Layout>
     );
   }
 
@@ -225,7 +228,7 @@ export default function ReportesOrientador() {
   };
 
   return (
-    <DashboardLayout>
+    <Layout>
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="relative overflow-hidden bg-gradient-to-br from-rose-600 via-pink-600 to-purple-600 rounded-2xl p-8 text-white shadow-xl">
@@ -379,6 +382,6 @@ export default function ReportesOrientador() {
           </div>
         </div>
       </div>
-    </DashboardLayout>
+    </Layout>
   );
 }

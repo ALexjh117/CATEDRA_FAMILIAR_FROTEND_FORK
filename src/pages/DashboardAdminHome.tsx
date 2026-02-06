@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
 import { getInstituciones, getSession } from '../api/endpoints';
-import { IconUsers, IconBuilding, IconSettings } from '../components/ui/Icons';
+import { PageLoading, StatsCardSkeleton, ButtonLoading } from '../components/ui/LoadingStates';
+import { ErrorState } from '../components/ui/ErrorStates';
+import { IconUsers, IconBuilding, IconSettings, IconRefresh } from '../components/ui/Icons';
 
 export default function DashboardAdminHome() {
   const session = getSession();
   const [counts, setCounts] = useState({ instituciones: 0, pendientes: 0 });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteLoading, setInviteLoading] = useState(false);
@@ -17,16 +20,28 @@ export default function DashboardAdminHome() {
 
   const load = async () => {
     setLoading(true);
+    setError(null);
     try {
       const instituciones = await getInstituciones();
+      // Validar que sea un array
+      if (!Array.isArray(instituciones)) {
+        throw new Error('Datos de instituciones inválidos');
+      }
       // El backend solo tiene /admin/instituciones/pendientes por ahora
       setCounts({ 
         instituciones: instituciones.length, 
         pendientes: instituciones.filter(i => !i.aprobada).length 
       });
-    } catch (e) {
-      // ignore
-    } finally { setLoading(false); }
+    } catch (error) {
+      console.error('Error loading dashboard:', error);
+      setError(error instanceof Error ? error.message : 'Error al cargar datos');
+    } finally { 
+      setLoading(false); 
+    }
+  };
+
+  const retryLoad = () => {
+    load();
   };
 
   const handleInviteAdmin = async () => {
@@ -56,6 +71,22 @@ export default function DashboardAdminHome() {
     { icono: '📊', titulo: 'Ver Reportes', desc: 'Acceso completo a estadísticas y reportes de toda la plataforma.' },
     { icono: '🔐', titulo: 'Control Total', desc: 'Máximo nivel de acceso y permisos en toda la plataforma.' },
   ];
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <PageLoading message="Cargando panel administrativo..." />
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout>
+        <ErrorState message={error} onRetry={retryLoad} />
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -99,15 +130,16 @@ export default function DashboardAdminHome() {
                   >
                     <IconUsers size={18} /> Ver Usuarios
                   </Link>
-                  <button
+                  <ButtonLoading
+                    loading={inviteLoading}
                     onClick={() => setShowInviteModal(true)}
                     className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white px-5 py-2.5 rounded-xl font-medium transition-all shadow-lg shadow-amber-500/25"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
                     </svg>
-                    Invitar Admin
-                  </button>
+                    {inviteLoading ? 'Enviando...' : 'Invitar Admin'}
+                  </ButtonLoading>
                 </div>
               </div>
 
@@ -132,30 +164,38 @@ export default function DashboardAdminHome() {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-teal-100 rounded-xl flex items-center justify-center">
-                <IconBuilding size={24} className="text-teal-600" />
+          {loading ? (
+            Array.from({ length: 2 }).map((_, index) => (
+              <StatsCardSkeleton key={index} />
+            ))
+          ) : (
+            <>
+              <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-teal-100 rounded-xl flex items-center justify-center">
+                    <IconBuilding size={24} className="text-teal-600" />
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-slate-800">{counts.instituciones}</div>
+                    <div className="text-sm text-slate-500">Instituciones Registradas</div>
+                  </div>
+                </div>
               </div>
-              <div>
-                <div className="text-2xl font-bold text-slate-800">{loading ? '...' : counts.instituciones}</div>
-                <div className="text-sm text-slate-500">Instituciones Registradas</div>
+              <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
+                    <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-slate-800">{counts.pendientes}</div>
+                    <div className="text-sm text-slate-500">Pendientes de Aprobación</div>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
-                <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-slate-800">{loading ? '...' : counts.pendientes}</div>
-                <div className="text-sm text-slate-500">Pendientes de Aprobar</div>
-              </div>
-            </div>
-          </div>
+            </>
+          )}
         </div>
 
         {/* Sección de Poderes */}
