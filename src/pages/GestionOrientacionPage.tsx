@@ -7,7 +7,7 @@ import {
   actualizarOrientador,
   desactivarOrientador
 } from '../api/endpoints';
-import DashboardLayout from '../components/DashboardLayout';
+import SidebarOrientador from '../components/orientador-acudiente/SidebarOrientador';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
@@ -154,37 +154,42 @@ const GestionOrientacionPage = () => {
 
   if (loading) {
     return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center h-64">
-          <LoadingSpinner size="lg" text="Cargando gestión de orientación..." />
-        </div>
-      </DashboardLayout>
+      <div className="min-h-screen bg-gray-50 flex">
+        <SidebarOrientador />
+        <main className="flex-1 p-4 lg:p-8 min-h-screen bg-slate-50">
+          <div className="flex items-center justify-center h-64">
+            <LoadingSpinner size="lg" text="Cargando gestión de orientación..." />
+          </div>
+        </main>
+      </div>
     );
   }
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-800">Gestión de Orientación</h1>
-            <p className="text-slate-600 mt-1">Administra docentes y orientadores de tu institución</p>
+    <div className="min-h-screen bg-gray-50 flex">
+      <SidebarOrientador />
+      <main className="flex-1 p-4 lg:p-8 min-h-screen bg-slate-50">
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-800">Gestión de Orientación</h1>
+              <p className="text-slate-600 mt-1">Administra docentes y orientadores de tu institución</p>
+            </div>
+            {activeTab === 'orientadores' && canManage && (
+              <Button
+                onClick={() => {
+                  setEditingOrientador(null);
+                  resetFormOrientador();
+                  setModalOrientador(true);
+                }}
+                className="flex items-center gap-2"
+              >
+                <IconPlus size={16} />
+                Nuevo Orientador
+              </Button>
+            )}
           </div>
-          {activeTab === 'orientadores' && canManage && (
-            <Button
-              onClick={() => {
-                setEditingOrientador(null);
-                resetFormOrientador();
-                setModalOrientador(true);
-              }}
-              className="flex items-center gap-2"
-            >
-              <IconPlus size={16} />
-              Nuevo Orientador
-            </Button>
-          )}
-        </div>
 
         {/* Messages */}
         {error && (
@@ -450,7 +455,8 @@ const GestionOrientacionPage = () => {
           </div>
         </div>
       </Modal>
-    </DashboardLayout>
+      </main>
+    </div>
   );
 };
 

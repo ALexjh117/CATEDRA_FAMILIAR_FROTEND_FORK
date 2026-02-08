@@ -4,7 +4,8 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Button from '../components/ui/Button';
 import FormFieldInput from '../components/ui/FormFieldInput';
 import Swal from 'sweetalert2';
-import { createAsignacion, getCursosByDocente, getPeriodos, getSession, getTareas } from '../api/endpoints';
+import { getSession } from '../api/endpoints';
+import { listarBancoTareas, listarCursos, listarPeriodos, crearAsignacion } from '../api/docentes';
 
 type AsignacionCreatePayload = {
   bancoTareaId: number;
@@ -59,9 +60,9 @@ export default function AsignacionesPage() {
         const docenteId = user?.id || 0;
 
         const [tareas, cursosDocente, periodosData] = await Promise.all([
-          getTareas(),
-          getCursosByDocente(docenteId),
-          getPeriodos(user?.institucionId)
+          listarBancoTareas(),
+          listarCursos(),
+          listarPeriodos()
         ]);
 
         setTareasBanco(Array.isArray(tareas) ? tareas : []);
@@ -162,12 +163,13 @@ export default function AsignacionesPage() {
     try {
       setAsignando(true);
 
-      const result = await createAsignacion(payload as any);
-      if (!result.success) {
+      const result = await crearAsignacion(payload as any);
+      const ok = (result as any)?.success !== false && ((result as any)?.id || (result as any)?.data?.id || (result as any)?.bancoTareaId);
+      if (!ok) {
         await Swal.fire({
           icon: 'error',
           title: 'No se pudo asignar',
-          text: result.error || 'Error al crear la asignación.',
+          text: (result as any)?.message || (result as any)?.error || 'Error al crear la asignación.',
           confirmButtonText: 'Entendido'
         });
         return;

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getSession, getAcudientesCoordinador, getAcudientesOrientador } from '../api/endpoints';
 import DashboardLayout from '../components/DashboardLayout';
+import OrientadorLayout from '../components/orientador-acudiente/OrientadorLayout';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { IconUsers, IconMail, IconFileText, IconUser } from '../components/ui/Icons';
 
@@ -8,6 +9,8 @@ export default function PadresFamiliaPage() {
   const session = getSession();
   const user = session?.user;
   const userRole = user?.rol;
+
+  const Layout = userRole === 'orientador' ? OrientadorLayout : DashboardLayout;
 
   const [loading, setLoading] = useState(true);
   const [acudientes, setAcudientes] = useState<any[]>([]);
@@ -49,16 +52,16 @@ export default function PadresFamiliaPage() {
 
   if (loading) {
     return (
-      <DashboardLayout>
+      <Layout>
         <div className="flex items-center justify-center h-64">
           <LoadingSpinner size="lg" text="Cargando padres de familia..." />
         </div>
-      </DashboardLayout>
+      </Layout>
     );
   }
 
   return (
-    <DashboardLayout>
+    <Layout>
       <div className="space-y-6">
         {/* Header */}
         <div>
@@ -214,6 +217,6 @@ export default function PadresFamiliaPage() {
           <span className="font-semibold text-teal-600">{acudientes.length}</span> acudientes
         </div>
       </div>
-    </DashboardLayout>
+    </Layout>
   );
 }
