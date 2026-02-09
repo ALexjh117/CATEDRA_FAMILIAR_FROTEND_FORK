@@ -1,4 +1,4 @@
-import httpService from './httpService';
+import { httpService } from './httpService';
 
 export interface TareaAsignadaMovil {
   id: number; // asignacionId
@@ -58,7 +58,7 @@ export interface DetalleAsignacionMovil {
 export async function listarTareasEstudiante(estudianteId: number, opts: { periodo?: number | string } = {}): Promise<TareaAsignadaMovil[]> {
   const params: any = {};
   if (opts.periodo) params.periodo = opts.periodo;
-  // Contrato móvil con base VITE_API_URL = .../api/movil
+  // Contrato móvil con base /api/movil
   const res = await httpService.get(`/estudiantes/${estudianteId}/tareas`, params);
   const body: any = res.data;
   const data = (body && typeof body === 'object' && 'data' in body) ? (body as any).data : body;
@@ -133,10 +133,9 @@ export async function enviarEntregaMovil(asignacionId: number, payload: {
   archivosUrl?: string[];
   nombreEnvio?: string;
 }): Promise<any> {
-  const base = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3333';
+  const base = '/api';
   const token = (() => { try { const s = localStorage.getItem('session'); return s ? JSON.parse(s).token : null; } catch { return null; } })();
-  const root = base.replace(/\/$/, '');
-  const urlPrimary = `${root}/asignaciones/${asignacionId}/entregas`;
+  const urlPrimary = `${base}/asignaciones/${asignacionId}/entregas`;
   const hasFiles = (payload.archivos && payload.archivos.length > 0);
   if (hasFiles) {
     const form = new FormData();
@@ -146,29 +145,18 @@ export async function enviarEntregaMovil(asignacionId: number, payload: {
     (payload.archivos || []).forEach((f) => form.append('archivos', f));
     (payload.archivosUrl || []).forEach((u) => form.append('archivosUrl', u));
 
-    let res = await fetch(urlPrimary, {
-      method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      body: form,
-    });
-    if (!res.ok) throw new Error(await res.text());
-    return await res.json();
+    const response = await httpService.post(`/asignaciones/${asignacionId}/entregas`, form);
+    if (response.status !== 200 && response.status !== 201) throw new Error(response.data);
+    return response.data;
   } else {
-    let res = await fetch(urlPrimary, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({
-        estudianteId: payload.estudianteId,
-        descripcion: payload.descripcion,
-        archivosUrl: payload.archivosUrl,
-        nombreEnvio: payload.nombreEnvio,
-      }),
+    const response = await httpService.post(`/asignaciones/${asignacionId}/entregas`, {
+      estudianteId: payload.estudianteId,
+      descripcion: payload.descripcion,
+      archivosUrl: payload.archivosUrl,
+      nombreEnvio: payload.nombreEnvio,
     });
-    if (!res.ok) throw new Error(await res.text());
-    return await res.json();
+    if (response.status !== 200 && response.status !== 201) throw new Error(response.data);
+    return response.data;
   }
 }
 

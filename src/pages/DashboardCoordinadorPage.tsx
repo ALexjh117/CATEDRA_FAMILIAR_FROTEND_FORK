@@ -50,11 +50,26 @@ export default function DashboardCoordinadorPage() {
   const session = getSession();
   const user = session?.user;
   const userRole = user?.rol;
-  
-  // Toggle para usar versión mejorada
-  const [useEnhanced, setUseEnhanced] = useState(true); // Por defecto usar versión mejorada
 
-  // Si useEnhanced es true, mostrar el dashboard mejorado
+  // Toggle para usar versión mejorada
+  const [useEnhanced, setUseEnhanced] = useState(false); // Forzar dashboard clásico para ver cambios
+
+  // Si el usuario es orientador, redirigir a su propio dashboard o mostrar solo su panel
+  if (userRole === 'orientador') {
+    // Aquí podrías redirigir o renderizar un componente exclusivo del orientador
+    // return <Navigate to="/dashboard/orientador" />;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="bg-white p-8 rounded-xl shadow-md text-center max-w-md">
+          <h2 className="text-2xl font-bold mb-2 text-teal-700">Panel exclusivo para Orientador</h2>
+          <p className="text-slate-600 mb-4">No tienes acceso a la gestión de docentes ni orientadores. Solo puedes ver tus cursos, tareas y estudiantes asignados.</p>
+          <a href="/dashboard/orientador" className="inline-block px-4 py-2 bg-teal-600 text-white rounded-lg font-medium hover:bg-teal-700 transition">Ir a mi panel</a>
+        </div>
+      </div>
+    );
+  }
+
+  // Si useEnhanced es true, mostrar el dashboard mejorado SOLO para coordinador
   if (useEnhanced) {
     return <CoordinadorDashboardEnhanced />;
   }
@@ -825,7 +840,7 @@ export default function DashboardCoordinadorPage() {
                 </div>
                 
                 {/* Acciones Rápidas */}
-                <div className="grid md:grid-cols-3 gap-4">
+                <div className="grid md:grid-cols-2 gap-4">
                   <button 
                     onClick={() => setActiveTab('docentes')}
                     className="p-4 bg-indigo-50 hover:bg-indigo-100 rounded-xl border border-indigo-200 text-left transition-colors"
@@ -841,14 +856,6 @@ export default function DashboardCoordinadorPage() {
                     <IconBook className="text-blue-600 mb-2" size={24} />
                     <h4 className="font-semibold text-blue-800">Ver Estudiantes</h4>
                     <p className="text-sm text-blue-600">Rendimiento académico</p>
-                  </button>
-                  <button 
-                    onClick={() => setActiveTab('carga-masiva')}
-                    className="p-4 bg-teal-50 hover:bg-teal-100 rounded-xl border border-teal-200 text-left transition-colors"
-                  >
-                    <IconFileUpload className="text-teal-600 mb-2" size={24} />
-                    <h4 className="font-semibold text-teal-800">Carga Masiva</h4>
-                    <p className="text-sm text-teal-600">Importar estudiantes</p>
                   </button>
                 </div>
               </div>

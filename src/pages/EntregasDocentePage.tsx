@@ -99,7 +99,7 @@ export default function EntregasDocentePage(){
                 const descripcion: string | undefined = (e as any).descripcion;
                 const nombreEnvio: string | undefined = (e as any).nombreEnvio || (e as any).nombre_envio;
                 const calif: any = (e as any).calificacion;
-                const api = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3333';
+                const api = '/api';
                 const origin = String(api).replace(/\/$/, '').replace(/\/api$/, '');
 
                 const absHref = (url?: string) => {

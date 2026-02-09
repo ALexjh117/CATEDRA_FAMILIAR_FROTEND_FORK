@@ -52,6 +52,11 @@ import { isBypassValidationsEnabled } from '../utils/dev';
 
 export default function DashboardAdminPage() {
   getSession(); // Verificar sesión activa
+    // Función para verificar si la institución tiene rector
+    // Verifica si existe un usuario con rol 'rector' en la institución
+    const tieneRector = (institucionId: number) => {
+      return usuarios.some(u => u.rol === 'rector' && u.institucionId === institucionId);
+    };
   
   const [loading, setLoading] = useState(true);
   const [instituciones, setInstituciones] = useState<Institucion[]>([]);
@@ -144,6 +149,17 @@ export default function DashboardAdminPage() {
         getGrados()
       ]);
 
+      console.log('📊 [DashboardAdminPage] Datos cargados:', {
+        instituciones: institucionesData.length,
+        cursos: cursosData.length,
+        tareas: tareasData.length,
+        usuarios: usuariosData.length,
+        periodos: periodosData.length,
+        grados: gradosData.length
+      });
+      
+      console.log('🏫 [DashboardAdminPage] Instituciones:', institucionesData);
+
       setInstituciones(Array.isArray(institucionesData) ? institucionesData : []);
       setCursos(Array.isArray(cursosData) ? cursosData : []);
       setTareas(Array.isArray(tareasData) ? tareasData : []);
@@ -226,7 +242,11 @@ export default function DashboardAdminPage() {
   // HANDLERS INSTITUCIONES
   // ============================================
   
+  const [creatingInstitucion, setCreatingInstitucion] = useState(false);
+  
   const handleCreateInstitucion = async () => {
+    if (creatingInstitucion) return;
+    setCreatingInstitucion(true);
     setError(null);
     const result = await createInstitucion(formInstitucion);
     
@@ -249,6 +269,7 @@ export default function DashboardAdminPage() {
     } else {
       setError(result.error || 'Error al crear institución');
     }
+    setCreatingInstitucion(false);
   };
 
   const handleUpdateInstitucion = async () => {
@@ -315,6 +336,13 @@ export default function DashboardAdminPage() {
   const handleCreateUsuario = async () => {
     setError(null);
     
+    // Validar jerarquía institucional antes de crear roles dependientes
+    if (["coordinador", "orientador", "docente_aula", "acudiente"].includes(formUsuario.rol)) {
+      if (!tieneRector(formUsuario.institucionId)) {
+        setError("Debe crear primero un rector para la institución antes de asignar coordinadores, orientadores, docentes o acudientes.");
+        return;
+      }
+    }
     // Si es rector o coordinador, usar los endpoints específicos del backend
     if (formUsuario.rol === 'rector') {
       // Validar campos requeridos para rector
@@ -331,6 +359,12 @@ export default function DashboardAdminPage() {
       }
       
       // Validar email
+        // Debug: mostrar usuario en sesión y rol
+        const session = getSession();
+        console.log('[DEBUG][handleCreateUsuario] Usuario en sesión:', session);
+        if (session && session.user) {
+          console.log('[DEBUG][handleCreateUsuario] RolId:', session.user.rolId, 'Rol:', session.user.rol);
+        }
       if (!formUsuario.correo.includes('@') || !formUsuario.correo.includes('.')) {
         setError('El correo electrónico no es válido');
         return;
@@ -423,7 +457,10 @@ export default function DashboardAdminPage() {
         institucionId: formUsuario.institucionId
       });
       
-      console.log('Resultado crear coordinador:', result);
+      console.log('[DEBUG][handleCreateUsuario] Resultado crear coordinador:', result);
+      if (result && typeof result === 'object') {
+        console.log('[DEBUG][handleCreateUsuario] Detalle resultado:', JSON.stringify(result, null, 2));
+      }
       
       if (result.success) {
         await loadData();
@@ -772,6 +809,11 @@ export default function DashboardAdminPage() {
 
   return (
     <DashboardLayout>
+      {error && (
+        <div style={{background:'#ffe0e0',color:'#b00',padding:'8px',borderRadius:'4px',margin:'8px 0',fontWeight:'bold'}}>
+          {error}
+        </div>
+      )}
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header con diseño distintivo */}
         <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-8 text-white shadow-xl">
@@ -2105,8 +2147,11 @@ export default function DashboardAdminPage() {
             }}>
               Cancelar
             </Button>
-            <Button onClick={editingInstitucion ? handleUpdateInstitucion : handleCreateInstitucion}>
-              {editingInstitucion ? 'Actualizar' : 'Crear'} Institución
+            <Button 
+              onClick={editingInstitucion ? handleUpdateInstitucion : handleCreateInstitucion}
+              disabled={creatingInstitucion}
+            >
+              {creatingInstitucion ? 'Creando...' : editingInstitucion ? 'Actualizar' : 'Crear'} {!creatingInstitucion && 'Institución'}
             </Button>
           </div>
         </div>

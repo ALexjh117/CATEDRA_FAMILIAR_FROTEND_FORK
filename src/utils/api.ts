@@ -15,14 +15,9 @@ export async function apiGet(path: string){
 
 export async function apiPost(path: string, body: any, isForm=false){
   if (isForm) {
-    // Para FormData, usar fetch directamente
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3333';
-    const response = await fetch(`${baseUrl}${path}`, {
-      method: 'POST',
-      body,
-      credentials: 'include'
-    });
-    return response.json();
+    // Para FormData, usar httpService centralizado
+    const response = await httpService.post(path, body);
+    return response.data;
   }
   const response = await httpService.post(path, body);
   return response.data;
@@ -30,13 +25,9 @@ export async function apiPost(path: string, body: any, isForm=false){
 
 export async function apiPut(path: string, body: any, isForm=false){
   if (isForm) {
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3333';
-    const response = await fetch(`${baseUrl}${path}`, {
-      method: 'PUT',
-      body,
-      credentials: 'include'
-    });
-    return response.json();
+    // Para FormData, usar httpService centralizado
+    const response = await httpService.put(path, body);
+    return response.data;
   }
   const response = await httpService.put(path, body);
   return response.data;

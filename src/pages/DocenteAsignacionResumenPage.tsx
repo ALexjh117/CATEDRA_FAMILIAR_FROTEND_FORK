@@ -73,7 +73,7 @@ export default function DocenteAsignacionResumenPage(){
   const calif = data?.calificaciones ?? 0;
   const pendientes = data?.entregasPendientes ?? Math.max(0, total - realizadas);
   const pct = total ? Math.round((realizadas/total)*100) : 0;
-  const api = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3333';
+  const api = '/api';
   const origin = String(api).replace(/\/$/, '').replace(/\/api$/, '');
   const absHref = (url?: string) => {
     if (!url) return '#';

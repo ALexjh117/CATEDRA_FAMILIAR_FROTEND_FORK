@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import AcudienteLayout from '../components/AcudienteLayout';
 import { getSession } from '../api/endpoints';
-import httpService from '../api/httpService';
+import { httpService } from '../api/httpService';
 
 interface PerfilAcudiente {
   nombres?: string;

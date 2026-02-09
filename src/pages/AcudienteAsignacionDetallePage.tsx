@@ -175,7 +175,7 @@ export default function AcudienteAsignacionDetallePage(){
                   {Array.isArray(detalle.entrega.archivos) && detalle.entrega.archivos.length > 0 && (
                     <ul className="list-disc pl-6 mt-2">
                       {detalle.entrega.archivos.map((a, idx) => {
-                        const api = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3333';
+                        const api = '/api';
                         const cleaned = String(api).replace(/\/$/, '');
                         // remove trailing /api or /api/movil to get server origin
                         const origin = cleaned.replace(/\/api(\/movil)?$/, '');
