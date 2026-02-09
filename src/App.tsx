@@ -193,7 +193,7 @@ export default function App(){
           
           <Route path="/dashboard/orientador" element={
             <ProtectedRoute allowedRoles={['orientador', 'coordinador', 'rector', 'admin']}>
-              <DashboardSupervisorPage title="Dashboard Orientador" description="Panel de control para orientadores." />
+              <DashboardSupervisorPage />
             </ProtectedRoute>
           } />
           
