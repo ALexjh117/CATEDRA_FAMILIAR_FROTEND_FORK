@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { getSession } from '../api/endpoints';
+import { httpService } from '../api/httpService';
 import { createCategoria, createTarea, getCategorias, getTareaById, getTareas } from '../api/endpointsDocente-orinetador';
 import DashboardLayout from '../components/DashboardLayout';
 import OrientadorLayout from '../components/orientador-acudiente/OrientadorLayout';
@@ -485,11 +486,9 @@ export default function TareasPage() {
   const buildFileUrl = (pathOrUrl: string) => {
     if (!pathOrUrl) return '';
     if (pathOrUrl.startsWith('http')) return pathOrUrl;
-    const base = import.meta.env.VITE_API_URL || 'http://localhost:3333';
-    const baseUrl = new URL(base);
-    const origin = baseUrl.origin;
+    const base = '/api';
     const normalizedPath = pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`;
-    return `${origin}${normalizedPath}`;
+    return `${base}${normalizedPath}`;
   };
 
   const isExternalUrl = (value: string) => /^https?:\/\//i.test(value);
@@ -521,28 +520,10 @@ export default function TareasPage() {
   };
 
   const fetchFileBlobUrl = async (url: string): Promise<string | null> => {
-    const token = getToken();
-    if (!token) {
-      await Swal.fire({
-        title: 'Sesión requerida',
-        text: 'Debes iniciar sesión nuevamente',
-        icon: 'warning',
-        confirmButtonText: 'Ir a login',
-        confirmButtonColor: '#4f46e5'
-      });
-      window.location.href = '/login';
-      return null;
-    }
-
     setLoadingFile(true);
     try {
-      const res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      if (res.status === 401) {
+      const response = await httpService.get(url, { responseType: 'blob' });
+      if (response.status === 401) {
         await Swal.fire({
           title: 'Sesión expirada',
           text: 'Debes iniciar sesión nuevamente',
@@ -553,22 +534,27 @@ export default function TareasPage() {
         window.location.href = '/login';
         return null;
       }
-
-      if (!res.ok) {
-        const msg = res.status === 404
-          ? 'Archivo no existe o fue eliminado'
-          : `Error ${res.status}`;
+      if (response.status === 404) {
         await Swal.fire({
           title: 'No se pudo abrir el archivo',
-          text: `${msg}\n${url}`,
+          text: `Archivo no existe o fue eliminado\n${url}`,
           icon: 'error',
           confirmButtonText: 'OK',
           confirmButtonColor: '#4f46e5'
         });
         return null;
       }
-
-      const blob = await res.blob();
+      if (response.status !== 200) {
+        await Swal.fire({
+          title: 'No se pudo abrir el archivo',
+          text: `Error ${response.status}\n${url}`,
+          icon: 'error',
+          confirmButtonText: 'OK',
+          confirmButtonColor: '#4f46e5'
+        });
+        return null;
+      }
+      const blob = response.data;
       const blobUrl = URL.createObjectURL(blob);
       if (fileBlobUrl) URL.revokeObjectURL(fileBlobUrl);
       setFileBlobUrl(blobUrl);
@@ -579,18 +565,14 @@ export default function TareasPage() {
   };
 
   const handleViewInternalFileByTareaId = async (tareaId: number) => {
-    const base = import.meta.env.VITE_API_URL || 'http://localhost:3333';
-    const origin = new URL(base).origin;
-    const url = `${origin}/tareas/${tareaId}/archivo`;
+    const url = `/api/tareas/${tareaId}/archivo`;
     const blobUrl = await fetchFileBlobUrl(url);
     if (!blobUrl) return;
     window.open(blobUrl, '_blank', 'noreferrer');
   };
 
   const handleDownloadInternalFileByTareaId = async (tareaId: number, fileNameHint?: string) => {
-    const base = import.meta.env.VITE_API_URL || 'http://localhost:3333';
-    const origin = new URL(base).origin;
-    const url = `${origin}/tareas/${tareaId}/archivo`;
+    const url = `/api/tareas/${tareaId}/archivo`;
     const blobUrl = await fetchFileBlobUrl(url);
     if (!blobUrl) return;
 

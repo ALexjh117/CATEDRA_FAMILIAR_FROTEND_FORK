@@ -26,7 +26,8 @@ class HttpService {
 
   constructor(config: Partial<ApiConfig> = {}) {
     this.config = {
-      baseURL: config.baseURL || import.meta.env.VITE_API_URL || 'http://localhost:3333',
+      // Usar '/api' como baseURL por defecto para aprovechar el proxy de Vite
+      baseURL: config.baseURL || '/api',
       timeout: config.timeout || 15000,
       headers: {
         'Content-Type': 'application/json',
@@ -50,7 +51,10 @@ class HttpService {
   }
 
   private getHeaders(): HeadersInit {
-    const headers: HeadersInit = { ...this.config.headers };
+    const headers: HeadersInit = { 
+      ...this.config.headers,
+      'ngrok-skip-browser-warning': 'true' // Evitar página de advertencia de ngrok
+    };
     
     const token = this.getAuthToken();
     if (token) {
@@ -96,7 +100,7 @@ class HttpService {
     // Construir URL correctamente
     const base = this.config.baseURL.endsWith('/') ? this.config.baseURL.slice(0, -1) : this.config.baseURL;
     const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-    const url = new URL(`${base}${path}`);
+    const url = `${base}${path}`;
     
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
@@ -110,12 +114,13 @@ class HttpService {
     const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
 
     try {
-      const response = await fetch(url.toString(), {
+      console.log(`[DEBUG][API] GET:`, url.toString());
+      const response = await fetch(url, {
         method: 'GET',
         headers: this.getHeaders(),
         signal: controller.signal
       });
-
+      console.log(`[DEBUG][API] GET Response:`, response.status, response.statusText);
       return await this.handleResponse<T>(response);
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
@@ -147,7 +152,7 @@ class HttpService {
     // Construir URL correctamente
     const base = this.config.baseURL.endsWith('/') ? this.config.baseURL.slice(0, -1) : this.config.baseURL;
     const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-    const url = new URL(`${base}${path}`);
+    const url = `${base}${path}`;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
 
@@ -169,7 +174,9 @@ class HttpService {
     }
 
     try {
-      const response = await fetch(url.toString(), options);
+      console.log(`[DEBUG][API] ${method}:`, url.toString());
+      const response = await fetch(url, options);
+      console.log(`[DEBUG][API] ${method} Response:`, response.status, response.statusText);
       return await this.handleResponse<T>(response);
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {

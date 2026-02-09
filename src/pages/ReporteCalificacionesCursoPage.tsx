@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import TeacherLayout from '../components/TeacherLayout';
 import Button from '../components/ui/Button';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
+import { httpService } from '../api/httpService';
 import { listarPeriodos, type PeriodoBackend, getReporteCalificacionesCurso, type ReporteCalificacionesCurso, listarCursos, type CursoBackend } from '../api/docentes';
 
 export default function ReporteCalificacionesCursoPage(){
@@ -26,8 +27,11 @@ export default function ReporteCalificacionesCursoPage(){
     setLoading(true);
     setError(null);
     try {
-      const res = await getReporteCalificacionesCurso(cursoId, { periodoId: periodoId ? Number(periodoId) : undefined });
-      setData(res);
+      let endpoint = `/reportes/cursos/${cursoId}/calificaciones?download=1&format=csv`;
+      if (periodoId) endpoint += `&periodo=${periodoId}`;
+      const response = await httpService.get(endpoint);
+      if (response.status !== 200) throw new Error('No se pudo descargar el CSV');
+      const blob = new Blob([response.data], { type: 'text/csv' });
     } catch (e: any) {
       setError(e?.message || 'Error al cargar el reporte');
     } finally { setLoading(false); }
@@ -45,15 +49,12 @@ export default function ReporteCalificacionesCursoPage(){
 
   const descargarCSV = async () => {
     try {
-      const base = import.meta.env.VITE_API_URL || 'http://localhost:3333';
       const token = (() => { try { const s = localStorage.getItem('session'); return s ? JSON.parse(s).token : null; } catch { return null; } })();
-      const url = new URL(`${base.replace(/\/$/, '')}/reportes/cursos/${cursoId}/calificaciones`);
-      if (periodoId) url.searchParams.set('periodo', String(periodoId));
-      url.searchParams.set('download', '1');
-      url.searchParams.set('format', 'csv');
-      const res = await fetch(url.toString(), { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
-      if (!res.ok) throw new Error('No se pudo descargar el CSV');
-      const blob = await res.blob();
+      let endpoint = `/reportes/cursos/${cursoId}/calificaciones?download=1&format=csv`;
+      if (periodoId) endpoint += `&periodo=${periodoId}`;
+      const response = await httpService.get(endpoint, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+      if (response.status !== 200) throw new Error('No se pudo descargar el CSV');
+      const blob = new Blob([response.data], { type: 'text/csv' });
       const a = document.createElement('a');
       const href = URL.createObjectURL(blob);
       a.href = href;

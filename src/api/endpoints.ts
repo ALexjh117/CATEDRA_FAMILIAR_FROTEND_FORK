@@ -1,42 +1,12 @@
 // ============================================
 // API ENDPOINTS - Cátedra de Familia
 // Usar apiClient centralizado para llamadas HTTP
+// Dummy para evitar ReferenceError
+const isBypassValidationsEnabled = () => false;
 // ============================================
 
 import apiClient from './apiClient';
-import { isBypassValidationsEnabled } from '../utils/dev';
-import { 
-  usuariosMock,
-  usuariosListMock,
-  estudiantesMock,
-  estudiantesAcudientesMock,
-  tareasMock, 
-  entregasMock, 
-  categoriasMock,
-  cursosMock,
-  institucionesMock,
-  departamentosMock,
-  municipiosMock,
-  periodosMock,
-  gradosMock,
-  notificacionesMock,
-  logsAuditoriaMock,
-  type Usuario,
-  type Estudiante,
-  type EstudianteAcudiente,
-  type Tarea,
-  type Entrega,
-  type Categoria,
-  type Curso,
-  type Institucion,
-  type Departamento,
-  type Municipio,
-  type Periodo,
-  type Grado,
-  type Notificacion,
-  type LogAuditoria,
-  type RolUsuario
-} from '../mocks/data';
+import { type Usuario, type Estudiante, type EstudianteAcudiente, type Tarea, type Entrega, type Categoria, type Curso, type Institucion, type Departamento, type Municipio, type Periodo, type Grado, type Notificacion, type LogAuditoria, type RolUsuario } from '../mocks/data';
 
 // Simular delay de red
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -61,40 +31,7 @@ const addLogAuditoria = (accion: 'crear' | 'actualizar' | 'eliminar' | 'login' |
 // ============================================
 
 export const login = async (correo: string, password: string, roleHint?: 'admin' | 'rector' | 'coordinador'): Promise<{ success: boolean; user?: Usuario; error?: string }> => {
-  // Si está en modo desarrollo o bypass, usar mocks
-  if (isBypassValidationsEnabled()) {
-    await delay(800);
-    
-    // Mock: determinar rol basado en correo
-    let user: Usuario | undefined;
-    const correoLower = correo.toLowerCase();
-
-    // Tratar dominios institucionales de Secretaría como admin
-    if (correoLower.endsWith('@educacionpopayan.gov.co') || correoLower.endsWith('@secretariaed.gov.co') || correo.includes('@admin')) {
-      user = usuariosMock.admin;
-    } else if (correo.includes('@docente')) {
-      // Verificar tipo de docente
-      if (correo.includes('orientador')) {
-        user = usuariosMock.orientador;
-      } else if (correo.includes('coordinador')) {
-        user = usuariosMock.coordinador;
-      } else if (correo.includes('rector')) {
-        user = usuariosMock.rector;
-      } else {
-        user = usuariosMock.docente;
-      }
-    } else {
-      user = usuariosMock.acudiente;
-    }
-
-    if (user) {
-      // Guardar sesión en localStorage
-      localStorage.setItem('session', JSON.stringify({ user, isPreview: false }));
-      return { success: true, user };
-    }
-    
-    return { success: false, error: 'Credenciales incorrectas' };
-  }
+  // Solo API real
   
   // Detectar roleHint automáticamente si no se proporciona
   if (!roleHint) {
@@ -164,28 +101,14 @@ export const logout = async (): Promise<void> => {
 export const getSession = (): { user: Usuario; isPreview: boolean } | null => {
   const session = localStorage.getItem('session');
   if (session) {
-    return JSON.parse(session);
+    const parsed = JSON.parse(session);
+    return parsed.user ? { user: parsed.user } : null;
   }
-  
-  // Verificar si hay modo preview
-  const previewRole = localStorage.getItem('previewRole');
-  if (previewRole) {
-    const user = usuariosMock[previewRole as keyof typeof usuariosMock];
-    if (user) {
-      return { user, isPreview: true };
-    }
-  }
-  
   return null;
 };
 
 export const setPreviewRole = (role: string): Usuario | null => {
-  const user = usuariosMock[role as keyof typeof usuariosMock];
-  if (user) {
-    localStorage.setItem('previewRole', role);
-    localStorage.setItem('session', JSON.stringify({ user, isPreview: true }));
-    return user;
-  }
+  // Función eliminada, no se permite preview
   return null;
 };
 
@@ -487,54 +410,12 @@ export const getTareaById = async (id: number): Promise<Tarea | null> => {
 };
 
 export const createTarea = async (data: Partial<Tarea>): Promise<{ success: boolean; tarea?: Tarea; error?: string }> => {
-  await delay(800);
-  
-  // Validar multitenancy: docente y curso deben ser de la misma institución
-  const curso = cursosMock.find(c => c.id === data.cursoId);
-  const docente = usuariosListMock.find(u => u.id === data.docenteId);
-  
-  if (curso && docente && docente.institucionId && curso.institucionId !== docente.institucionId) {
-    return { success: false, error: 'No puede crear tareas para cursos de otra institución' };
+  // Usar API real para crear tarea
+  const result = await apiClient.createTarea(data);
+  if (result.success && result.data) {
+    return { success: true, tarea: result.data };
   }
-  
-  const newTarea: Tarea = {
-    id: Date.now(),
-    titulo: data.titulo || '',
-    descripcion: data.descripcion || '',
-    categoriaId: data.categoriaId || 1,
-    frecuencia: data.frecuencia || 'semanal',
-    fechaInicio: data.fechaInicio || new Date().toISOString().split('T')[0],
-    fechaVencimiento: data.fechaVencimiento || '',
-    cursoId: data.cursoId || 1,
-    docenteId: data.docenteId || 2,
-    periodoId: data.periodoId,
-    incluyeEnBoletin: data.incluyeEnBoletin ?? true,
-    estado: 'activa',
-    createdAt: new Date().toISOString().split('T')[0]
-  };
-  
-  tareasMock.push(newTarea);
-  addLogAuditoria('crear', 'Tarea', newTarea.id, `Tarea creada: ${newTarea.titulo}`);
-  
-  // Enviar notificaciones a acudientes del curso
-  const estudiantes = estudiantesMock.filter(e => e.cursoId === data.cursoId);
-  const acudientesIds = new Set<number>();
-  estudiantes.forEach(e => {
-    const vinculos = estudiantesAcudientesMock.filter(v => v.estudianteId === e.id);
-    vinculos.forEach(v => acudientesIds.add(v.acudienteId));
-  });
-  
-  acudientesIds.forEach(acudienteId => {
-    enviarNotificacion({
-      tipo: 'tarea_nueva',
-      titulo: 'Nueva tarea asignada',
-      mensaje: `Se ha asignado la tarea "${newTarea.titulo}"`,
-      destinatarioId: acudienteId,
-      tareaId: newTarea.id
-    });
-  });
-  
-  return { success: true, tarea: newTarea };
+  return { success: false, error: result.message || 'Error al crear tarea' };
 };
 
 export const getTareasPendientesAcudiente = async (_acudienteId: number): Promise<Tarea[]> => {
@@ -762,19 +643,16 @@ export const deleteCategoria = async (id: number): Promise<{ success: boolean; e
 // ============================================
 
 export const getInstituciones = async (): Promise<Institucion[]> => {
-  // Verificar si hay sesión con token real (no preview)
-  const session = getSession();
-  if (!session?.token || session.isPreview) {
-    // En modo preview o sin token, retornar mock
-    return institucionesMock.filter(i => !i.eliminado_en);
-  }
+  // Solo API real
 
   try {
     // Usar endpoint público /instituciones (NO /admin/instituciones/pendientes)
     const result = await apiClient.getInstituciones();
+    console.log('🏫 [endpoints.ts] getInstituciones result:', result);
+    
     if (result.success && result.data) {
       // Mapear datos del backend al formato del frontend
-      return result.data.map((inst: any) => ({
+      const mappedData = result.data.map((inst: any) => ({
         id: inst.id,
         nombre: inst.nombre,
         codigo_dane: inst.codigoDane || inst.codigo_dane,
@@ -793,13 +671,14 @@ export const getInstituciones = async (): Promise<Institucion[]> => {
         aprobado: inst.aprobado || false,
         creado_en: inst.creadoEn || inst.creado_en
       }));
+      
+      console.log('🏫 [endpoints.ts] Instituciones mapeadas:', mappedData);
+      return mappedData;
     }
-    // Si falla la API, usar mock como fallback
-    return institucionesMock.filter(i => !i.eliminado_en);
+    return [];
   } catch (error) {
     console.error('Error al obtener instituciones:', error);
-    // Fallback a mock
-    return institucionesMock.filter(i => !i.eliminado_en);
+    return [];
   }
 };
 
@@ -1932,12 +1811,10 @@ export const getUsuarios = async (): Promise<Usuario[]> => {
         debe_cambiar_contrasena: user.debeCambiarContrasena || user.debe_cambiar_contrasena || false
       }));
     }
-    // Fallback a mock si falla
-    return usuariosListMock.filter(u => !u.deletedAt);
+    return [];
   } catch (error) {
     console.error('Error al obtener usuarios:', error);
-    // Fallback a mock
-    return usuariosListMock.filter(u => !u.deletedAt);
+    return [];
   }
 };
 
@@ -1945,12 +1822,15 @@ export const getUsuarios = async (): Promise<Usuario[]> => {
  * Obtener cursos
  */
 export const getCursos = async (institucionId?: number): Promise<Curso[]> => {
-  await delay(300);
-  const cursos = cursosMock.filter(c => !c.deletedAt);
-  if (institucionId) {
-    return cursos.filter(c => c.institucionId === institucionId);
+  const result = await apiClient.getCursos();
+  if (result.success && result.data) {
+    let cursos = result.data.filter((c: any) => !c.deletedAt);
+    if (institucionId) {
+      cursos = cursos.filter((c: any) => c.institucionId === institucionId);
+    }
+    return cursos;
   }
-  return cursos;
+  return [];
 };
 
 /**
@@ -2113,12 +1993,15 @@ export const getPerfilUsuario = async (usuarioId?: number): Promise<{ success: b
  * Obtener períodos
  */
 export const getPeriodos = async (institucionId?: number): Promise<Periodo[]> => {
-  await delay(300);
-  const periodos = periodosMock.filter(p => !p.deletedAt);
-  if (institucionId) {
-    return periodos.filter(p => p.institucionId === institucionId);
+  const result = await apiClient.getPeriodos();
+  if (result.success && result.data) {
+    let periodos = result.data.filter((p: any) => !p.deletedAt);
+    if (institucionId) {
+      periodos = periodos.filter((p: any) => p.institucionId === institucionId);
+    }
+    return periodos;
   }
-  return periodos;
+  return [];
 };
 
 /**

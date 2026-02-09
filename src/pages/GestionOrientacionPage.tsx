@@ -7,7 +7,7 @@ import {
   actualizarOrientador,
   desactivarOrientador
 } from '../api/endpoints';
-import SidebarOrientador from '../components/orientador-acudiente/SidebarOrientador';
+import DashboardLayout from '../components/DashboardLayout';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
@@ -24,7 +24,19 @@ const GestionOrientacionPage = () => {
   const session = getSession();
   const user = session?.user;
   const userRole = user?.rol;
-  
+
+  // Protección básica: solo coordinador puede ver esta página
+  if (userRole !== 'coordinador') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="bg-white p-8 rounded-xl shadow-md text-center max-w-md">
+          <h2 className="text-2xl font-bold mb-2 text-teal-700">Acceso denegado</h2>
+          <p className="text-slate-600 mb-4">Esta sección es exclusiva para el rol Coordinador.</p>
+        </div>
+      </div>
+    );
+  }
+
   // Solo Coordinador y Admin pueden crear/editar
   const canManage = userRole === 'coordinador' || userRole === 'admin' || userRole === 'admin_sistema';
   
@@ -154,23 +166,17 @@ const GestionOrientacionPage = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex">
-        <SidebarOrientador />
-        <main className="flex-1 p-4 lg:p-8 min-h-screen bg-slate-50">
-          <div className="flex items-center justify-center h-64">
-            <LoadingSpinner size="lg" text="Cargando gestión de orientación..." />
-          </div>
-        </main>
-      </div>
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <LoadingSpinner size="lg" text="Cargando gestión de orientación..." />
+        </div>
+      </DashboardLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      <SidebarOrientador />
-      <main className="flex-1 p-4 lg:p-8 min-h-screen bg-slate-50">
-        <div className="space-y-6">
-          {/* Header */}
+    <DashboardLayout>
+      <div className="space-y-6">{/* Header */}
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-slate-800">Gestión de Orientación</h1>
@@ -455,8 +461,7 @@ const GestionOrientacionPage = () => {
           </div>
         </div>
       </Modal>
-      </main>
-    </div>
+    </DashboardLayout>
   );
 };
 

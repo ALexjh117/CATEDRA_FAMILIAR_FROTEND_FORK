@@ -749,9 +749,11 @@ class ApiClient {
   }): Promise<RectorCoordinadorResponse> {
     // Determinar rol del usuario actual
     const session = this.getSession();
+    console.log('[DEBUG][apiClient.crearCoordinador] Session:', session);
     const rolId = session?.user?.rolId;
-    
-    if (rolId === 1) {
+    const rol = session?.user?.rol;
+    console.log('[DEBUG][apiClient.crearCoordinador] rolId:', rolId, 'rol:', rol);
+    if (rolId === 1 || rol === 'admin' || rol === 'admin_sistema') {
       // Admin Sistema - requiere institucionId
       if (!data.institucionId) {
         return { success: false, message: 'Debe seleccionar una institución' };
@@ -839,17 +841,11 @@ class ApiClient {
   async descargarPlantillaExcel(): Promise<void> {
     try {
       const token = this.getToken();
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3333';
+      const baseUrl = '/api';
       
-      const response = await fetch(`${baseUrl}/estudiantes/plantilla-excel`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      if (!response.ok) {
-        throw new Error('Error al descargar plantilla');
-      }
-      
-      const blob = await response.blob();
+      const response = await httpService.get(`/estudiantes/plantilla-excel`, { responseType: 'blob' });
+      if (response.status !== 200) throw new Error('Error al descargar plantilla');
+      const blob = response.data;
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -869,17 +865,12 @@ class ApiClient {
   async validarExcel(archivo: File): Promise<ValidacionExcelResponse> {
     try {
       const token = this.getToken();
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3333';
+      const baseUrl = '/api';
       const formData = new FormData();
       formData.append('archivo', archivo);
       
-      const response = await fetch(`${baseUrl}/estudiantes/validar-excel`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData
-      });
-      
-      return await response.json();
+      const response = await httpService.post(`/estudiantes/validar-excel`, formData);
+      return response.data;
     } catch (error: any) {
       return {
         success: false,
@@ -895,18 +886,13 @@ class ApiClient {
   async cargaMasivaEstudiantes(archivo: File, cursoId: number): Promise<CargaMasivaResponse> {
     try {
       const token = this.getToken();
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3333';
+      const baseUrl = '/api';
       const formData = new FormData();
       formData.append('archivo', archivo);
       formData.append('cursoId', String(cursoId));
       
-      const response = await fetch(`${baseUrl}/estudiantes/carga-masiva`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData
-      });
-      
-      return await response.json();
+      const response = await httpService.post(`/estudiantes/carga-masiva`, formData);
+      return response.data;
     } catch (error: any) {
       return {
         success: false,
@@ -926,7 +912,7 @@ class ApiClient {
   ): Promise<CargaMasivaDualResponse> {
     try {
       const token = this.getToken();
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3333';
+      const baseUrl = '/api';
       
       console.log('🔧 [apiClient] cargaMasivaDual iniciado');
       console.log('🔑 Token:', token ? 'Presente' : 'FALTA TOKEN');
@@ -942,25 +928,14 @@ class ApiClient {
       
       console.log('📦 FormData creado, enviando a:', `${baseUrl}/estudiantes/carga-masiva-dual`);
       
-      const response = await fetch(`${baseUrl}/estudiantes/carga-masiva-dual`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData
-      });
-      
-      console.log('📡 Response status:', response.status, response.statusText);
-      console.log('📡 Response headers:', Object.fromEntries(response.headers.entries()));
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ Response no OK:', errorText);
+      const response = await httpService.post(`/estudiantes/carga-masiva-dual`, formData);
+      if (response.status !== 200 && response.status !== 201) {
         return {
           success: false,
-          message: `Error HTTP ${response.status}: ${errorText}`
+          message: `Error HTTP ${response.status}: ${response.data}`
         };
       }
-      
-      const data = await response.json();
+      const data = response.data;
       console.log('✅ Response JSON:', data);
       return data;
     } catch (error: any) {
@@ -1801,6 +1776,28 @@ class ApiClient {
       return response.data;
     } catch (error: any) {
       console.error('Error al crear institución:', error);
+      
+      // Manejo específico para error 409 Conflict
+      if (error.response?.status === 409) {
+        const conflictField = error.response?.data?.field || error.response?.data?.error || '';
+        let conflictMessage = 'Ya existe una institución con ';
+        
+        if (conflictField.includes('codigo_dane') || conflictField.includes('codigoDane')) {
+          conflictMessage += 'este código DANE';
+        } else if (conflictField.includes('nit')) {
+          conflictMessage += 'este NIT';
+        } else if (conflictField.includes('nombre')) {
+          conflictMessage += 'este nombre';
+        } else {
+          conflictMessage = error.response?.data?.message || 'Esta institución ya existe en el sistema';
+        }
+        
+        return {
+          success: false,
+          message: conflictMessage,
+          data: null
+        };
+      }
       
       const errorMessage = error.response?.data?.error 
         || error.response?.data?.message 
