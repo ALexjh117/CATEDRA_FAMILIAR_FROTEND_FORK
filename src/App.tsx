@@ -38,6 +38,8 @@ import PerfilAcudientePage from './pages/PerfilAcudientePage'
 import AcudienteTareasEstudiantePage from './pages/AcudienteTareasEstudiantePage'
 import AcudienteAsignacionDetallePage from './pages/AcudienteAsignacionDetallePage'
 import AcudienteHijosPage from './pages/AcudienteHijosPage'
+import EstudiantesPage from './pages/EstudiantesPage'
+import OrientadorLayout from './components/orientador-acudiente/OrientadorLayout'
 import AcudienteTareasAutoPage from './pages/AcudienteTareasAutoPage'
 // Legacy
 import DashboardPage from './pages/DashboardPage'
@@ -191,7 +193,7 @@ export default function App(){
           
           <Route path="/dashboard/orientador" element={
             <ProtectedRoute allowedRoles={['orientador', 'coordinador', 'rector', 'admin']}>
-              <PagePlaceholder title="Dashboard Orientador" description="Panel de control para orientadores." />
+              <DashboardSupervisorPage />
             </ProtectedRoute>
           } />
           
@@ -253,7 +255,13 @@ export default function App(){
           {/* Docente - Entregas con layout docente */}
           <Route path="/entregas" element={<ProtectedRoute allowedRoles={['docente','docente_aula']}><EntregasDocentePage /></ProtectedRoute>} />
           <Route path="/docente/entregas" element={<ProtectedRoute allowedRoles={['docente','docente_aula']}><EntregasDocentePage /></ProtectedRoute>} />
-          <Route path="/estudiantes" element={<ProtectedRoute allowedRoles={['docente','orientador','coordinador','rector','admin']}><PagePlaceholder title="Estudiantes" description="Listado y seguimiento de estudiantes."/></ProtectedRoute>} />
+<Route path="/estudiantes" element={
+  <ProtectedRoute allowedRoles={['orientador']}>
+    <OrientadorLayout>
+      <EstudiantesPage />
+    </OrientadorLayout>
+  </ProtectedRoute>
+} />
           <Route path="/gestion-orientacion" element={<ProtectedRoute allowedRoles={['coordinador','rector','admin']}><GestionOrientacionPage /></ProtectedRoute>} />
           <Route path="/directivos" element={<ProtectedRoute allowedRoles={['rector','admin']}><DirectivosPage /></ProtectedRoute>} />
           <Route path="/cursos" element={<ProtectedRoute allowedRoles={['orientador','coordinador','rector','admin']}><CursosPage /></ProtectedRoute>} />
@@ -262,6 +270,11 @@ export default function App(){
           <Route path="/reportes/coordinador" element={<ProtectedRoute allowedRoles={['coordinador']}><ReportesCoordinador /></ProtectedRoute>} />
           <Route path="/reportes/orientador" element={<ProtectedRoute allowedRoles={['orientador']}><ReportesOrientador /></ProtectedRoute>} />
           <Route path="/reportes/docente" element={<ProtectedRoute allowedRoles={['docente','docente_aula']}><ReportesDocente /></ProtectedRoute>} />
+          <Route path="/tareas" element={
+  <ProtectedRoute allowedRoles={['orientador','coordinador','rector','admin']}>
+    <TareasPage />
+  </ProtectedRoute>
+} />
           <Route path="/reportes/cursos/:id/entregas" element={<ProtectedRoute allowedRoles={['docente','docente_aula']}><ReporteEntregasCursoPage /></ProtectedRoute>} />
           <Route path="/reportes/cursos/:id/calificaciones" element={<ProtectedRoute allowedRoles={['docente','docente_aula']}><ReporteCalificacionesCursoPage /></ProtectedRoute>} />
           <Route path="/reportes/admin" element={<ProtectedRoute allowedRoles={['admin']}><ReportesAdmin /></ProtectedRoute>} />
