@@ -920,14 +920,19 @@ class ApiClient {
       console.log('📄 Archivo Estudiantes:', archivoEstudiantes.name, archivoEstudiantes.type);
       console.log('👨‍👩‍👧 Archivo Acudientes:', archivoAcudientes.name, archivoAcudientes.type);
       console.log('🏫 Institución ID:', institucionId);
-      
+
+      // Asegura que el token esté en el header antes de la petición
+      if (token) {
+        httpService.setAuthToken(token);
+      }
+
       const formData = new FormData();
       formData.append('archivo_estudiantes', archivoEstudiantes);
       formData.append('archivo_acudientes', archivoAcudientes);
       formData.append('institucionId', String(institucionId));
-      
+
       console.log('📦 FormData creado, enviando a:', `${baseUrl}/estudiantes/carga-masiva-dual`);
-      
+
       const response = await httpService.post(`/estudiantes/carga-masiva-dual`, formData);
       if (response.status !== 200 && response.status !== 201) {
         return {

@@ -47,12 +47,32 @@ import {
 } from '../components/ui/Icons';
 
 export default function DashboardCoordinadorPage() {
+  // Proteger la sesión del coordinador al inicio
+  const initialSession = getSession();
+  const [protectedSession] = useState(() => {
+    // Congelar la sesión al montar el componente
+    if (initialSession) {
+      localStorage.setItem('coordinador_session_backup', JSON.stringify(initialSession));
+    }
+    return initialSession;
+  });
+  
   const session = getSession();
   const user = session?.user;
   const userRole = user?.rol;
 
   // Toggle para usar versión mejorada
   const [useEnhanced, setUseEnhanced] = useState(false); // Forzar dashboard clásico para ver cambios
+
+  // Validar que la sesión no haya cambiado inesperadamente
+  useEffect(() => {
+    const currentSession = getSession();
+    if (currentSession && protectedSession && currentSession.user.rol !== protectedSession.user.rol) {
+      console.error('⚠️ [DashboardCoordinador] Sesión corrompida detectada. Restaurando sesión original...');
+      localStorage.setItem('session', localStorage.getItem('coordinador_session_backup') || '');
+      window.location.reload();
+    }
+  }, [session, protectedSession]);
 
   // Si el usuario es orientador, redirigir a su propio dashboard o mostrar solo su panel
   if (userRole === 'orientador') {
@@ -146,22 +166,17 @@ export default function DashboardCoordinadorPage() {
       const institucionId = user?.institucionId;
       console.log('🔄 [DashboardCoordinador] Cargando datos para institución:', institucionId);
       
-      // Cargar datos de la institución
-      const instData = await getMiInstitucion();
-      setInstitucion(instData);
+      // Cargar datos de la institución con manejo de errores
+      let instData = null;
+      try {
+        instData = await getMiInstitucion();
+        setInstitucion(instData);
+      } catch (err) {
+        console.warn('⚠️ Error cargando institución:', err);
+      }
       
-      // Cargar datos del coordinador desde endpoints específicos
-      const [
-        estadisticasData,
-        cursosCoordData,
-        alertasData,
-        docentesCoordData,
-        orientadoresData,
-        estudiantesResponse,
-        tareasData,
-        cursosResponse,
-        gradosResponse
-      ] = await Promise.all([
+      // Usar Promise.allSettled para que no falle todo si una petición falla
+      const results = await Promise.allSettled([
         getEstadisticasCoordinador(),
         getCursosCoordinador(),
         getAlertasCoordinador(),
@@ -172,6 +187,25 @@ export default function DashboardCoordinadorPage() {
         apiClient.getCursos(),
         apiClient.getGrados()
       ]);
+
+      // Extraer datos con valores por defecto si fallan
+      const estadisticasData = results[0].status === 'fulfilled' ? results[0].value : null;
+      const cursosCoordData = results[1].status === 'fulfilled' ? results[1].value : [];
+      const alertasData = results[2].status === 'fulfilled' ? results[2].value : null;
+      const docentesCoordData = results[3].status === 'fulfilled' ? results[3].value : [];
+      const orientadoresData = results[4].status === 'fulfilled' ? results[4].value : [];
+      const estudiantesResponse = results[5].status === 'fulfilled' ? results[5].value : { data: [] };
+      const tareasData = results[6].status === 'fulfilled' ? results[6].value : [];
+      const cursosResponse = results[7].status === 'fulfilled' ? results[7].value : { data: [] };
+      const gradosResponse = results[8].status === 'fulfilled' ? results[8].value : { data: [] };
+      
+      // Log de errores si los hay
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          const endpoints = ['estadisticas', 'cursos coord', 'alertas', 'docentes', 'orientadores', 'estudiantes', 'tareas', 'cursos', 'grados'];
+          console.warn(`⚠️ Error cargando ${endpoints[index]}:`, result.reason);
+        }
+      });
 
       console.log('📥 [DashboardCoordinador] Respuesta de estudiantes:', estudiantesResponse);
       console.log('📊 [DashboardCoordinador] Datos de estudiantes:', estudiantesResponse?.data);
@@ -194,11 +228,30 @@ export default function DashboardCoordinadorPage() {
       
       console.log('📚 [DashboardCoordinador] Cursos cargados:', Array.isArray(cursosResponse?.data) ? cursosResponse.data.length : 0);
       console.log('📋 [DashboardCoordinador] Lista de cursos:', cursosResponse?.data);
+      
+      // Verificar si hubo errores críticos (backend caído)
+      const failedRequests = results.filter(r => r.status === 'rejected').length;
+      if (failedRequests >= 3) {
+        console.error('❌ [DashboardCoordinador] Backend no responde. Múltiples peticiones fallaron.');
+        setError('⚠️ El backend parece estar caído. Algunos datos pueden no estar disponibles. Verifica tu conexión o contacta al administrador.');
+      }
     } catch (err) {
       console.error('Error loading data:', err);
       setError('Error al cargar los datos');
     } finally {
       setLoading(false);
+      
+      // Restaurar la sesión si fue modificada durante la carga
+      const sessionAfterLoad = localStorage.getItem('session');
+      if (sessionBeforeLoad && sessionAfterLoad !== sessionBeforeLoad) {
+        const beforeParsed = JSON.parse(sessionBeforeLoad);
+        const afterParsed = JSON.parse(sessionAfterLoad);
+        
+        if (beforeParsed.user.rol !== afterParsed.user.rol) {
+          console.warn('⚠️ [DashboardCoordinador] Sesión modificada durante loadData. Restaurando...');
+          localStorage.setItem('session', sessionBeforeLoad);
+        }
+      }
     }
   };
 
