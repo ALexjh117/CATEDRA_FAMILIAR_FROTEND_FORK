@@ -26,7 +26,8 @@ import {
   updateCurso,
   deleteCurso,
   getDepartamentos,
-  getMunicipios
+  getMunicipios,
+  crearDocente
 } from '../api/endpoints';
 import { type Institucion, type Curso, type Tarea, type Usuario, type Periodo, type Grado, type Departamento, type Municipio } from '../mocks/data';
 import { departamentosMock, municipiosMock } from '../mocks/data';
@@ -100,7 +101,7 @@ export default function DashboardAdminPage() {
     rector_documento: '',
     rector_telefono: ''
   });
-  const [formUsuario, setFormUsuario] = useState<{ nombre: string; apellidos: string; correo: string; telefono: string; documento: string; tipoDocumento: string; contrasena: string; rol: 'admin' | 'rector' | 'coordinador' | 'orientador' | 'docente_aula' | 'acudiente'; institucionId: number }>({ nombre: '', apellidos: '', correo: '', telefono: '', documento: '', tipoDocumento: 'cc', contrasena: '', rol: 'docente_aula', institucionId: 1 });
+  const [formUsuario, setFormUsuario] = useState<{ nombre: string; apellidos: string; correo: string; telefono: string; documento: string; tipoDocumento: string; contrasena: string; rol: 'admin' | 'rector' | 'coordinador' | 'orientador' | 'docente_aula' | 'acudiente'; institucionId: number; telefonoEmergencia?: string; personaEmergencia?: string; direccion?: string; esDirectorGrado?: boolean; gradoAsignado?: string; areaQueOrienta?: string; centroInteres?: string }>({ nombre: '', apellidos: '', correo: '', telefono: '', documento: '', tipoDocumento: 'cc', contrasena: '', rol: 'docente_aula', institucionId: 1, telefonoEmergencia: '', personaEmergencia: '', direccion: '', esDirectorGrado: false, gradoAsignado: '', areaQueOrienta: '', centroInteres: '' });
   const [formPeriodo, setFormPeriodo] = useState<{ nombre: string; fechaInicio: string; fechaFin: string; institucionId: number; anio: number; estado: 'planificado' | 'activo' | 'cerrado' }>({ nombre: '', fechaInicio: '', fechaFin: '', institucionId: 1, anio: new Date().getFullYear(), estado: 'planificado' });
   const [formGrado, setFormGrado] = useState({ nombre: '', orden: 0, institucionId: 1 });
   const [formCurso, setFormCurso] = useState<{ nombre: string; gradoId: number; jornada: 'mañana' | 'tarde' | 'completa'; institucionId: number; docenteDirectorId: number | undefined }>({ nombre: '', gradoId: 1, jornada: 'mañana', institucionId: 1, docenteDirectorId: undefined });
@@ -402,7 +403,7 @@ export default function DashboardAdminPage() {
       if (result.success) {
         await loadData();
         setModalUsuario(false);
-        setFormUsuario({ nombre: '', apellidos: '', correo: '', telefono: '', documento: '', tipoDocumento: 'cc', contrasena: '', rol: 'docente_aula', institucionId: 1 });
+        setFormUsuario({ nombre: '', apellidos: '', correo: '', telefono: '', documento: '', tipoDocumento: 'cc', contrasena: '', rol: 'docente_aula', institucionId: 1, telefonoEmergencia: '', personaEmergencia: '', direccion: '', esDirectorGrado: false, gradoAsignado: '', areaQueOrienta: '', centroInteres: '' });
         alert(`Rector creado exitosamente. Contraseña asignada: ${formUsuario.contrasena} (debe cambiarla en el primer inicio de sesión)`);
       } else {
         setError(result.error || 'Error al crear rector');
@@ -473,6 +474,41 @@ export default function DashboardAdminPage() {
       return;
     }
     
+    // Crear Docente de Aula con contrato extendido del backend
+    if (formUsuario.rol === 'docente_aula') {
+      if (!formUsuario.nombre || !formUsuario.apellidos || !formUsuario.correo || !formUsuario.documento || !formUsuario.institucionId) {
+        setError('Nombre, apellidos, correo, documento e institución son obligatorios para crear un docente');
+        return;
+      }
+      const payload: any = {
+        correo: formUsuario.correo,
+        telefono: formUsuario.telefono || undefined,
+        numeroDocumento: formUsuario.documento,
+        contrasena: formUsuario.contrasena || undefined,
+        nombres: formUsuario.nombre,
+        apellidos: formUsuario.apellidos,
+        tipoDocumento: (formUsuario.tipoDocumento || 'cc').toUpperCase(),
+        telefonoEmergencia: formUsuario.telefonoEmergencia || undefined,
+        personaEmergencia: formUsuario.personaEmergencia || undefined,
+        direccion: formUsuario.direccion || undefined,
+        esDirectorGrado: formUsuario.esDirectorGrado || undefined,
+        gradoAsignado: formUsuario.gradoAsignado || undefined,
+        areaQueOrienta: formUsuario.areaQueOrienta || undefined,
+        centroInteres: formUsuario.centroInteres || undefined,
+        institucionId: Number(formUsuario.institucionId),
+      };
+      const result = await crearDocente(payload);
+      if (result.success) {
+        await loadData();
+        setModalUsuario(false);
+        setFormUsuario({ nombre: '', apellidos: '', correo: '', telefono: '', documento: '', tipoDocumento: 'cc', contrasena: '', rol: 'docente_aula', institucionId: 1, telefonoEmergencia: '', personaEmergencia: '', direccion: '', esDirectorGrado: false, gradoAsignado: '', areaQueOrienta: '', centroInteres: '' });
+        setSuccess('Docente creado correctamente');
+      } else {
+        setError(result.error || 'Error al crear docente');
+      }
+      return;
+    }
+
     // Para otros roles, usar createUsuario genérico (solo funcionará con mock por ahora)
     const result = await createUsuario(formUsuario);
     
@@ -2163,7 +2199,7 @@ export default function DashboardAdminPage() {
         onClose={() => {
           setModalUsuario(false);
           setEditingUsuario(null);
-          setFormUsuario({ nombre: '', apellidos: '', correo: '', telefono: '', documento: '', tipoDocumento: 'cc', contrasena: '', rol: 'docente_aula', institucionId: 1 });
+          setFormUsuario({ nombre: '', apellidos: '', correo: '', telefono: '', documento: '', tipoDocumento: 'cc', contrasena: '', rol: 'docente_aula', institucionId: 1, telefonoEmergencia: '', personaEmergencia: '', direccion: '', esDirectorGrado: false, gradoAsignado: '', areaQueOrienta: '', centroInteres: '' });
           setError(null);
         }}
         title={editingUsuario ? 'Editar Usuario' : 'Nuevo Usuario'}
@@ -2243,6 +2279,72 @@ export default function DashboardAdminPage() {
             onChange={(e) => setFormUsuario({ ...formUsuario, telefono: e.target.value })}
             required={formUsuario.rol === 'rector' || formUsuario.rol === 'coordinador'}
           />
+
+          {/* Campos extendidos solo para Docente de Aula */}
+          {formUsuario.rol === 'docente_aula' && (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <FormFieldInput
+                  name="telefonoEmergencia"
+                  label="Teléfono de Emergencia"
+                  placeholder="Contacto de emergencia"
+                  value={formUsuario.telefonoEmergencia as any}
+                  onChange={(e) => setFormUsuario({ ...formUsuario, telefonoEmergencia: e.target.value })}
+                />
+                <FormFieldInput
+                  name="personaEmergencia"
+                  label="Persona de Emergencia"
+                  placeholder="Nombre del contacto"
+                  value={formUsuario.personaEmergencia as any}
+                  onChange={(e) => setFormUsuario({ ...formUsuario, personaEmergencia: e.target.value })}
+                />
+              </div>
+
+              <FormFieldInput
+                name="direccion"
+                label="Dirección"
+                placeholder="Dirección de residencia"
+                value={formUsuario.direccion as any}
+                onChange={(e) => setFormUsuario({ ...formUsuario, direccion: e.target.value })}
+              />
+
+              <div className="grid grid-cols-2 gap-4 items-center">
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                    checked={Boolean(formUsuario.esDirectorGrado)}
+                    onChange={(e) => setFormUsuario({ ...formUsuario, esDirectorGrado: e.target.checked })}
+                  />
+                  Es director de grado
+                </label>
+                <FormFieldInput
+                  name="gradoAsignado"
+                  label="Grado Asignado"
+                  placeholder="Ej: 5B o 1"
+                  value={formUsuario.gradoAsignado as any}
+                  onChange={(e) => setFormUsuario({ ...formUsuario, gradoAsignado: e.target.value })}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormFieldInput
+                  name="areaQueOrienta"
+                  label="Área que Orienta"
+                  placeholder="Ej: Matemáticas"
+                  value={formUsuario.areaQueOrienta as any}
+                  onChange={(e) => setFormUsuario({ ...formUsuario, areaQueOrienta: e.target.value })}
+                />
+                <FormFieldInput
+                  name="centroInteres"
+                  label="Centro de Interés"
+                  placeholder="Ej: Robótica"
+                  value={formUsuario.centroInteres as any}
+                  onChange={(e) => setFormUsuario({ ...formUsuario, centroInteres: e.target.value })}
+                />
+              </div>
+            </>
+          )}
           
           {/* Campo de contraseña - solo visible para rector y coordinador */}
           {(formUsuario.rol === 'rector' || formUsuario.rol === 'coordinador') && (
