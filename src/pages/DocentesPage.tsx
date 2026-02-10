@@ -70,7 +70,18 @@ export default function DocentesPage() {
     contrasena: generarContrasenaDocente(),
     nombre: '',
     apellido: '',
+    numeroDocumento: '',
     telefono: '',
+    // Campos extendidos según contrato backend
+    tipoDocumento: 'CC',
+    telefonoEmergencia: '',
+    personaEmergencia: '',
+    direccion: '',
+    esDirectorGrado: false,
+    gradoAsignado: '',
+    areaQueOrienta: '',
+    centroInteres: '',
+    institucionId: (user?.institucionId as number) || 1,
     cursoIds: [] as number[]
   });
 
@@ -107,7 +118,17 @@ export default function DocentesPage() {
       contrasena: generarContrasenaDocente(),
       nombre: '',
       apellido: '',
+      numeroDocumento: '',
       telefono: '',
+      tipoDocumento: 'CC',
+      telefonoEmergencia: '',
+      personaEmergencia: '',
+      direccion: '',
+      esDirectorGrado: false,
+      gradoAsignado: '',
+      areaQueOrienta: '',
+      centroInteres: '',
+      institucionId: (user?.institucionId as number) || 1,
       cursoIds: []
     });
     setModalDocente(true);
@@ -120,7 +141,17 @@ export default function DocentesPage() {
       contrasena: '',
       nombre: docente.nombre,
       apellido: docente.apellido,
+      numeroDocumento: (docente as any).numeroDocumento || (docente as any).documento || '',
       telefono: docente.telefono || '',
+      tipoDocumento: (docente as any).tipoDocumento || 'CC',
+      telefonoEmergencia: (docente as any).telefonoEmergencia || '',
+      personaEmergencia: (docente as any).personaEmergencia || '',
+      direccion: (docente as any).direccion || '',
+      esDirectorGrado: Boolean((docente as any).esDirectorGrado) || false,
+      gradoAsignado: (docente as any).gradoAsignado || '',
+      areaQueOrienta: (docente as any).areaQueOrienta || '',
+      centroInteres: (docente as any).centroInteres || '',
+      institucionId: docente.institucionId || (user?.institucionId as number) || 1,
       cursoIds: docente.cursos?.map(c => c.id) || []
     });
     setModalDocente(true);
@@ -129,6 +160,11 @@ export default function DocentesPage() {
   const handleSaveDocente = async () => {
     if (!formDocente.nombre.trim() || !formDocente.apellido.trim() || !formDocente.correo.trim()) {
       showToast('error', 'Nombre, apellido y correo son obligatorios');
+      return;
+    }
+
+    if (!editingDocente && !formDocente.numeroDocumento.trim()) {
+      showToast('error', 'El número de documento es obligatorio para nuevos docentes');
       return;
     }
 
@@ -154,25 +190,63 @@ export default function DocentesPage() {
           showToast('error', result.error || 'Error al actualizar');
         }
       } else {
-        const result = await crearDocente({
+        const gradoAsignadoValue: any = (() => {
+          const n = Number(formDocente.gradoAsignado);
+          return Number.isFinite(n) && !isNaN(n) ? n : formDocente.gradoAsignado;
+        })();
+        const crearPayload = {
           correo: formDocente.correo,
           contrasena: formDocente.contrasena,
           nombre: formDocente.nombre,
           apellido: formDocente.apellido,
+          // Campos duplicados para compatibilidad con backend: usar nombres/apellidos
+          nombres: formDocente.nombre,
+          apellidos: formDocente.apellido,
+          numeroDocumento: formDocente.numeroDocumento,
           telefono: formDocente.telefono || undefined,
-          institucionId: user?.institucionId || 1,
-          cursoIds: formDocente.cursoIds.length > 0 ? formDocente.cursoIds : undefined
-        });
+          institucionId: Number(formDocente.institucionId) || (user?.institucionId as number) || 1,
+          cursoIds: formDocente.cursoIds.length > 0 ? formDocente.cursoIds : undefined,
+          tipoDocumento: formDocente.tipoDocumento,
+          telefonoEmergencia: formDocente.telefonoEmergencia || undefined,
+          personaEmergencia: formDocente.personaEmergencia || undefined,
+          direccion: formDocente.direccion || undefined,
+          esDirectorGrado: formDocente.esDirectorGrado || undefined,
+          gradoAsignado: gradoAsignadoValue || undefined,
+          areaQueOrienta: formDocente.areaQueOrienta || undefined,
+          centroInteres: formDocente.centroInteres || undefined
+        } as any;
+        console.log('[DocentesPage][crearDocente] payload ->', crearPayload);
+        const result = await crearDocente(crearPayload);
+        console.log('[DocentesPage][crearDocente] result <-', result);
         if (result.success) {
-          showToast('success', 'Docente creado correctamente');
+          const body: any = (result as any).data || {};
+          const pwdInfo: string = body?.passwordTemporal ? ` Contraseña temporal: ${body.passwordTemporal}` : '';
+          // Optimistic update: insertar el docente retornado en la lista local
+          const dRaw: any = body?.docente || body?.data?.docente || null;
+          if (dRaw) {
+            const docenteNuevo: Docente = {
+              id: dRaw.id,
+              nombre: dRaw.nombre || dRaw.nombres || formDocente.nombre,
+              apellido: dRaw.apellido || dRaw.apellidos || formDocente.apellido,
+              correo: body?.usuario?.correo || formDocente.correo,
+              telefono: dRaw.telefono || formDocente.telefono,
+              institucionId: dRaw.institucionId || (user?.institucionId as number) || 1,
+              estaActivo: true,
+              cursos: Array.isArray(dRaw.cursos) ? dRaw.cursos.map((c: any) => ({ id: c.id, nombre: c.nombre })) : []
+            };
+            setDocentes(prev => [docenteNuevo, ...prev]);
+          }
+          showToast('success', `Docente creado correctamente.${pwdInfo}`);
           setModalDocente(false);
-          loadData();
+          // Hacer loadData en background para sincronizar asignaciones/cursos si aplica
+          setTimeout(() => { try { loadData(); } catch {} }, 0);
         } else {
           showToast('error', result.error || 'Error al crear');
         }
       }
-    } catch (error) {
-      showToast('error', 'Error al guardar docente');
+    } catch (error: any) {
+      console.error('[DocentesPage][crearDocente] EXCEPTION:', error?.response?.data || error);
+      showToast('error', error?.response?.data?.message || error?.message || 'Error al guardar docente');
     } finally {
       setSaving(false);
     }
@@ -455,6 +529,91 @@ export default function DocentesPage() {
             required
             disabled={!!editingDocente}
           />
+
+          <FormFieldInput
+            label="Número de Documento"
+            type="text"
+            value={formDocente.numeroDocumento}
+            onChange={(e) => setFormDocente(prev => ({ ...prev, numeroDocumento: e.target.value }))}
+            placeholder="Documento de identidad"
+            required={!editingDocente}
+          />
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Documento</label>
+              <select
+                value={formDocente.tipoDocumento}
+                onChange={(e) => setFormDocente(prev => ({ ...prev, tipoDocumento: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="CC">CC</option>
+                <option value="TI">TI</option>
+                <option value="CE">CE</option>
+                <option value="PA">PA</option>
+              </select>
+            </div>
+            <FormFieldInput
+              label="Teléfono de Emergencia"
+              type="tel"
+              value={formDocente.telefonoEmergencia}
+              onChange={(e) => setFormDocente(prev => ({ ...prev, telefonoEmergencia: e.target.value }))}
+              placeholder="Contacto de emergencia"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <FormFieldInput
+              label="Persona de Emergencia"
+              type="text"
+              value={formDocente.personaEmergencia}
+              onChange={(e) => setFormDocente(prev => ({ ...prev, personaEmergencia: e.target.value }))}
+              placeholder="Nombre del contacto"
+            />
+            <FormFieldInput
+              label="Dirección"
+              type="text"
+              value={formDocente.direccion}
+              onChange={(e) => setFormDocente(prev => ({ ...prev, direccion: e.target.value }))}
+              placeholder="Dirección de residencia"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 items-center">
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={formDocente.esDirectorGrado}
+                onChange={(e) => setFormDocente(prev => ({ ...prev, esDirectorGrado: e.target.checked }))}
+                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              Es director de grado
+            </label>
+            <FormFieldInput
+              label="Grado Asignado"
+              type="text"
+              value={formDocente.gradoAsignado}
+              onChange={(e) => setFormDocente(prev => ({ ...prev, gradoAsignado: e.target.value }))}
+              placeholder="Ej: 5B"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <FormFieldInput
+              label="Área que Orienta"
+              type="text"
+              value={formDocente.areaQueOrienta}
+              onChange={(e) => setFormDocente(prev => ({ ...prev, areaQueOrienta: e.target.value }))}
+              placeholder="Ej: Matemáticas"
+            />
+            <FormFieldInput
+              label="Centro de Interés"
+              type="text"
+              value={formDocente.centroInteres}
+              onChange={(e) => setFormDocente(prev => ({ ...prev, centroInteres: e.target.value }))}
+              placeholder="Ej: Robótica"
+            />
+          </div>
           
           {!editingDocente && (
             <div>
@@ -478,6 +637,15 @@ export default function DocentesPage() {
             value={formDocente.telefono}
             onChange={(e) => setFormDocente(prev => ({ ...prev, telefono: e.target.value }))}
             placeholder="Número de contacto"
+          />
+
+          <FormFieldInput
+            label="Institución ID"
+            type="number"
+            value={String(formDocente.institucionId ?? '')}
+            onChange={(e) => setFormDocente(prev => ({ ...prev, institucionId: Number(e.target.value) }))}
+            placeholder="ID de la institución"
+            name="institucionId"
           />
           
           {/* Selector de cursos */}
