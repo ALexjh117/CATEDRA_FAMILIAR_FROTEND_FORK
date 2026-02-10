@@ -6,7 +6,19 @@ const isBypassValidationsEnabled = () => false;
 // ============================================
 
 import apiClient from './apiClient';
-import { type Usuario, type Estudiante, type EstudianteAcudiente, type Tarea, type Entrega, type Categoria, type Curso, type Institucion, type Departamento, type Municipio, type Periodo, type Grado, type Notificacion, type LogAuditoria, type RolUsuario } from '../mocks/data';
+import httpService from './httpService';
+import { type Usuario, type Estudiante, type EstudianteAcudiente, type Tarea, type Entrega, type Categoria, type Curso, type Institucion, type Departamento, type Municipio, type Periodo, type Grado, type Notificacion, type LogAuditoria, type RolUsuario, usuariosListMock } from '../mocks/data';
+
+// Definiciones seguras para evitar ReferenceError cuando no hay mocks cargados
+const tareasMock: any[] = [];
+const entregasMock: any[] = [];
+const logsAuditoriaMock: any[] = [];
+const departamentosMock: any[] = [];
+const municipiosMock: any[] = [];
+const categoriasMock: any[] = [];
+const notificacionesMock: any[] = [];
+const estudiantesMock: any[] = [];
+const estudiantesAcudientesMock: any[] = [];
 
 // Simular delay de red
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -102,7 +114,7 @@ export const getSession = (): { user: Usuario; isPreview: boolean } | null => {
   const session = localStorage.getItem('session');
   if (session) {
     const parsed = JSON.parse(session);
-    return parsed.user ? { user: parsed.user } : null;
+    return parsed.user ? { user: parsed.user as Usuario, isPreview: Boolean(parsed.isPreview) } : null;
   }
   return null;
 };
@@ -1615,6 +1627,7 @@ export const getResumenInstitucional = async () => {
  * GET /docentes
  */
 export const getDocentesCRUD = async () => {
+  // Según guía actual del backend, listar usando /api/docentes
   const result = await apiClient.getDocentes();
   return result.data || [];
 };
@@ -1637,12 +1650,72 @@ export const crearDocente = async (data: {
   contrasena: string;
   nombre: string;
   apellido: string;
+  numeroDocumento?: string;
   telefono?: string;
   institucionId: number;
   cursoIds?: number[];
+  tipoDocumento?: string;
+  telefonoEmergencia?: string;
+  personaEmergencia?: string;
+  direccion?: string;
+  esDirectorGrado?: boolean;
+  gradoAsignado?: string;
+  areaQueOrienta?: string;
+  centroInteres?: string;
 }) => {
-  const result = await apiClient.createDocente(data);
-  return { success: result.success, data: result.data, error: result.message };
+  // Elegir endpoint según rol: orientador (rolId 4) usa /orientadores/docentes; admin mantiene /docentes
+  const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('session') : null;
+  const session = raw ? JSON.parse(raw) : null;
+  const rolId = session?.user?.rolId;
+  const rol = session?.user?.rol;
+  const isOrientador = rolId === 4 || rol === 'orientador';
+  const isAdmin = rolId === 1 || rol === 'admin_sistema';
+
+  if (isOrientador || isAdmin) {
+    // Mapear al shape esperado por el backend de orientadores
+    const payload: any = {
+      correo: data.correo,
+      contrasena: data.contrasena,
+      nombres: data.nombre,
+      apellidos: data.apellido,
+      numeroDocumento: data.numeroDocumento,
+      telefono: data.telefono,
+      institucionId: data.institucionId,
+      cursoIds: data.cursoIds,
+      tipoDocumento: data.tipoDocumento,
+      telefonoEmergencia: data.telefonoEmergencia,
+      personaEmergencia: data.personaEmergencia,
+      direccion: data.direccion,
+      esDirectorGrado: data.esDirectorGrado,
+      gradoAsignado: data.gradoAsignado,
+      areaQueOrienta: data.areaQueOrienta,
+      centroInteres: data.centroInteres,
+    };
+    try {
+      console.log('[crearDocente][orientador] POST /orientadores/docentes payload:', {
+        correo: payload.correo,
+        tieneContrasena: !!payload.contrasena,
+        nombres: payload.nombres,
+        apellidos: payload.apellidos,
+        tipoDocumento: payload.tipoDocumento,
+        numeroDocumento: payload.numeroDocumento,
+        telefono: payload.telefono,
+        institucionId: payload.institucionId,
+        cursoIds: Array.isArray(payload.cursoIds) ? payload.cursoIds : undefined,
+      });
+      const res = await httpService.post('/orientadores/docentes', payload);
+      console.log('[crearDocente][orientador] respuesta:', { status: (res as any)?.status, keys: Object.keys(res?.data || {}) });
+      const body: any = res.data;
+      return { success: true, data: body, error: undefined };
+    } catch (e: any) {
+      const msg = e?.response?.data?.message || e?.message || 'Error al crear docente';
+      console.error('[crearDocente][orientador] ERROR:', { status: e?.response?.status, data: e?.response?.data, message: msg });
+      return { success: false, data: undefined, error: msg };
+    }
+  } else {
+    const result = await apiClient.createDocente(data);
+    return { success: result.success, data: result.data, error: result.message };
+  }
 };
 
 /**

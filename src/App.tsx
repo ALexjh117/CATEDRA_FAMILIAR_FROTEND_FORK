@@ -41,9 +41,11 @@ import AcudienteHijosPage from './pages/AcudienteHijosPage'
 import EstudiantesPage from './pages/EstudiantesPage'
 import OrientadorLayout from './components/orientador-acudiente/OrientadorLayout'
 import AcudienteTareasAutoPage from './pages/AcudienteTareasAutoPage'
+
 // Legacy
 import DashboardPage from './pages/DashboardPage'
 import PagePlaceholder from './components/PagePlaceholder'
+import DocentesPage from './pages/DocentesPage'
 
 // Protected Route wrapper
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactElement, allowedRoles?: string[] }) {
@@ -275,6 +277,11 @@ export default function App(){
     <TareasPage />
   </ProtectedRoute>
 } />
+          <Route path="/docentes" element={
+            <ProtectedRoute allowedRoles={['orientador']}>
+              <DocentesPage />
+            </ProtectedRoute>
+          } />
           <Route path="/reportes/cursos/:id/entregas" element={<ProtectedRoute allowedRoles={['docente','docente_aula']}><ReporteEntregasCursoPage /></ProtectedRoute>} />
           <Route path="/reportes/cursos/:id/calificaciones" element={<ProtectedRoute allowedRoles={['docente','docente_aula']}><ReporteCalificacionesCursoPage /></ProtectedRoute>} />
           <Route path="/reportes/admin" element={<ProtectedRoute allowedRoles={['admin']}><ReportesAdmin /></ProtectedRoute>} />
@@ -300,3 +307,5 @@ export default function App(){
     </ToastProvider>
   )
 }
+
+

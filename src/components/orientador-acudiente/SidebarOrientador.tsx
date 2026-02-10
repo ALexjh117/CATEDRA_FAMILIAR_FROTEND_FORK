@@ -29,6 +29,7 @@ const navItems: NavItem[] = [
   { type: 'link', path: '/dashboard', label: 'Inicio', icon: 'home' },
   { type: 'link', path: '/dashboard/orientador', label: 'Mi Panel', icon: 'dashboard' },
   { type: 'link', path: '/tareas', label: 'Tareas', icon: 'dashboard' },
+  { type: 'link', path: '/docentes', label: 'Docentes', icon: 'users' },
   { type: 'link', path: '/padres-familia', label: 'Padres de Familia', icon: 'family' },
   {
     type: 'group',
