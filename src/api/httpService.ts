@@ -98,18 +98,19 @@ class HttpService {
 
   async get<T = any>(endpoint: string, params?: Record<string, any>): Promise<HttpResponse<T>> {
     // Construir URL correctamente
-    const base = this.config.baseURL.endsWith('/') ? this.config.baseURL.slice(0, -1) : this.config.baseURL;
-    const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-    const url = `${base}${path}`;
-    
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          url.searchParams.append(key, String(value));
-        }
-      });
+const base = this.config.baseURL.endsWith('/') ? this.config.baseURL.slice(0, -1) : this.config.baseURL;
+const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+const url = new URL(`${base}${path}`, origin);
+ 
+if (params) {
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      url.searchParams.append(key, String(value));
     }
-
+  });
+}
+ 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
 

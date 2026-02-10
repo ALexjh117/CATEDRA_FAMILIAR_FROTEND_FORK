@@ -150,6 +150,10 @@ export async function loginUnicoMultiRol(correo: string, contrasena: string, cap
       context,
       isPreview: false
     }));
+    // Imprimir el token en consola tras login exitoso (pedido del admin)
+    try {
+      console.log('[LOGIN][DEBUG] JWT:', token);
+    } catch {}
 
     return { success: true, user, token, message, context };
   } catch (error: any) {
@@ -248,7 +252,18 @@ export async function getEstudiantesInstitucionOrientador(): Promise<any[]> {
     }
 
     const data = raw?.data ?? raw?.estudiantes ?? [];
-    return Array.isArray(data) ? data : [];
+    if (Array.isArray(data) && data.length > 0) return data;
+
+    // Fallback: si no hay estudiantes por el endpoint de orientador,
+    // intentar obtener el listado general de estudiantes.
+    try {
+      const resp2 = await httpService.get<any>('/estudiantes');
+      const raw2 = resp2.data as any;
+      const data2 = raw2?.data ?? raw2?.estudiantes ?? [];
+      return Array.isArray(data2) ? data2 : [];
+    } catch {
+      return [];
+    }
   } catch (error: any) {
     throw new Error(error?.message || 'Error de conexión');
   }
