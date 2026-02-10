@@ -113,6 +113,10 @@ export default function BulkUploadDual({ institucionId, onClose, onSuccess }: Bu
     console.log('👨‍👩‍👧 Archivo Acudientes:', archivoAcudientes.name, archivoAcudientes.size, 'bytes');
     console.log('🏫 Institución ID:', institucionId);
 
+    // Proteger la sesión actual antes de la carga masiva
+    const sessionBeforeUpload = localStorage.getItem('session');
+    console.log('🔒 [BulkUploadDual] Sesión protegida antes de carga');
+
     setProcessing(true);
     setProgress(0);
     setError(null);
@@ -151,6 +155,20 @@ export default function BulkUploadDual({ institucionId, onClose, onSuccess }: Bu
       setError(err.message || 'Error inesperado al procesar los archivos');
     } finally {
       setProcessing(false);
+      
+      // Restaurar la sesión si fue modificada durante la carga
+      const sessionAfterUpload = localStorage.getItem('session');
+      if (sessionBeforeUpload && sessionAfterUpload !== sessionBeforeUpload) {
+        const beforeParsed = JSON.parse(sessionBeforeUpload);
+        const afterParsed = JSON.parse(sessionAfterUpload);
+        
+        if (beforeParsed.user.rol !== afterParsed.user.rol) {
+          console.warn('⚠️ [BulkUploadDual] Sesión modificada durante carga. Restaurando...');
+          localStorage.setItem('session', sessionBeforeUpload);
+          window.location.reload();
+        }
+      }
+      
       console.log('🏁 Proceso finalizado');
     }
   };
@@ -441,13 +459,40 @@ export default function BulkUploadDual({ institucionId, onClose, onSuccess }: Bu
                     <p className="text-sm font-semibold text-amber-800 mb-2">
                       ⚠️ {result.errores.length} registro(s) con errores:
                     </p>
-                    <div className="max-h-48 overflow-y-auto space-y-1">
-                      {result.errores.map((err, i) => (
-                        <div key={i} className="text-xs text-amber-700">
+                    {/* Mostrar los primeros 5 errores críticos */}
+                    <div className="space-y-1 mb-2">
+                      {result.errores.slice(0, 5).map((err, i) => (
+                        <div key={i} className="text-xs text-red-700 font-semibold">
                           • <strong>{err.archivo}</strong> - Fila {err.fila}, Campo {err.campo}: {err.mensaje}
                         </div>
                       ))}
+                      {result.errores.length > 5 && (
+                        <div className="text-xs text-amber-700 italic">...y {result.errores.length - 5} más</div>
+                      )}
                     </div>
+                    {/* Botón para descargar log de errores en CSV */}
+                    <button
+                      className="px-3 py-1 bg-amber-200 hover:bg-amber-300 text-amber-900 rounded text-xs font-semibold border border-amber-300 transition"
+                      onClick={() => {
+                        const csv = [
+                          'archivo,fila,campo,valor,mensaje',
+                          ...result.errores.map(e => `${e.archivo},${e.fila},${e.campo},"${String(e.valor).replace(/"/g, '""')}","${e.mensaje.replace(/"/g, '""')}"`)
+                        ].join('\n');
+                        const blob = new Blob([csv], { type: 'text/csv' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'errores_carga_masiva.csv';
+                        document.body.appendChild(a);
+                        a.click();
+                        setTimeout(() => {
+                          document.body.removeChild(a);
+                          URL.revokeObjectURL(url);
+                        }, 100);
+                      }}
+                    >
+                      Descargar log de errores (CSV)
+                    </button>
                   </div>
                 )}
               </div>
