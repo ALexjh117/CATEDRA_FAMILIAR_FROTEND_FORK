@@ -50,27 +50,89 @@ function extractRolFromMessage(message?: unknown): RolUsuario | undefined {
 
 export async function loginUnicoMultiRol(correo: string, contrasena: string, captchaToken?: string | null): Promise<LoginUnicoResult> {
   try {
-    const response = await httpService.post<any>('/login', {
-      correo,
-      email: correo,
-      usuario: correo,
-      contrasena,
-      password: contrasena,
-      // Enviar token de reCAPTCHA usando claves comunes para maximizar compatibilidad
-      recaptcha: captchaToken,
-      reCaptcha: captchaToken,
-      recaptchaToken: captchaToken,
-      token_captcha: captchaToken,
-      captchaToken: captchaToken
-    });
+    try {
+      console.log('[LOGIN][DEBUG] Intentando login', {
+        correo,
+        tieneCaptcha: Boolean(captchaToken),
+        captchaLen: captchaToken ? String(captchaToken).length : 0
+      });
+    } catch {}
+    // Detectar si el input es un número de documento (acudiente)
+    const isDocumento = typeof correo === 'string' && /^[0-9]{5,}$/.test(correo.trim());
+    const payload = isDocumento
+      // Acudiente: enviar usuario (doc), numeroDocumento y contrasena + captcha
+      ? {
+          usuario: correo.trim(),
+          numeroDocumento: correo.trim(),
+          contrasena,
+          password: contrasena,
+          recaptcha: captchaToken,
+          reCaptcha: captchaToken,
+          recaptchaToken: captchaToken,
+          token_captcha: captchaToken,
+          captchaToken: captchaToken
+        }
+      // Payload general para otros roles/backends
+      : {
+          correo,
+          email: correo,
+          usuario: correo,
+          contrasena,
+          password: contrasena,
+          // Enviar token de reCAPTCHA usando claves comunes para maximizar compatibilidad
+          recaptcha: captchaToken,
+          reCaptcha: captchaToken,
+          recaptchaToken: captchaToken,
+          token_captcha: captchaToken,
+          captchaToken: captchaToken
+        };
+
+    try {
+      console.log('[LOGIN][DEBUG] Payload seleccionado', {
+        esAcudientePorDocumento: isDocumento,
+        keys: Object.keys(payload)
+      });
+    } catch {}
+
+    const endpointPath = isDocumento ? '/acudientes/login' : '/login';
+    const response = await httpService.post<any>(endpointPath, payload);
 
     const raw = response.data as any;
 
-    const token: string | undefined =
+    try {
+      console.log('[LOGIN][DEBUG] Respuesta cruda de /login', {
+        status: response.status,
+        tieneToken: Boolean((raw?.token ?? raw?.data?.token ?? raw?.jwt ?? raw?.access_token)),
+        keys: Object.keys(raw || {})
+      });
+    } catch {}
+
+    // Intentar extraer el token desde múltiples ubicaciones comunes y, si no está, desde el header Authorization
+    let token: string | undefined =
       raw?.token ??
       raw?.data?.token ??
       raw?.jwt ??
-      raw?.access_token;
+      raw?.access_token ??
+      raw?.accessToken ??
+      raw?.bearerToken ??
+      raw?.bearer ??
+      raw?.data?.bearerToken ??
+      raw?.token_acceso ??
+      raw?.tokenAcceso ??
+      raw?.data?.token_acceso ??
+      raw?.tokenBearer ??
+      raw?.api_token ??
+      raw?.sessionToken ??
+      raw?.data?.accessToken;
+
+    try {
+      if (!token && response.headers && typeof response.headers.get === 'function') {
+        const authHeader = response.headers.get('Authorization') || response.headers.get('authorization');
+        if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+          token = authHeader.slice(7).trim();
+        }
+      }
+    } catch {}
 
     const message: string | undefined = raw?.message ?? raw?.mensaje ?? raw?.data?.message;
 
@@ -117,10 +179,12 @@ export async function loginUnicoMultiRol(correo: string, contrasena: string, cap
       (typeof rolId === 'number' ? ROLES_MAP[rolId] : undefined);
 
     if (!token) {
+      try { console.warn('[LOGIN][DEBUG] Falla: no se recibió token', { message }); } catch {}
       return { success: false, error: message || 'Login inválido: no se recibió token.' };
     }
 
     if (!rolNombre) {
+      try { console.warn('[LOGIN][DEBUG] Falla: no se pudo determinar rol', { rolId, message }); } catch {}
       return { success: false, error: message || 'Login inválido: no se pudo determinar el rol.' };
     }
 
@@ -150,6 +214,14 @@ export async function loginUnicoMultiRol(correo: string, contrasena: string, cap
       context,
       isPreview: false
     }));
+    // Configurar Authorization inmediatamente para siguientes requests
+    try {
+      httpService.setAuthToken(token);
+      try {
+        const len = token ? String(token).length : 0;
+        console.log('[LOGIN][DEBUG] Token aplicado a Authorization', { len });
+      } catch {}
+    } catch {}
     // Imprimir el token en consola tras login exitoso (pedido del admin)
     try {
       console.log('[LOGIN][DEBUG] JWT:', token);
@@ -157,10 +229,46 @@ export async function loginUnicoMultiRol(correo: string, contrasena: string, cap
 
     return { success: true, user, token, message, context };
   } catch (error: any) {
-    return {
-      success: false,
-      error: error?.message || 'Error de conexión'
-    };
+    try {
+      const body = error?.body;
+      const serverMsg: string | undefined =
+        body?.message ?? body?.mensaje ?? body?.error ?? body?.detail ?? body?.detalle;
+      const reason: string | undefined = body?.reason ?? body?.motivo;
+      const code: string | number | undefined = error?.code ?? body?.code ?? body?.error_code;
+      // Campos que podrían indicar por qué "no existe"
+      const field: string | undefined = body?.field ?? body?.campo;
+      const fields = Array.isArray(body?.fields || body?.errores)
+        ? (body?.fields || body?.errores).map((e: any) => e?.field || e?.campo || e?.name).filter(Boolean)
+        : undefined;
+
+      const composed = [serverMsg, reason]
+        .filter(Boolean)
+        .join(' - ');
+
+      console.error('[LOGIN][DEBUG] Error en login', {
+        mensaje: error?.message,
+        status: error?.status,
+        code,
+        serverMsg,
+        reason,
+        field,
+        fields
+      });
+
+      const friendly = composed || error?.message || 'Error de conexión';
+      const withField = field ? `${friendly} (campo: ${field})` : friendly;
+      const withFields = !field && fields?.length ? `${friendly} (campos: ${fields.join(', ')})` : withField;
+
+      return {
+        success: false,
+        error: withFields
+      };
+    } catch {
+      return {
+        success: false,
+        error: error?.message || 'Error de conexión'
+      };
+    }
   }
 }
 
