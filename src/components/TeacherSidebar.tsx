@@ -55,13 +55,21 @@ export default function TeacherSidebar({ open, onClose }: { open: boolean; onClo
 
       {/* Sidebar */}
       <aside
-        className={`fixed lg:static z-50 top-0 left-0 h-full w-72 bg-white border-r border-slate-200/70 shadow-xl lg:shadow-none transform transition-transform duration-200 ${
+        className={`fixed lg:fixed z-30 lg:top-16 top-0 left-0 w-72 bg-white border-r border-slate-200/70 shadow-xl lg:shadow-none transform transition-transform duration-200 ${
           open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
+        style={{ height: '100vh', ...(typeof window !== 'undefined' ? {} : {}) }}
       >
         <div className="h-16 flex items-center justify-between px-4 border-b border-slate-200/70">
-          <div className="font-display font-bold text-slate-800">
-            Sidebar Docente Personalizado
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-sm font-medium text-slate-700 truncate max-w-[9rem]">{
+              (user?.nombre && user?.nombre !== 'Usuario')
+                ? `${user?.nombre} ${user?.apellidos || ''}`.trim()
+                : (user?.correo ? String(user.correo).split('@')[0] : 'Docente')
+            }</span>
+            <span className="px-2 py-0.5 rounded-md text-[10px] bg-teal-50 text-teal-700 border border-teal-200">
+              {(((user?.rol || 'docente') as string) === 'docente_aula' ? 'Docente' : ((user?.rol || 'docente') as string).replace('_',' '))}
+            </span>
           </div>
           <button className="lg:hidden p-2 rounded-lg hover:bg-slate-100" onClick={onClose}>
             <IconX size={18} />
@@ -69,10 +77,6 @@ export default function TeacherSidebar({ open, onClose }: { open: boolean; onClo
         </div>
 
         <div className="px-3 py-4">
-          <div className="px-2 py-2 mb-3 rounded-lg bg-teal-50 text-teal-700 text-sm font-medium">
-            Bienvenido, {user?.nombre || 'Docente'}
-          </div>
-          
           <nav className="space-y-1">
             {navItems.map((item) => {
               const Icon = iconMap[item.icon];
