@@ -25,9 +25,10 @@ class HttpService {
   private config: ApiConfig;
 
   constructor(config: Partial<ApiConfig> = {}) {
+    const envBase = (typeof import.meta !== 'undefined' ? (import.meta as any)?.env?.VITE_API_URL : undefined) as string | undefined;
     this.config = {
-      // Usar '/api' como baseURL por defecto para aprovechar el proxy de Vite
-      baseURL: config.baseURL || '/api',
+      // Preferir VITE_API_URL; si no, usar '/api' para aprovechar el proxy de Vite
+      baseURL: config.baseURL || envBase || '/api',
       timeout: config.timeout || 15000,
       headers: {
         'Content-Type': 'application/json',
@@ -35,6 +36,9 @@ class HttpService {
         ...config.headers
       }
     };
+    try {
+      console.log('[HTTP][INIT] Base URL:', this.config.baseURL);
+    } catch {}
   }
 
   private getAuthToken(): string | null {

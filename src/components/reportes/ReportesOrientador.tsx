@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { getSession } from '../../api/endpoints';
-import apiClient from '../../api/apiClient';
+import httpService from '../../api/httpService';
 import DashboardLayout from '../DashboardLayout';
 import OrientadorLayout from '../orientador-acudiente/OrientadorLayout';
 import LoadingSpinner from '../ui/LoadingSpinner';
-import { exportToExcel, exportEstadisticasToPDF } from '../../utils/exportUtils';
+import Modal from '../ui/Modal';
+import { exportToExcel } from '../../utils/exportUtils';
 import {
   IconDownload,
   IconBarChart,
@@ -14,7 +15,7 @@ import {
   IconAlert
 } from '../ui/Icons';
 
-type TipoReporte = 'casos' | 'estudiantes' | 'participacion' | 'alertas';
+type TipoReporte = 'estudiantesPorCurso' | 'cumplimientoEntregas' | 'alertasAcademicas' | 'sinCalificaciones';
 
 interface ReporteConfig {
   id: TipoReporte;
@@ -32,37 +33,41 @@ export default function ReportesOrientador() {
 
   const [loading, setLoading] = useState(true);
   const [generando, setGenerando] = useState(false);
-  const [periodoSeleccionado, setPeriodoSeleccionado] = useState('2026-1');
+  const [periodoSeleccionado, setPeriodoSeleccionado] = useState('20261');
   const [reporteSeleccionado, setReporteSeleccionado] = useState<TipoReporte | null>(null);
+  const [cursoId, setCursoId] = useState('');
+  const [gradoId, setGradoId] = useState('');
+  const [jornada, setJornada] = useState('');
+  const [umbral, setUmbral] = useState('3.0');
 
   const tiposReporte: ReporteConfig[] = [
     {
-      id: 'casos',
-      nombre: 'Casos de Acompañamiento',
-      descripcion: 'Registro y seguimiento de casos de acompañamiento familiar y estudiantil.',
-      icono: IconHeart,
-      color: 'rose'
-    },
-    {
-      id: 'estudiantes',
-      nombre: 'Estudiantes Atendidos',
-      descripcion: 'Listado de estudiantes con seguimiento y atención personalizada.',
+      id: 'estudiantesPorCurso',
+      nombre: 'Estudiantes por Curso/Grado/Jornada',
+      descripcion: 'Totales por curso y resumen por grado y jornada.',
       icono: IconUsers,
       color: 'blue'
     },
     {
-      id: 'participacion',
-      nombre: 'Participación Familiar',
-      descripcion: 'Nivel de participación de las familias en actividades del programa.',
-      icono: IconGraduationCap,
-      color: 'purple'
+      id: 'cumplimientoEntregas',
+      nombre: 'Cumplimiento de Entregas por Curso',
+      descripcion: 'Tareas asignadas, entregadas y cumplimiento por estudiante y resumen.',
+      icono: IconBarChart,
+      color: 'indigo'
     },
     {
-      id: 'alertas',
+      id: 'alertasAcademicas',
       nombre: 'Alertas Académicas',
-      descripcion: 'Estudiantes que requieren atención prioritaria por bajo rendimiento.',
+      descripcion: 'Estudiantes con notas bajo el umbral, agrupados por curso.',
       icono: IconAlert,
       color: 'amber'
+    },
+    {
+      id: 'sinCalificaciones',
+      nombre: 'Estudiantes sin Calificaciones',
+      descripcion: 'Estudiantes sin calificaciones en el período, agrupados por curso.',
+      icono: IconGraduationCap,
+      color: 'purple'
     }
   ];
 
@@ -84,126 +89,95 @@ export default function ReportesOrientador() {
     }
   };
 
-  const generarReporteCasos = async () => {
+  const normalizeToRows = (payload: any): any[] => {
+    if (!payload) return [];
+    const data = payload.data ?? payload;
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.items)) return data.items;
+    if (Array.isArray(data?.list)) return data.list;
+    if (Array.isArray(data?.alertas)) return data.alertas;
+    if (Array.isArray(data?.estudiantes)) return data.estudiantes;
+    if (Array.isArray(data?.cursos)) return data.cursos;
+    return [data];
+  };
+
+  const generarEstudiantesPorCurso = async () => {
     setGenerando(true);
     try {
-      const stats = {
-        'Orientador': `${user?.nombre} ${user?.apellidos || ''}`,
-        'Período': periodoSeleccionado,
-        'Fecha del Reporte': new Date().toLocaleDateString('es-CO'),
-        '': '',
-        'CASOS DE ACOMPAÑAMIENTO': '',
-        'Total Casos Activos': 'Pendiente de API',
-        'Casos Cerrados': 'Pendiente de API',
-        'Casos Críticos': 'Pendiente de API',
-        ' ': '',
-        'SEGUIMIENTO': '',
-        'Estudiantes en Seguimiento': 'Pendiente de API',
-        'Familias Contactadas': 'Pendiente de API',
-        'Reuniones Realizadas': 'Pendiente de API'
-      };
-
-      exportEstadisticasToPDF(
-        stats,
-        `Reporte_Casos_Orientador_${periodoSeleccionado}`,
-        'Reporte de Casos de Acompañamiento - Orientación'
-      );
+      const query: string[] = [];
+      if (gradoId) query.push(`gradoId=${encodeURIComponent(Number(gradoId))}`);
+      if (jornada) query.push(`jornada=${encodeURIComponent(jornada)}`);
+      const qs = query.length ? `?${query.join('&')}` : '';
+      const res = await httpService.get(`/reportes/institucion/estudiantes-por-curso${qs}`);
+      const rows = normalizeToRows(res.data);
+      exportToExcel(rows, `Estudiantes_por_Curso_${new Date().toISOString().slice(0,10)}`, 'Estudiantes por Curso');
     } finally {
       setGenerando(false);
     }
   };
 
-  const generarReporteEstudiantes = async () => {
+  const generarCumplimientoEntregas = async () => {
     setGenerando(true);
     try {
-      // TODO: Obtener datos reales del backend
-      const data = [
-        {
-          'Estudiante': 'Pendiente de API',
-          'Grado': '-',
-          'Tipo de Atención': '-',
-          'Estado': '-',
-          'Última Sesión': '-'
-        }
-      ];
-
-      exportToExcel(
-        data,
-        `Reporte_Estudiantes_Orientador_${periodoSeleccionado}`,
-        'Estudiantes Atendidos'
-      );
+      if (!cursoId) throw new Error('Selecciona un cursoId');
+      const qs = periodoSeleccionado ? `?periodoId=${encodeURIComponent(Number(periodoSeleccionado))}` : '';
+      const res = await httpService.get(`/reportes/cursos/${encodeURIComponent(Number(cursoId))}/entregas${qs}`);
+      const rows = normalizeToRows(res.data);
+      exportToExcel(rows, `Cumplimiento_Entregas_Curso_${cursoId}_${periodoSeleccionado || 'all'}`, 'Cumplimiento Entregas');
     } finally {
       setGenerando(false);
     }
   };
 
-  const generarReporteParticipacion = async () => {
+  const generarAlertasAcademicas = async () => {
     setGenerando(true);
     try {
-      const stats = {
-        'Orientador': `${user?.nombre} ${user?.apellidos || ''}`,
-        'Período': periodoSeleccionado,
-        'Fecha del Reporte': new Date().toLocaleDateString('es-CO'),
-        '': '',
-        'PARTICIPACIÓN FAMILIAR': '',
-        'Familias Contactadas': 'Pendiente de API',
-        'Familias Activas': 'Pendiente de API',
-        'Tasa de Respuesta': 'Pendiente de API',
-        ' ': '',
-        'ACTIVIDADES': '',
-        'Talleres Realizados': 'Pendiente de API',
-        'Asistencia Promedio': 'Pendiente de API',
-        'Satisfacción': 'Pendiente de API'
-      };
-
-      exportEstadisticasToPDF(
-        stats,
-        `Reporte_Participacion_Orientador_${periodoSeleccionado}`,
-        'Reporte de Participación Familiar - Orientación'
-      );
+      const query: string[] = [];
+      if (umbral) query.push(`umbral=${encodeURIComponent(Number(umbral))}`);
+      if (periodoSeleccionado) query.push(`periodoId=${encodeURIComponent(Number(periodoSeleccionado))}`);
+      if (cursoId) query.push(`cursoId=${encodeURIComponent(Number(cursoId))}`);
+      const qs = query.length ? `?${query.join('&')}` : '';
+      const res = await httpService.get(`/reportes/institucion/alertas-academicas${qs}`);
+      const rows = normalizeToRows(res.data);
+      exportToExcel(rows, `Alertas_Academicas_${periodoSeleccionado || 'general'}`, 'Alertas Académicas');
     } finally {
       setGenerando(false);
     }
   };
 
-  const generarReporteAlertas = async () => {
+  const generarSinCalificaciones = async () => {
     setGenerando(true);
     try {
-      // TODO: Obtener datos reales del backend
-      const data = [
-        {
-          'Estudiante': 'Pendiente de API',
-          'Grado': '-',
-          'Tipo de Alerta': '-',
-          'Nivel': '-',
-          'Acciones Tomadas': '-'
-        }
-      ];
-
-      exportToExcel(
-        data,
-        `Reporte_Alertas_Orientador_${periodoSeleccionado}`,
-        'Alertas Académicas'
-      );
+      const query: string[] = [];
+      if (periodoSeleccionado) query.push(`periodoId=${encodeURIComponent(Number(periodoSeleccionado))}`);
+      if (cursoId) query.push(`cursoId=${encodeURIComponent(Number(cursoId))}`);
+      const qs = query.length ? `?${query.join('&')}` : '';
+      const res = await httpService.get(`/reportes/institucion/sin-calificaciones${qs}`);
+      const rows = normalizeToRows(res.data);
+      exportToExcel(rows, `Sin_Calificaciones_${periodoSeleccionado || 'general'}`, 'Sin Calificaciones');
     } finally {
       setGenerando(false);
     }
   };
 
-  const handleGenerarReporte = async (tipo: TipoReporte) => {
+  const handleGenerarReporte = (tipo: TipoReporte) => {
     setReporteSeleccionado(tipo);
-    switch (tipo) {
-      case 'casos':
-        await generarReporteCasos();
+  };
+
+  const confirmarGenerar = async () => {
+    if (!reporteSeleccionado) return;
+    switch (reporteSeleccionado) {
+      case 'estudiantesPorCurso':
+        await generarEstudiantesPorCurso();
         break;
-      case 'estudiantes':
-        await generarReporteEstudiantes();
+      case 'cumplimientoEntregas':
+        await generarCumplimientoEntregas();
         break;
-      case 'participacion':
-        await generarReporteParticipacion();
+      case 'alertasAcademicas':
+        await generarAlertasAcademicas();
         break;
-      case 'alertas':
-        await generarReporteAlertas();
+      case 'sinCalificaciones':
+        await generarSinCalificaciones();
         break;
     }
     setReporteSeleccionado(null);
@@ -223,6 +197,7 @@ export default function ReportesOrientador() {
   const colorClasses: Record<string, { bg: string; border: string; text: string; icon: string }> = {
     rose: { bg: 'from-rose-50 to-rose-100/50', border: 'border-rose-200 hover:border-rose-400', text: 'text-rose-600', icon: 'bg-rose-500' },
     blue: { bg: 'from-blue-50 to-blue-100/50', border: 'border-blue-200 hover:border-blue-400', text: 'text-blue-600', icon: 'bg-blue-500' },
+    indigo: { bg: 'from-indigo-50 to-indigo-100/50', border: 'border-indigo-200 hover:border-indigo-400', text: 'text-indigo-600', icon: 'bg-indigo-500' },
     purple: { bg: 'from-purple-50 to-purple-100/50', border: 'border-purple-200 hover:border-purple-400', text: 'text-purple-600', icon: 'bg-purple-500' },
     amber: { bg: 'from-amber-50 to-amber-100/50', border: 'border-amber-200 hover:border-amber-400', text: 'text-amber-600', icon: 'bg-amber-500' }
   };
@@ -246,23 +221,12 @@ export default function ReportesOrientador() {
                 <h1 className="text-2xl md:text-3xl font-display font-bold">
                   Reportes de Orientación
                 </h1>
-                <p className="text-rose-100 mt-1">
-                  Seguimiento y acompañamiento familiar
-                </p>
+                <p className="text-rose-100 mt-1">Centro de reportes institucionales para Orientación</p>
               </div>
             </div>
             
-            <div className="flex flex-wrap gap-3">
-              <select
-                value={periodoSeleccionado}
-                onChange={(e) => setPeriodoSeleccionado(e.target.value)}
-                className="px-4 py-2.5 bg-white/10 text-white rounded-xl font-medium border border-white/10 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-rose-400"
-              >
-                <option value="2026-1" className="text-gray-900">Período 2026-1</option>
-                <option value="2025-2" className="text-gray-900">Período 2025-2</option>
-                <option value="2025-1" className="text-gray-900">Período 2025-1</option>
-              </select>
-            </div>
+            {/* Filtros ahora se solicitan en un modal al generar */
+            }
           </div>
         </div>
 
@@ -274,8 +238,7 @@ export default function ReportesOrientador() {
                 <IconHeart className="text-rose-600" size={20} />
               </div>
               <div>
-                <p className="text-2xl font-bold text-slate-800">-</p>
-                <p className="text-xs text-slate-500">Casos Activos</p>
+                <p className="text-sm font-semibold text-slate-800">Casos Activos</p>
               </div>
             </div>
           </div>
@@ -286,8 +249,7 @@ export default function ReportesOrientador() {
                 <IconUsers className="text-blue-600" size={20} />
               </div>
               <div>
-                <p className="text-2xl font-bold text-slate-800">-</p>
-                <p className="text-xs text-slate-500">Estudiantes</p>
+                <p className="text-sm font-semibold text-slate-800">Estudiantes</p>
               </div>
             </div>
           </div>
@@ -298,8 +260,7 @@ export default function ReportesOrientador() {
                 <IconGraduationCap className="text-purple-600" size={20} />
               </div>
               <div>
-                <p className="text-2xl font-bold text-slate-800">-</p>
-                <p className="text-xs text-slate-500">Familias</p>
+                <p className="text-sm font-semibold text-slate-800">Familias</p>
               </div>
             </div>
           </div>
@@ -310,8 +271,7 @@ export default function ReportesOrientador() {
                 <IconAlert className="text-amber-600" size={20} />
               </div>
               <div>
-                <p className="text-2xl font-bold text-slate-800">-</p>
-                <p className="text-xs text-slate-500">Alertas</p>
+                <p className="text-sm font-semibold text-slate-800">Alertas</p>
               </div>
             </div>
           </div>
@@ -369,18 +329,150 @@ export default function ReportesOrientador() {
           </div>
         </div>
 
-        {/* Nota sobre endpoints pendientes */}
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-          <div className="flex items-start gap-3">
-            <IconAlert className="text-amber-600 flex-shrink-0" size={20} />
-            <div>
-              <h3 className="font-semibold text-amber-900">Endpoints en desarrollo</h3>
-              <p className="text-sm text-amber-700 mt-1">
-                Los reportes de orientador están listos en el frontend. Los endpoints del backend están pendientes de implementación.
-              </p>
+        {/* Modal para seleccionar parámetros del reporte */}
+        <Modal
+          isOpen={!!reporteSeleccionado}
+          onClose={() => setReporteSeleccionado(null)}
+          title={
+            reporteSeleccionado === 'estudiantesPorCurso' ? 'Estudiantes por Curso/Grado/Jornada' :
+            reporteSeleccionado === 'cumplimientoEntregas' ? 'Cumplimiento de Entregas por Curso' :
+            reporteSeleccionado === 'alertasAcademicas' ? 'Alertas Académicas' :
+            reporteSeleccionado === 'sinCalificaciones' ? 'Estudiantes sin Calificaciones' : 'Generar reporte'
+          }
+          size="md"
+        >
+          <div className="space-y-4">
+            {reporteSeleccionado === 'estudiantesPorCurso' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm text-slate-700">Grado (opcional)</label>
+                  <input
+                    type="number"
+                    value={gradoId}
+                    onChange={(e) => setGradoId(e.target.value)}
+                    placeholder="Número de grado"
+                    className="px-3 py-2 bg-white rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-400"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm text-slate-700">Jornada</label>
+                  <select
+                    value={jornada}
+                    onChange={(e) => setJornada(e.target.value)}
+                    className="px-3 py-2 bg-white rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-400"
+                  >
+                    <option value="">Todas</option>
+                    <option value="Mañana">Mañana</option>
+                    <option value="Tarde">Tarde</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {reporteSeleccionado === 'cumplimientoEntregas' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm text-slate-700">Curso</label>
+                  <input
+                    type="number"
+                    value={cursoId}
+                    onChange={(e) => setCursoId(e.target.value)}
+                    placeholder="Número de curso"
+                    className="px-3 py-2 bg-white rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-400"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm text-slate-700">Período (opcional)</label>
+                  <input
+                    value={periodoSeleccionado}
+                    onChange={(e) => setPeriodoSeleccionado(e.target.value)}
+                    placeholder="Ej: 20261"
+                    className="px-3 py-2 bg-white rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-400"
+                  />
+                </div>
+              </div>
+            )}
+
+            {reporteSeleccionado === 'alertasAcademicas' && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm text-slate-700">Umbral (nota mínima)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="5"
+                    value={umbral}
+                    onChange={(e) => setUmbral(e.target.value)}
+                    placeholder="3.0"
+                    className="px-3 py-2 bg-white rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-400"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm text-slate-700">Período (opcional)</label>
+                  <input
+                    value={periodoSeleccionado}
+                    onChange={(e) => setPeriodoSeleccionado(e.target.value)}
+                    placeholder="Ej: 20261"
+                    className="px-3 py-2 bg-white rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-400"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm text-slate-700">Curso (opcional)</label>
+                  <input
+                    type="number"
+                    value={cursoId}
+                    onChange={(e) => setCursoId(e.target.value)}
+                    placeholder="Número de curso"
+                    className="px-3 py-2 bg-white rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-400"
+                  />
+                </div>
+              </div>
+            )}
+
+            {reporteSeleccionado === 'sinCalificaciones' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm text-slate-700">Período</label>
+                  <input
+                    value={periodoSeleccionado}
+                    onChange={(e) => setPeriodoSeleccionado(e.target.value)}
+                    placeholder="Ej: 20261"
+                    className="px-3 py-2 bg-white rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-400"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-sm text-slate-700">Curso (opcional)</label>
+                  <input
+                    type="number"
+                    value={cursoId}
+                    onChange={(e) => setCursoId(e.target.value)}
+                    placeholder="Número de curso"
+                    className="px-3 py-2 bg-white rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-400"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => setReporteSeleccionado(null)}
+                className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarGenerar}
+                disabled={generando}
+                className="px-4 py-2 rounded-lg bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                {generando ? 'Generando...' : 'Generar Reporte'}
+              </button>
             </div>
           </div>
-        </div>
+        </Modal>
+
+        {/* Nota removida: endpoints ya disponibles en backend */}
       </div>
     </Layout>
   );
