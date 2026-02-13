@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-  target: 'https://escuelaparapadres-backend-1.onrender.com',
+  target: 'http://127.0.0.1:3333 ',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path.replace(/^\/api/, ''),
