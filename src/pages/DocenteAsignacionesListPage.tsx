@@ -215,6 +215,40 @@ export default function DocenteAsignacionesListPage(){
                     const realizadas = a.entregas?.realizadas ?? 0;
                     const pct = total ? Math.round((realizadas/total)*100) : 0;
                     const vence = a.fechaVencimiento || '';
+
+                    // Estado visible derivado para evitar 'vencida' recién creada
+                    const now = new Date();
+                    const end = vence ? new Date(vence) : null;
+                    const isPast = end ? end.getTime() < now.getTime() : false;
+                    const completada = realizadas >= total && total > 0;
+                    let estadoVis: string = a.estado || '';
+                    if (a.estado === 'calificada') estadoVis = 'calificada';
+                    else if (completada) estadoVis = 'entregada';
+                    else if (end) estadoVis = isPast ? 'vencida' : 'pendiente';
+                    else estadoVis = 'pendiente';
+
+                    const estadoCls = estadoVis === 'calificada'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : estadoVis === 'entregada'
+                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                        : estadoVis === 'pendiente'
+                          ? 'bg-amber-50 text-amber-700 border-amber-200'
+                          : estadoVis === 'vencida'
+                            ? 'bg-rose-50 text-rose-700 border-rose-200'
+                            : 'bg-slate-50 text-slate-700 border-slate-200';
+
+                    // Info humanizada de vencimiento
+                    const humanVence = (() => {
+                      if (!end) return '-';
+                      const msPerDay = 24*60*60*1000;
+                      const diffDays = Math.ceil((end.getTime() - now.getTime()) / msPerDay);
+                      if (diffDays > 1) return `En ${diffDays} días`;
+                      if (diffDays === 1) return 'Mañana';
+                      if (diffDays === 0) return 'Hoy';
+                      if (diffDays === -1) return 'Ayer';
+                      return `Hace ${Math.abs(diffDays)} días`;
+                    })();
+
                     return (
                       <tr key={a.id} className={`border-t border-slate-100 ${highlightId === a.id ? 'bg-teal-50/40' : ''}`}>
                         <td className="px-4 py-3 font-medium text-slate-800">
@@ -227,9 +261,16 @@ export default function DocenteAsignacionesListPage(){
                         <td className="px-4 py-3 text-slate-700">{realizadas}/{total}</td>
                         <td className="px-4 py-3 text-slate-700">{pct}%</td>
                         <td className="px-4 py-3">
-                          <span className="px-2 py-1 rounded-lg text-xs border" data-status={a.estado}>{a.estado || '-'}</span>
+                          <span className={`px-2 py-1 rounded-lg text-xs border ${estadoCls}`} data-status={estadoVis}>{estadoVis || '-'}</span>
                         </td>
-                        <td className="px-4 py-3 text-slate-700">{vence}</td>
+                        <td className="px-4 py-3 text-slate-700">
+                          <div className="flex flex-col leading-tight">
+                            <span>{vence || '-'}</span>
+                            {vence && (
+                              <span className="text-xs text-slate-500">{humanVence}</span>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-4 py-3 text-right">
                           <Link to={`/docente/asignaciones/${a.id}`}><Button size="sm">Ver resumen</Button></Link>
                         </td>
