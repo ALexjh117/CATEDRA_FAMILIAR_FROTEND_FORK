@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { getSession, getTareas, getEntregas, getCursos } from '../../api/endpoints';
 import { listarCursos, type CursoBackend } from '../../api/docentes';
 import { type Tarea, type Entrega } from '../../mocks/data';
-import DashboardLayout from '../DashboardLayout';
+import TeacherLayout from '../TeacherLayout';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import { exportToExcel, exportEstadisticasToPDF } from '../../utils/exportUtils';
 import {
@@ -290,12 +290,12 @@ export default function ReportesDocente() {
 
   if (loading) {
     return (
-      <DashboardLayout>
+      <TeacherLayout>
         <div className="flex flex-col items-center justify-center h-64 gap-4">
           <LoadingSpinner size="lg" />
           <p className="text-slate-500 animate-pulse">Cargando tus reportes...</p>
         </div>
-      </DashboardLayout>
+      </TeacherLayout>
     );
   }
 
@@ -307,7 +307,7 @@ export default function ReportesDocente() {
   };
 
   return (
-    <DashboardLayout>
+    <TeacherLayout>
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="relative overflow-hidden bg-gradient-to-br from-blue-600 via-teal-600 to-blue-700 rounded-2xl p-8 text-white shadow-xl">
@@ -452,6 +452,6 @@ export default function ReportesDocente() {
           </div>
         </div>
       </div>
-    </DashboardLayout>
+    </TeacherLayout>
   );
 }

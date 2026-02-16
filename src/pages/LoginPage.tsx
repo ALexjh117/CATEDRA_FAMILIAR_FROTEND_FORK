@@ -100,9 +100,25 @@ export default function LoginPage() {
     setError('');
 
     try {
+      try {
+        console.log('[UI][LOGIN] Enviando credenciales', {
+          correo: formData.correo,
+          recordar: formData.recordar,
+          tieneCaptcha: Boolean(captchaToken),
+          captchaLen: captchaToken ? String(captchaToken).length : 0,
+          domainType
+        });
+      } catch {}
       const result = await loginUnicoMultiRol(formData.correo, formData.password, captchaToken);
 
       if (result.success && result.user) {
+        try {
+          console.log('[UI][LOGIN] Login exitoso', {
+            rol: result.user.rol,
+            id: result.user.id,
+            nombre: result.user.nombre
+          });
+        } catch {}
         // Verificar si debe cambiar contraseña
         if (result.user.debe_cambiar_contrasena) {
           setUserToChange({
@@ -140,9 +156,18 @@ export default function LoginPage() {
             navigate('/dashboard/docente');
         }
       } else {
+        try {
+          console.warn('[UI][LOGIN] Fallo login', {
+            error: result.error || result.message,
+            correo: formData.correo
+          });
+        } catch {}
         setError(result.error || result.message || 'Error al iniciar sesión');
       }
     } catch (err) {
+      try {
+        console.error('[UI][LOGIN] Excepción en login', err);
+      } catch {}
       setError('Error de conexión. Intenta de nuevo.');
     } finally {
       setLoading(false);

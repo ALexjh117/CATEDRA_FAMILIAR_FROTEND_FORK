@@ -96,7 +96,17 @@ export default function DocentesPage() {
         getDocentesCRUD(),
         getCursosCRUD()
       ]);
-      setDocentes(docentesData);
+      const filtrados = user?.institucionId
+        ? docentesData.filter((d: any) => Number(d?.institucionId) === Number(user?.institucionId))
+        : docentesData;
+      try {
+        console.log('[DocentesPage][loadData] totales:', {
+          recibidos: Array.isArray(docentesData) ? docentesData.length : 'no-array',
+          institucionId: user?.institucionId,
+          filtrados: Array.isArray(filtrados) ? filtrados.length : 'no-array'
+        });
+      } catch {}
+      setDocentes(filtrados);
       setCursos(cursosData);
     } catch (error) {
       console.error('Error cargando datos:', error);
@@ -499,8 +509,7 @@ export default function DocentesPage() {
               value={formDocente.nombre}
               onChange={(e) => setFormDocente(prev => ({ ...prev, nombre: e.target.value }))}
               placeholder="Nombre del docente"
-              required
-            />
+              required name={''}            />
             <FormFieldInput
               label="Apellido"
               value={formDocente.apellido}
@@ -514,10 +523,9 @@ export default function DocentesPage() {
                     ? generarContrasenaDocente(nuevoApellido)
                     : prev.contrasena
                 }));
-              }}
+              } }
               placeholder="Apellido del docente"
-              required
-            />
+              required name={''}            />
           </div>
           
           <FormFieldInput
@@ -527,8 +535,7 @@ export default function DocentesPage() {
             onChange={(e) => setFormDocente(prev => ({ ...prev, correo: e.target.value }))}
             placeholder="correo@institucion.edu.co"
             required
-            disabled={!!editingDocente}
-          />
+            disabled={!!editingDocente} name={''}          />
 
           <FormFieldInput
             label="Número de Documento"
@@ -536,8 +543,7 @@ export default function DocentesPage() {
             value={formDocente.numeroDocumento}
             onChange={(e) => setFormDocente(prev => ({ ...prev, numeroDocumento: e.target.value }))}
             placeholder="Documento de identidad"
-            required={!editingDocente}
-          />
+            required={!editingDocente} name={''}          />
 
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -558,8 +564,7 @@ export default function DocentesPage() {
               type="tel"
               value={formDocente.telefonoEmergencia}
               onChange={(e) => setFormDocente(prev => ({ ...prev, telefonoEmergencia: e.target.value }))}
-              placeholder="Contacto de emergencia"
-            />
+              placeholder="Contacto de emergencia" name={''}            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -568,15 +573,13 @@ export default function DocentesPage() {
               type="text"
               value={formDocente.personaEmergencia}
               onChange={(e) => setFormDocente(prev => ({ ...prev, personaEmergencia: e.target.value }))}
-              placeholder="Nombre del contacto"
-            />
+              placeholder="Nombre del contacto" name={''}            />
             <FormFieldInput
               label="Dirección"
               type="text"
               value={formDocente.direccion}
               onChange={(e) => setFormDocente(prev => ({ ...prev, direccion: e.target.value }))}
-              placeholder="Dirección de residencia"
-            />
+              placeholder="Dirección de residencia" name={''}            />
           </div>
 
           <div className="grid grid-cols-2 gap-4 items-center">
@@ -594,8 +597,7 @@ export default function DocentesPage() {
               type="text"
               value={formDocente.gradoAsignado}
               onChange={(e) => setFormDocente(prev => ({ ...prev, gradoAsignado: e.target.value }))}
-              placeholder="Ej: 5B"
-            />
+              placeholder="Ej: 5B" name={''}            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -604,15 +606,13 @@ export default function DocentesPage() {
               type="text"
               value={formDocente.areaQueOrienta}
               onChange={(e) => setFormDocente(prev => ({ ...prev, areaQueOrienta: e.target.value }))}
-              placeholder="Ej: Matemáticas"
-            />
+              placeholder="Ej: Matemáticas" name={''}            />
             <FormFieldInput
               label="Centro de Interés"
               type="text"
               value={formDocente.centroInteres}
               onChange={(e) => setFormDocente(prev => ({ ...prev, centroInteres: e.target.value }))}
-              placeholder="Ej: Robótica"
-            />
+              placeholder="Ej: Robótica" name={''}            />
           </div>
           
           {!editingDocente && (
@@ -623,8 +623,7 @@ export default function DocentesPage() {
                 value={formDocente.contrasena}
                 onChange={(e) => setFormDocente(prev => ({ ...prev, contrasena: e.target.value }))}
                 placeholder="Contraseña inicial"
-                required
-              />
+                required name={''}              />
               <p className="text-xs text-gray-500 mt-1">
                 💡 Sugerencia auto-generada. El docente deberá cambiarla en su primer inicio de sesión.
               </p>
@@ -636,8 +635,7 @@ export default function DocentesPage() {
             type="tel"
             value={formDocente.telefono}
             onChange={(e) => setFormDocente(prev => ({ ...prev, telefono: e.target.value }))}
-            placeholder="Número de contacto"
-          />
+            placeholder="Número de contacto" name={''}          />
 
           <FormFieldInput
             label="Institución ID"
