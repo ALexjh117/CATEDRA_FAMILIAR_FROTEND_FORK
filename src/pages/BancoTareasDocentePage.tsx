@@ -6,7 +6,8 @@ import Modal from '../components/ui/Modal';
 import FormFieldInput from '../components/ui/FormFieldInput';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { useToast } from '../components/ui/ToastGlobal';
-import { listarBancoTareas, listarCursos, listarPeriodos, crearAsignacion, type BancoTareaBackend, type CursoBackend, type PeriodoBackend } from '../api/docentes';
+import { listarBancoTareas, listarCursos, listarPeriodos, crearAsignacion, crearAsignacionOrientador, type BancoTareaBackend, type CursoBackend, type PeriodoBackend } from '../api/docentes';
+import { getCursosPorInstitucion, getGradosPublic } from '../api/endpointsDocente-orinetador';
 import { getSession } from '../api/endpoints';
 
 export default function BancoTareasDocentePage(){
@@ -58,9 +59,34 @@ export default function BancoTareasDocentePage(){
     setLoading(true);
     setError(null);
     try {
+      const isOrientador = session?.user?.rol === 'orientador';
+      const instId = (session as any)?.user?.institucionId || (session as any)?.context?.institucionId || 0;
+
       const [tareas, cursosRes, periodosRes] = await Promise.all([
         listarBancoTareas(),
-        listarCursos(),
+        (async () => {
+          if (isOrientador) {
+            // 1) Preferir /grados y aplanar cursos
+            try {
+              const gradosRes = await getGradosPublic();
+              if (gradosRes.success && Array.isArray(gradosRes.data) && gradosRes.data.length) {
+                const flat = gradosRes.data
+                  .flatMap((g: any) => Array.isArray(g?.cursos) ? g.cursos.map((c: any) => ({ ...c, _grado: g })) : [])
+                  .filter((c: any) => !instId || !c.institucionId || c.institucionId === instId)
+                  .map((c: any) => ({ id: Number(c.id), nombre: c.nombre || `Curso #${c.id}` })) as CursoBackend[];
+                if (flat.length) return flat;
+              }
+            } catch {}
+            // 2) Fallback: /cursos/institucion/:id
+            try {
+              const r = await getCursosPorInstitucion(Number(instId || 0));
+              const data = Array.isArray(r?.data) ? r.data : [];
+              return data.map((c: any) => ({ id: Number(c.id), nombre: c.nombre || `Curso #${c.id}` })) as CursoBackend[];
+            } catch {}
+          }
+          // Docente o fallback
+          return await listarCursos();
+        })(),
         listarPeriodos(),
       ]);
       setItems(Array.isArray(tareas) ? tareas : []);
@@ -105,7 +131,7 @@ export default function BancoTareasDocentePage(){
 
       const isOrientador = session?.user?.rol === 'orientador';
       const today = new Date().toISOString().slice(0,10);
-      const result = await crearAsignacion({
+      const payload = {
         bancoTareaId: selected.id,
         cursoId: cursoIds[0],
         periodoId: Number(periodoId),
@@ -117,10 +143,15 @@ export default function BancoTareasDocentePage(){
         descripcion,
         tema: selected.tema,
         institucionId: session?.user?.institucionId,
-        // Para rol orientador el backend requiere docenteId explícito
-        // @ts-ignore
-        docenteId: isOrientador ? (session as any)?.user?.id : undefined,
-      });
+      } as any;
+
+      // Debug
+      // eslint-disable-next-line no-console
+      console.log('crearAsignacion payload:', payload);
+
+      const result = isOrientador
+        ? await crearAsignacionOrientador(payload)
+        : await crearAsignacion(payload);
 
       const ok = (result as any)?.success !== false; // asumir éxito si backend no envía bandera
       if (!ok) {
@@ -132,8 +163,8 @@ export default function BancoTareasDocentePage(){
       showToast('Tarea asignada correctamente', 'success');
       navigate('/docente/asignaciones', { state: createdId ? { highlightId: createdId } : undefined });
     } catch (e: any) {
-      console.error(e);
-      const msg = e?.message || 'No se pudo asignar la tarea. Intenta de nuevo.';
+      console.error('crearAsignacion error:', e);
+      const msg = e?.response?.data?.message || e?.message || 'No se pudo asignar la tarea. Intenta de nuevo.';
       showToast(msg, 'error');
     } finally {
       setSaving(false);
@@ -233,6 +264,9 @@ export default function BancoTareasDocentePage(){
                       <option key={p.id} value={p.id}>{p.nombre}</option>
                     ))}
                   </select>
+                  {periodos.length === 0 && (
+                    <div className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">No hay períodos disponibles. Configura un período activo para poder asignar.</div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Fecha inicio</label>
@@ -266,6 +300,9 @@ export default function BancoTareasDocentePage(){
                     </label>
                   ))}
                 </div>
+                {cursos.length === 0 && (
+                  <div className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">No hay cursos visibles para tu institución. Verifica que existan grados/cursos.</div>
+                )}
               </div>
 
               <div>

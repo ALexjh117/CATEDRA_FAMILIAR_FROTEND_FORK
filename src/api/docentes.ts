@@ -19,6 +19,103 @@ export interface EstudianteBackend {
   cursoId?: number;
 }
 
+// =====================
+// ORIENTADOR ENDPOINTS
+// =====================
+
+// Listar asignaciones del orientador con filtros y paginación
+export async function listarAsignacionesOrientador(params?: {
+  periodoId?: number;
+  periodo?: number;
+  cursoId?: number;
+  curso?: number;
+  estado?: 'activa' | 'vencida' | 'futura';
+  q?: string;
+  page?: number;
+  perPage?: number;
+}) {
+  const qp: any = { ...params };
+  // compat shorthand: permitir periodoId o periodo
+  if (qp.periodoId && !qp.periodo) qp.periodo = qp.periodoId;
+  if (qp.cursoId && !qp.curso) qp.curso = qp.cursoId;
+  const response = await httpService.get<any>('/orientador/asignaciones', qp);
+  const body = response.data || {};
+  const data = Array.isArray(body?.data) ? body.data : Array.isArray(body) ? body : [];
+  const meta = body?.meta;
+  // Normalizar a una forma similar a AsignacionBackend cuando sea posible
+  const mapped = (data as any[]).map((a: any) => ({
+    id: a.id,
+    bancoTareaId: a.bancoTareaId ?? a.banco_tarea_id,
+    titulo: a.titulo || '',
+    descripcion: a.descripcion || '',
+    periodoId: a.periodoId ?? a.periodo_id ?? qp.periodo ?? undefined,
+    fechaInicio: a.fechaInicio ?? a.fecha_inicio,
+    fechaVencimiento: a.fechaVencimiento ?? a.fecha_vencimiento,
+    cursoIds: Array.isArray(a.cursos) ? a.cursos.map((c: any) => c.id) : undefined,
+    cursoNombre: undefined,
+    docenteId: a.docente?.id,
+    entregas: { realizadas: 0, total: 0 },
+    estado: a.estado,
+  }));
+  return { data: mapped, raw: data, meta } as { data: AsignacionBackend[]; raw: any[]; meta?: any };
+}
+
+// Resumen de asignación para orientador
+export async function getResumenAsignacionOrientador(asignacionId: number) {
+  const response = await httpService.get<any>(`/orientador/asignaciones/${asignacionId}/resumen`);
+  const body = response.data || {};
+  const d = body?.data || body || {};
+  // Mapear a una estructura compatible con ResumenAsignacionBackend en lo posible
+  const asigna = d.asignacion || {};
+  const resumen = d.resumen || {};
+  const cursos = Array.isArray(d.cursos) ? d.cursos : [];
+  const mapped: ResumenAsignacionBackend = {
+    asignacionId: asigna.id ?? asignacionId,
+    titulo: asigna.titulo || '',
+    periodoId: asigna.periodoId ?? asigna.periodo_id,
+    totalCursos: Array.isArray(cursos) ? cursos.length : 0,
+    totalEstudiantes: resumen.totalEstudiantes ?? 0,
+    entregasRealizadas: resumen.entregados ?? 0,
+    entregasPendientes: resumen.noEntregados ?? 0,
+    calificaciones: 0,
+    porCurso: Array.isArray(cursos)
+      ? cursos.map((c: any) => ({
+          cursoId: c.id,
+          cursoNombre: c.nombre || `Curso #${c.id}`,
+          totalEstudiantes: 0,
+          entregasRealizadas: 0,
+          calificaciones: 0,
+        }))
+      : undefined,
+  };
+  return mapped;
+}
+
+// Variante: obtener el cuerpo crudo (con listas entregados/noEntregados)
+export async function getResumenAsignacionOrientadorRaw(asignacionId: number) {
+  const response = await httpService.get<any>(`/orientador/asignaciones/${asignacionId}/resumen`);
+  const body = response.data || {};
+  return body?.data || body || {};
+}
+
+// Crear y asignar como orientador (multi-curso permitido)
+export async function crearAsignacionOrientador(payload: {
+  bancoTareaId: number;
+  periodoId: number;
+  cursoId?: number;
+  cursoIds?: number[];
+  fechaInicio?: string;
+  fechaVencimiento?: string;
+  frecuencia?: string;
+  incluirEnBoletin?: boolean;
+  titulo?: string;
+  descripcion?: string;
+  tema?: string;
+}) {
+  const response = await httpService.post('/asignaciones/orientador', payload);
+  return response.data;
+}
+
 // Calificaciones: crear (aplicar nota sugerida en servidor si no se envía nota)
 export async function crearCalificacion(payload: {
   entregaId: number;

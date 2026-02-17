@@ -42,6 +42,21 @@ function normalizeRol(input?: unknown): RolUsuario | undefined {
   return undefined;
 }
 
+// Public: GET /grados -> { success, data: [ { id, nombre, orden, cursos: [...] } ] }
+export async function getGradosPublic(): Promise<{ success: boolean; data: any[]; message?: string; status?: number }> {
+  try {
+    const response = await httpService.get<any>('/grados');
+    const raw = response.data as any;
+    if (raw?.success === false) {
+      return { success: false, data: [], message: raw?.message || 'Error al obtener grados' };
+    }
+    const data = raw?.data ?? raw?.grados ?? raw;
+    return { success: true, data: Array.isArray(data) ? data : [], message: raw?.message };
+  } catch (error: any) {
+    return { success: false, data: [], message: error?.message || 'Error de conexión', status: error?.status };
+  }
+}
+
 function extractRolFromMessage(message?: unknown): RolUsuario | undefined {
   if (!message || typeof message !== 'string') return undefined;
   const match = message.match(/rol\s*:\s*([^\n\r]+)/i);
