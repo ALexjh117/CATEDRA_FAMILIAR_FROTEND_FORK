@@ -4,8 +4,10 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Button from '../components/ui/Button';
 import FormFieldInput from '../components/ui/FormFieldInput';
 import Swal from 'sweetalert2';
-import { getSession } from '../api/endpoints';
-import { listarBancoTareas, listarCursos, listarPeriodos, crearAsignacion } from '../api/docentes';
+import { getSession, getCursos } from '../api/endpoints';
+import { getCursosPorInstitucion } from '../api/endpointsDocente-orinetador';
+import { getGradosPublic } from '../api/endpointsDocente-orinetador';
+import { listarBancoTareas, listarCursos, listarPeriodos, crearAsignacion, crearAsignacionOrientador } from '../api/docentes';
 
 type AsignacionCreatePayload = {
   bancoTareaId: number;
@@ -50,6 +52,7 @@ export default function AsignacionesPage() {
   const [overrideDescripcion, setOverrideDescripcion] = useState<string>('');
   const [overrideTema, setOverrideTema] = useState<string>('');
 
+  // Campo no requerido para orientador (se usa identidad de sesión)
   const [docenteIdOrientador, setDocenteIdOrientador] = useState<string>('');
   const [asignando, setAsignando] = useState(false);
 
@@ -58,20 +61,64 @@ export default function AsignacionesPage() {
       setLoading(true);
       try {
         const docenteId = user?.id || 0;
+        const instId = (user as any)?.institucionId ?? (session as any)?.context?.institucionId ?? 0;
 
-        const [tareas, cursosDocente, periodosData] = await Promise.all([
+        const [tareas, cursosDocenteOrAll, periodosData] = await Promise.all([
           listarBancoTareas(),
-          listarCursos(),
+          (async () => {
+            if (user?.rol === 'orientador') {
+              // 1) Preferir /grados (público) y aplanar sus cursos
+              try {
+                const gradosRes = await getGradosPublic();
+                if (gradosRes.success && Array.isArray(gradosRes.data) && gradosRes.data.length) {
+                  const flatCursos = gradosRes.data
+                    .flatMap((g: any) => Array.isArray(g?.cursos) ? g.cursos.map((c: any) => ({ ...c, _grado: g })) : [])
+                    .filter((c: any) => !instId || !c.institucionId || c.institucionId === instId);
+                  if (flatCursos.length) {
+                    try { console.log('[Cursos][Orientador][/grados] recibidos:', { instId, cantidad: flatCursos.length, muestra: flatCursos.slice(0,3) }); } catch {}
+                    return flatCursos;
+                  }
+                }
+              } catch {}
+
+              // 2) Fallback: /cursos/institucion/:institucionId (público)
+              const res = await getCursosPorInstitucion(Number(instId || 0));
+              let lista = Array.isArray(res?.data) ? res.data : [];
+
+              // 3) Fallback final: /cursos (todos) opcionalmente filtrado por institución
+              if (!Array.isArray(lista) || lista.length === 0) {
+                try {
+                  const all = await getCursos(Number(instId || undefined));
+                  lista = Array.isArray(all) ? all : [];
+                } catch {}
+              }
+              try { console.log('[Cursos][Orientador] recibidos:', { instId, cantidad: lista.length, muestra: lista.slice(0,3) }); } catch {}
+              return lista;
+            }
+            // Docente: cursos propios
+            return await listarCursos();
+          })(),
           listarPeriodos()
         ]);
 
         setTareasBanco(Array.isArray(tareas) ? tareas : []);
-        setCursos(Array.isArray(cursosDocente) ? cursosDocente : []);
+        const cursosNorm = Array.isArray(cursosDocenteOrAll)
+          ? cursosDocenteOrAll.map((c: any) => {
+              const id = Number(c?.id ?? c?.cursoId ?? c?.curso_id ?? 0);
+              const gradoNombre = c?.grado?.nombre || c?.gradoNombre || c?.grado_nombre || c?.gradoDescripcion || c?.grado?.descripcion || c?.grado;
+              const grupo = c?.grupo?.nombre || c?.grupoNombre || c?.grupo || c?.letra || c?.paralelo || c?.seccion;
+              const nombreDerivado = [gradoNombre, grupo].filter(Boolean).join(' ');
+              const nombre = c?.nombre || c?.nombreCurso || c?.nombre_curso || c?.nombreCompleto || c?.nombre_completo || nombreDerivado || (gradoNombre || grupo) || (id ? `Curso #${id}` : 'Curso');
+              return { id, nombre };
+            })
+          : [];
+        try { console.log('[Cursos] normalizados:', { cantidad: cursosNorm.length, muestra: cursosNorm.slice(0,3) }); } catch {}
+        setCursos(cursosNorm);
         setPeriodos(Array.isArray(periodosData) ? periodosData : []);
 
         const primeraTareaId = Array.isArray(tareas) && tareas.length > 0 ? tareas[0].id : 0;
         const primerPeriodoId = Array.isArray(periodosData) && periodosData.length > 0 ? periodosData[0].id : 0;
-        const primerCursoId = Array.isArray(cursosDocente) && cursosDocente.length > 0 ? cursosDocente[0].id : 0;
+        const primerCursoId = Array.isArray(cursosDocenteOrAll) && cursosDocenteOrAll.length > 0 ? cursosDocenteOrAll[0].id : 0;
 
         setBancoTareaId(prev => prev || primeraTareaId);
         setPeriodoId(prev => prev || primerPeriodoId);
@@ -132,16 +179,6 @@ export default function AsignacionesPage() {
     }
 
     const esOrientador = user?.rol === 'orientador';
-    const docenteIdParsed = docenteIdOrientador ? Number(docenteIdOrientador) : 0;
-    if (esOrientador && !docenteIdParsed) {
-      await Swal.fire({
-        icon: 'error',
-        title: 'Docente requerido',
-        text: 'Como orientador debes indicar el docenteId.',
-        confirmButtonText: 'Entendido'
-      });
-      return;
-    }
 
     const payload: AsignacionCreatePayload = {
       bancoTareaId,
@@ -154,7 +191,7 @@ export default function AsignacionesPage() {
       descripcion: overrideDescripcion || undefined,
       tema: overrideTema || undefined,
       institucionId: user?.institucionId || undefined,
-      docenteId: esOrientador ? docenteIdParsed : undefined
+      docenteId: esOrientador ? Number(user?.id) : undefined
     };
 
     if (esMultiCurso) payload.cursoIds = cursoIds;
@@ -163,7 +200,9 @@ export default function AsignacionesPage() {
     try {
       setAsignando(true);
 
-      const result = await crearAsignacion(payload as any);
+      const result = esOrientador
+        ? await crearAsignacionOrientador(payload as any)
+        : await crearAsignacion(payload as any);
       const ok = (result as any)?.success !== false && ((result as any)?.id || (result as any)?.data?.id || (result as any)?.bancoTareaId);
       if (!ok) {
         await Swal.fire({
@@ -252,15 +291,7 @@ export default function AsignacionesPage() {
             </select>
           </div>
 
-          {user?.rol === 'orientador' && (
-            <FormFieldInput
-              name="docenteId"
-              label="Docente ID (requerido para orientador)"
-              placeholder="Ej: 12"
-              value={docenteIdOrientador}
-              onChange={(e) => setDocenteIdOrientador(e.target.value)}
-            />
-          )}
+          {/* Para orientador ya se usa el ID de sesión; no pedirlo manualmente */}
 
           <div className="flex items-center gap-3">
             <input
@@ -276,6 +307,16 @@ export default function AsignacionesPage() {
             />
             <label htmlFor="multiCurso" className="text-sm font-semibold text-gray-700">Asignar a varios cursos</label>
           </div>
+
+          {user?.rol === 'orientador' && cursos.length === 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800">
+              <div className="font-semibold mb-1">No hay cursos disponibles</div>
+              <div className="text-sm">
+                Tu institución no tiene cursos visibles aún. Verifica que existan grados y cursos en el sistema.
+                Recuerda: los cursos se seleccionan en este paso de asignación, después de crear la tarea en el banco.
+              </div>
+            </div>
+          )}
 
           {!esMultiCurso ? (
             <div>
