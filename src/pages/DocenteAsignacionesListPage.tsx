@@ -2,10 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import TeacherLayout from '../components/TeacherLayout';
 import Button from '../components/ui/Button';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-import { listarAsignaciones, listarCursos, listarPeriodos, type AsignacionBackend, type CursoBackend, type PeriodoBackend } from '../api/docentes';
+import { listarAsignaciones, listarCursos, listarPeriodos, listarAsignacionesOrientador, type AsignacionBackend, type CursoBackend, type PeriodoBackend } from '../api/docentes';
+import { getSession, getCursos } from '../api/endpoints';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 
 export default function DocenteAsignacionesListPage(){
+  const session = getSession();
+  const user = session?.user;
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation() as any;
   const [loading, setLoading] = useState(true);
@@ -40,16 +43,41 @@ export default function DocenteAsignacionesListPage(){
     setError(null);
     try {
       const [res, per, cur] = await Promise.all([
-        listarAsignaciones({ periodo: periodo ? Number(periodo) : undefined, cursoId: cursoId ? Number(cursoId) : undefined, estado: estado as any, detallePorCurso, page, perPage }),
+        (async () => {
+          if (user?.rol === 'orientador') {
+            return await listarAsignacionesOrientador({
+              periodo: periodo ? Number(periodo) : undefined,
+              curso: cursoId ? Number(cursoId) : undefined,
+              estado: estado as any,
+              page,
+              perPage,
+              q: undefined,
+            });
+          }
+          return await listarAsignaciones({ periodo: periodo ? Number(periodo) : undefined, cursoId: cursoId ? Number(cursoId) : undefined, estado: estado as any, detallePorCurso, page, perPage });
+        })(),
         listarPeriodos(),
-        listarCursos()
+        (async () => {
+          if (user?.rol === 'orientador') {
+            try {
+              const r = await getCursos() as any;
+              const body = r?.data || r;
+              if (Array.isArray(body?.cursos)) return body.cursos as CursoBackend[];
+              if (Array.isArray(body?.data?.data)) return body.data.data as CursoBackend[];
+              if (Array.isArray(body?.data)) return body.data as CursoBackend[];
+              if (Array.isArray(body?.items)) return body.items as CursoBackend[];
+              if (Array.isArray(body)) return body as CursoBackend[];
+            } catch {}
+          }
+          return await listarCursos();
+        })()
       ]);
       const resAny: any = res as any;
       const list = Array.isArray(resAny?.data?.data)
         ? resAny.data.data
         : (Array.isArray(resAny?.data)
           ? resAny.data
-          : (Array.isArray(resAny) ? resAny : []));
+          : (Array.isArray(resAny?.data?.asignaciones) ? resAny.data.asignaciones : (Array.isArray(resAny?.data) ? resAny.data : (Array.isArray(resAny) ? resAny : []))));
       // Ordenar por fechaInicio DESC y luego id DESC (por si el backend no lo aplica)
       let sorted = [...list].sort((a: any, b: any) => {
         const fa = a.fechaInicio ? new Date(a.fechaInicio).getTime() : 0;
@@ -77,7 +105,7 @@ export default function DocenteAsignacionesListPage(){
     }
   };
 
-  useEffect(() => { load(); }, [periodo, cursoId, estado, detallePorCurso, page, perPage, highlightId]);
+  useEffect(() => { load(); }, [periodo, cursoId, estado, detallePorCurso, page, perPage, highlightId, user?.rol]);
   useEffect(() => { actualizarQuery(); }, [periodo, cursoId, estado, detallePorCurso, page, perPage]);
   useEffect(() => {
     const hid = location?.state?.highlightId;

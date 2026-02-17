@@ -4,11 +4,14 @@ import TeacherLayout from '../components/TeacherLayout';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
-import { getResumenAsignacion, listarCursos, listarEntregasDocente, crearCalificacion, type ResumenAsignacionBackend, type CursoBackend } from '../api/docentes';
+import { getResumenAsignacion, listarCursos, listarEntregasDocente, crearCalificacion, getResumenAsignacionOrientadorRaw, type ResumenAsignacionBackend, type CursoBackend } from '../api/docentes';
+import { getSession, getCursos } from '../api/endpoints';
 
 export default function DocenteAsignacionResumenPage(){
   const { id } = useParams();
   const asignacionId = Number(id);
+  const session = getSession();
+  const user = session?.user;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string|null>(null);
@@ -27,11 +30,49 @@ export default function DocenteAsignacionResumenPage(){
     setError(null);
     try {
       const [res, cur, ent] = await Promise.all([
-        getResumenAsignacion(asignacionId, { cursoId: cursoId ? Number(cursoId) : undefined }),
-        listarCursos(),
+        (async () => {
+          if (user?.rol === 'orientador') {
+            // usar raw para obtener listas y KPIs
+            const raw = await getResumenAsignacionOrientadorRaw(asignacionId);
+            return raw; // lo adaptamos abajo
+          }
+          return await getResumenAsignacion(asignacionId, { cursoId: cursoId ? Number(cursoId) : undefined });
+        })(),
+        (async () => {
+          if (user?.rol === 'orientador') {
+            try {
+              const r = await getCursos() as any;
+              const body = r?.data || r;
+              if (Array.isArray(body?.cursos)) return body.cursos as CursoBackend[];
+              if (Array.isArray(body?.data?.data)) return body.data.data as CursoBackend[];
+              if (Array.isArray(body?.data)) return body.data as CursoBackend[];
+              if (Array.isArray(body?.items)) return body.items as CursoBackend[];
+              if (Array.isArray(body)) return body as CursoBackend[];
+            } catch {}
+          }
+          return await listarCursos();
+        })(),
         listarEntregasDocente({ asignacionId, soloPendientes: false })
       ]);
-      setData(res);
+      if (user?.rol === 'orientador') {
+        const d: any = res?.data || res || {};
+        const asigna = d.asignacion || {};
+        const resumen = d.resumen || {};
+        const cursosD = Array.isArray(d.cursos) ? d.cursos : [];
+        setData({
+          asignacionId: asigna.id ?? asignacionId,
+          titulo: asigna.titulo || `Asignación #${asignacionId}`,
+          periodoId: asigna.periodoId ?? asigna.periodo_id,
+          totalCursos: cursosD.length,
+          totalEstudiantes: resumen.totalEstudiantes ?? 0,
+          entregasRealizadas: resumen.entregados ?? 0,
+          entregasPendientes: resumen.noEntregados ?? 0,
+          calificaciones: 0,
+          porCurso: cursosD.map((c: any) => ({ cursoId: c.id, cursoNombre: c.nombre || `Curso #${c.id}`, totalEstudiantes: 0, entregasRealizadas: 0, calificaciones: 0 }))
+        });
+      } else {
+        setData(res as any);
+      }
       setCursos(cur);
       const entList = Array.isArray((ent as any)?.data) ? (ent as any).data : (Array.isArray(ent as any) ? (ent as any) : []);
       setEntregas(entList as any[]);

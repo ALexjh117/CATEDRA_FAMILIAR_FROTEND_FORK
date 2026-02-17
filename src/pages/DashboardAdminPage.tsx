@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import Swal from 'sweetalert2';
 import { useLocation } from 'react-router-dom';
 import { 
   getSession, 
@@ -531,16 +532,38 @@ export default function DashboardAdminPage() {
     if (formUsuario.apellidos) dataToUpdate.apellido = formUsuario.apellidos; // Backend usa 'apellido'
     if (formUsuario.telefono) dataToUpdate.telefono = formUsuario.telefono;
     if (formUsuario.correo) dataToUpdate.correo = formUsuario.correo;
+    // Permitir cambiar institución y rol
+    if (typeof formUsuario.institucionId === 'number' && formUsuario.institucionId > 0) {
+      dataToUpdate.institucionId = formUsuario.institucionId;
+    }
+    if (formUsuario.rol) {
+      dataToUpdate.rol = formUsuario.rol;
+    }
     
     const result = await updateUsuario(editingUsuario.id, dataToUpdate);
     
     if (result.success) {
+      await Swal.fire({
+        icon: 'success',
+        title: 'Usuario actualizado',
+        text: 'Los cambios se guardaron correctamente.',
+        confirmButtonText: 'OK',
+        confirmButtonColor: '#14b8a6'
+      });
       await loadData();
       setModalUsuario(false);
       setEditingUsuario(null);
       setFormUsuario({ nombre: '', apellidos: '', correo: '', telefono: '', documento: '', tipoDocumento: 'cc', contrasena: '', rol: 'docente_aula', institucionId: 1 });
     } else {
-      setError(result.error || 'Error al actualizar usuario');
+      const msg = result.error || 'Error al actualizar usuario';
+      setError(msg);
+      await Swal.fire({
+        icon: 'error',
+        title: 'No se pudo actualizar',
+        text: msg,
+        confirmButtonText: 'Entendido',
+        confirmButtonColor: '#ef4444'
+      });
     }
   };
 

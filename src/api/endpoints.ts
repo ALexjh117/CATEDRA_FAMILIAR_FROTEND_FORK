@@ -1869,8 +1869,20 @@ export const getUsuarios = async (): Promise<Usuario[]> => {
   try {
     const result = await apiClient.getUsuarios();
     if (result.success && result.data) {
+      // Aceptar formas: [] | {data: []} | {data: {data: [], meta}}
+      const raw = Array.isArray(result.data)
+        ? result.data
+        : (Array.isArray((result as any)?.data?.data)
+            ? (result as any).data.data
+            : (Array.isArray((result as any)?.data?.items)
+                ? (result as any).data.items
+                : []));
+      try {
+        console.log('[DEBUG][endpoints.getUsuarios] raw length:', Array.isArray(raw) ? raw.length : 'n/a');
+        console.log('[DEBUG][endpoints.getUsuarios] raw sample:', Array.isArray(raw) ? raw.slice(0, 3) : raw);
+      } catch {}
       // Mapear datos del backend al formato del frontend
-      return result.data.map((user: any) => ({
+      const mapped = raw.map((user: any) => ({
         id: user.id,
         nombre: user.nombre || '',
         apellidos: user.apellidos || user.apellido || '',
@@ -1880,9 +1892,13 @@ export const getUsuarios = async (): Promise<Usuario[]> => {
         tipoDocumento: user.tipoDocumento || user.tipo_documento || 'CC',
         rol: user.rol || 'docente_aula',
         activo: user.activo !== false,
-        institucionId: user.institucionId || user.institucion_id,
+        institucionId: Number(user.institucionId ?? user.institucion_id ?? 0) || undefined,
         debe_cambiar_contrasena: user.debeCambiarContrasena || user.debe_cambiar_contrasena || false
       }));
+      try {
+        console.log('[DEBUG][endpoints.getUsuarios] mapped sample:', mapped.slice(0, 5).map(u => ({ id: u.id, rol: u.rol, institucionId: u.institucionId, tipo: typeof u.institucionId })));
+      } catch {}
+      return mapped;
     }
     return [];
   } catch (error) {
@@ -1932,7 +1948,12 @@ export const createUsuario = async (data: Partial<Usuario>): Promise<{ success: 
  */
 export const updateUsuario = async (id: number, data: Partial<Usuario>): Promise<{ success: boolean; usuario?: Usuario; error?: string }> => {
   try {
-    const result = await apiClient.updateUsuario(id, data);
+    // Compat: algunos backends esperan snake_case o campos adicionales
+    const payload: any = { ...data };
+    if (payload.institucionId && !payload.institucion_id) payload.institucion_id = payload.institucionId;
+    // Si viene rolId desde el form externo, preservarlo; si solo viene rol string, enviarlo tal cual
+    if ((data as any)?.rolId && !payload.rolId) payload.rolId = (data as any).rolId;
+    const result = await apiClient.updateUsuario(id, payload);
     if (result.success && result.data) {
       return { 
         success: true, 

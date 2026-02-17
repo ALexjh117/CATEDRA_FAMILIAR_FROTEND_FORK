@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { getSession } from '../api/endpoints';
 import { httpService } from '../api/httpService';
-import { createCategoria, createTarea, getCategorias, getTareaById, getTareas } from '../api/endpointsDocente-orinetador';
+import { createCategoria, createTarea, getCategorias, getTareaById, getTareas, getGradosPublic } from '../api/endpointsDocente-orinetador';
+import { listarCursos, listarPeriodos, crearAsignacion, crearAsignacionOrientador } from '../api/docentes';
 import DashboardLayout from '../components/DashboardLayout';
 import OrientadorLayout from '../components/orientador-acudiente/OrientadorLayout';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -71,8 +72,16 @@ export default function TareasPage() {
   const [loadingDetalle, setLoadingDetalle] = useState(false);
   const [fileBlobUrl, setFileBlobUrl] = useState<string | null>(null);
   const [loadingFile, setLoadingFile] = useState(false);
+  const [asignCursos, setAsignCursos] = useState<Array<{ id: number; nombre: string; docenteId?: number | null }>>([]);
+  const [asignPeriodos, setAsignPeriodos] = useState<{ id: number; nombre: string }[]>([]);
+  const [asignCursoId, setAsignCursoId] = useState<number>(0);
+  const [asignPeriodoId, setAsignPeriodoId] = useState<number>(0);
+  const [asignFechaInicio, setAsignFechaInicio] = useState<string>('');
+  const [asignFechaVenc, setAsignFechaVenc] = useState<string>('');
+  const [asignando, setAsignando] = useState(false);
 
   const [categorias, setCategorias] = useState<{ id: number; nombre: string }[]>(CATEGORIAS_MOCK);
+  const [grados, setGrados] = useState<{ id: number; nombre: string }[]>(GRADOS);
 
   const [savingCategoria, setSavingCategoria] = useState(false);
   const [savingTarea, setSavingTarea] = useState(false);
@@ -100,6 +109,7 @@ export default function TareasPage() {
   useEffect(() => {
     loadTareas();
     loadCategorias();
+    loadGrados();
   }, []);
 
   useEffect(() => {
@@ -108,10 +118,100 @@ export default function TareasPage() {
     };
   }, [fileBlobUrl]);
 
+  const loadAsignacionContext = async () => {
+    try {
+      const [per, cursos] = await Promise.all([
+        listarPeriodos(),
+        (async () => {
+          if (userRole === 'orientador') {
+            try {
+              const gradosRes = await getGradosPublic();
+              if (gradosRes.success && Array.isArray(gradosRes.data)) {
+                const instId = (session as any)?.user?.institucionId || (session as any)?.context?.institucionId || 0;
+                const flat = gradosRes.data
+                  .flatMap((g: any) => Array.isArray(g?.cursos) ? g.cursos.map((c: any) => ({ ...c, _grado: g })) : [])
+                  .filter((c: any) => {
+                    if (!instId) return true;
+                    const ci = c.institucionId ?? c.institucion_id;
+                    if (ci === undefined || ci === null || ci === '') return true;
+                    return Number(ci) === Number(instId);
+                  })
+                  .map((c: any) => ({ id: Number(c.id), nombre: c.nombre || `Curso #${c.id}`, docenteId: c.docenteId ?? c.docente_id ?? null }));
+                if (flat.length) return flat;
+              }
+            } catch {}
+          }
+          const propios = await listarCursos();
+          return Array.isArray(propios) ? propios.map((c: any)=>({ id: Number(c.id), nombre: c.nombre || `Curso #${c.id}`, docenteId: c.docenteId ?? c.docente_id ?? null })) : [];
+        })()
+      ]);
+      const perArr = Array.isArray(per) ? per : [];
+      setAsignPeriodos(perArr.map((p: any)=>({ id: Number(p.id), nombre: p.nombre || `Periodo #${p.id}` })));
+      const cursosArr = Array.isArray(cursos) ? cursos : [];
+      setAsignCursos(cursosArr);
+      setAsignPeriodoId((perArr[0]?.id) ? Number(perArr[0].id) : 0);
+      setAsignCursoId((cursosArr[0]?.id) ? Number(cursosArr[0].id) : 0);
+    } catch {}
+  };
+
+  const onAsignarDesdeNueva = async () => {
+    if (!tareaSeleccionada) return;
+    if (!asignPeriodoId || !asignCursoId) {
+      await Swal.fire({ title: 'Faltan datos', text: 'Selecciona período y curso', icon: 'warning', confirmButtonText: 'OK', confirmButtonColor: '#4f46e5' });
+      return;
+    }
+    // Permitir que el orientador asigne incluso si el curso no tiene docente
+    try {
+      setAsignando(true);
+      const payload: any = {
+        bancoTareaId: tareaSeleccionada.id,
+        periodoId: Number(asignPeriodoId),
+        cursoId: Number(asignCursoId),
+        fechaInicio: asignFechaInicio || new Date().toISOString().slice(0,10),
+        fechaVencimiento: asignFechaVenc || undefined,
+      };
+      const isOri = userRole === 'orientador';
+      if (isOri) payload.docenteId = (session as any)?.user?.id;
+      const res = isOri ? await crearAsignacionOrientador(payload) : await crearAsignacion(payload);
+      const ok = (res as any)?.success !== false;
+      if (!ok) {
+        await Swal.fire({ title: 'No se pudo asignar', text: (res as any)?.message || 'Error al asignar', icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#4f46e5' });
+        return;
+      }
+      await Swal.fire({ title: 'Asignación creada', icon: 'success', confirmButtonText: 'OK', confirmButtonColor: '#4f46e5' });
+      setModalAsignar(false);
+      setTareaSeleccionada(null);
+      loadTareas();
+    } catch (e: any) {
+      await Swal.fire({ title: 'Error', text: e?.message || 'Error al asignar', icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#4f46e5' });
+    } finally {
+      setAsignando(false);
+    }
+  };
+
+  const loadGrados = async () => {
+    try {
+      const res = await getGradosPublic();
+      if (res.success && Array.isArray(res.data) && res.data.length > 0) {
+        const mapped = res.data
+          .map((g: any) => ({ id: Number(g.id), nombre: g.nombre || `Grado #${g.id}` }))
+          .filter((g: any) => Number.isFinite(g.id) && g.nombre);
+        if (mapped.length > 0) {
+          setGrados(mapped);
+          return;
+        }
+      }
+      setGrados(GRADOS);
+    } catch {
+      setGrados(GRADOS);
+    }
+  };
+
   const normalizeTarea = (raw: any): BancoTarea => {
     const categoriaId = Number(raw?.categoriaId ?? raw?.categoria_id ?? 0);
 
     const gradosRaw = raw?.gradosObjetivo ?? raw?.grados_objetivo;
+    console.log("gradosRaw:", gradosRaw);
     const gradosObjetivo: number[] | null =
       Array.isArray(gradosRaw)
         ? gradosRaw.map((x: any) => Number(x)).filter((x: any) => Number.isFinite(x))
@@ -279,15 +379,26 @@ export default function TareasPage() {
       console.log('📥 [Tareas] Respuesta crear:', result);
 
       if (result.success) {
-        await Swal.fire({
-          title: 'Tarea creada correctamente',
-          icon: 'success',
-          confirmButtonText: 'OK',
-          confirmButtonColor: '#4f46e5'
-        });
         setModalCrear(false);
+        const creada = (result as any)?.data || (result as any)?.tarea || null;
         resetForm();
-        loadTareas();
+        if (creada) {
+          const tNorm = normalizeTarea(creada);
+          setTareaSeleccionada(tNorm);
+          const today = new Date().toISOString().slice(0,10);
+          setAsignFechaInicio(today);
+          await loadAsignacionContext();
+          setModalAsignar(true);
+        } else {
+          await Swal.fire({
+            title: 'Tarea creada',
+            text: 'Ahora puedes asignarla desde el banco o usando el botón Asignar.',
+            icon: 'success',
+            confirmButtonText: 'OK',
+            confirmButtonColor: '#4f46e5'
+          });
+          loadTareas();
+        }
       } else {
         const status = (result as any)?.status;
         const msg = result.message || 'Error al crear la tarea';
@@ -417,7 +528,10 @@ export default function TareasPage() {
 
   const handleAsignarTarea = (tarea: BancoTarea) => {
     setTareaSeleccionada(tarea);
-    setModalAsignar(true);
+    const today = new Date().toISOString().slice(0,10);
+    setAsignFechaInicio(today);
+    setAsignFechaVenc('');
+    loadAsignacionContext().finally(() => setModalAsignar(true));
   };
 
   const handleVerDetalleTarea = async (tarea: BancoTarea) => {
@@ -586,7 +700,7 @@ export default function TareasPage() {
 
   const getGradosText = (gradosIds: number[] | null) => {
     if (!gradosIds || gradosIds.length === 0) return 'Todos los grados';
-    return gradosIds.map(id => GRADOS.find(g => g.id === id)?.nombre || id).join(', ');
+    return gradosIds.map(id => grados.find(g => g.id === id)?.nombre || id).join(', ');
   };
 
   if (loading) {
@@ -892,8 +1006,14 @@ export default function TareasPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">Grados Objetivo</label>
+                  {grados.length === 0 && (
+                    <div className="mb-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                      No hay grados disponibles actualmente. Si eres orientador, verifica que tu institución tenga grados configurados. 
+                      Los cursos se seleccionan en el paso de asignación, después de crear la tarea.
+                    </div>
+                  )}
                   <div className="grid grid-cols-3 gap-2">
-                    {GRADOS.map(grado => (
+                    {grados.map(grado => (
                       <label key={grado.id} className="flex items-center gap-2 text-sm">
                         <input
                           type="checkbox"
@@ -911,6 +1031,7 @@ export default function TareasPage() {
                       </label>
                     ))}
                   </div>
+                  <p className="mt-2 text-xs text-slate-500">Nota: la selección de cursos específicos se realiza al momento de asignar la tarea al/los curso(s).</p>
                 </div>
 
                 <div className="flex items-center gap-4">
@@ -1013,7 +1134,7 @@ export default function TareasPage() {
           </div>
         )}
 
-        {/* Modal Asignar (Placeholder) */}
+        {/* Modal Asignar inmediata */}
         {modalAsignar && tareaSeleccionada && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
@@ -1023,20 +1144,59 @@ export default function TareasPage() {
               </div>
               
               <div className="p-6">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
-                  <p className="font-semibold mb-2">🚧 Funcionalidad en desarrollo</p>
-                  <p>El backend está preparando el endpoint <code className="bg-blue-100 px-1 rounded">POST /asignaciones</code></p>
-                  <p className="mt-2">Tarea seleccionada: <strong>{tareaSeleccionada.titulo}</strong></p>
+                <div className="text-sm text-slate-700 mb-4">Selecciona el período y el curso para asignar "{tareaSeleccionada.titulo}".</div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Periodo</label>
+                    <select className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-teal-500" value={asignPeriodoId} onChange={(e)=> setAsignPeriodoId(Number(e.target.value))}>
+                      {asignPeriodos.map(p => (
+                        <option key={p.id} value={p.id}>{p.nombre}</option>
+                      ))}
+                    </select>
+                    {asignPeriodos.length === 0 && (
+                      <div className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">No hay períodos disponibles. Configura un período activo.</div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Curso</label>
+                    <select className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-teal-500" value={asignCursoId} onChange={(e)=> setAsignCursoId(Number(e.target.value))}>
+                      {asignCursos.map(c => (
+                        <option key={c.id} value={c.id}>{c.nombre}</option>
+                      ))}
+                    </select>
+                    {asignCursos.length === 0 && (
+                      <div className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">No hay cursos visibles. Verifica que existan grados/cursos en tu institución.</div>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Fecha inicio</label>
+                      <input type="date" className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-teal-500" value={asignFechaInicio} onChange={(e)=> setAsignFechaInicio(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Fecha vencimiento (opcional)</label>
+                      <input type="date" className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-teal-500" value={asignFechaVenc} onChange={(e)=> setAsignFechaVenc(e.target.value)} />
+                    </div>
+                  </div>
                 </div>
               </div>
 
               <div className="bg-slate-50 border-t border-slate-200 px-6 py-4 rounded-b-2xl">
-                <button
-                  onClick={() => { setModalAsignar(false); setTareaSeleccionada(null); }}
-                  className="w-full px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors font-medium"
-                >
-                  Cerrar
-                </button>
+                <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={() => { setModalAsignar(false); setTareaSeleccionada(null); }}
+                    className="px-4 py-2 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 transition-colors font-medium"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={onAsignarDesdeNueva}
+                    disabled={asignando || asignPeriodos.length===0 || asignCursos.length===0}
+                    className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors font-medium disabled:opacity-60"
+                  >
+                    {asignando ? 'Asignando...' : 'Asignar'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
