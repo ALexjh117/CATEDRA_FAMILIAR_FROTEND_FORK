@@ -55,18 +55,16 @@ export interface DetalleAsignacionMovil {
   } | null;
 }
 
-export async function listarTareasEstudiante(estudianteId: number | 'me', opts: { periodo?: number | string; periodoId?: number | string } = {}): Promise<TareaAsignadaMovil[]> {
+export async function listarTareasEstudiante(estudianteId: number, opts: { periodo?: number | string } = {}): Promise<TareaAsignadaMovil[]> {
   const params: any = {};
-  const periodoParam = opts.periodoId ?? opts.periodo;
-  if (periodoParam) params.periodo = periodoParam;
-  // Endpoint general
-  const idSeg = typeof estudianteId === 'string' ? estudianteId : String(estudianteId);
-  const res = await httpService.get(`/estudiantes/${idSeg}/tareas`, params);
+  if (opts.periodo) params.periodo = opts.periodo;
+  // Contrato móvil con base /api/movil
+  const res = await httpService.get(`/estudiantes/${estudianteId}/tareas`, params);
   const body: any = res.data;
-  const dataGeneral = (body && typeof body === 'object' && 'data' in body) ? (body as any).data : body;
-
-  if (Array.isArray(dataGeneral) && dataGeneral.length > 0) {
-    const mapped = dataGeneral.map((a: any) => {
+  const data = (body && typeof body === 'object' && 'data' in body) ? (body as any).data : body;
+  if (Array.isArray(data) && data.length > 0) {
+    // Normalizar campos posibles del backend
+    return data.map((a: any) => {
       const estadoRaw = a.estado || a.status || 'pendiente';
       const estadoNorm: TareaAsignadaMovil['estado'] = (
         ['pendiente','entregada','calificada','vencida','entregada_tardia'] as const
@@ -78,18 +76,13 @@ export async function listarTareasEstudiante(estudianteId: number | 'me', opts: 
         fechaInicio: a.fechaInicio || a.fecha_inicio,
         fechaVencimiento: a.fechaVencimiento || a.fecha_vencimiento,
         estado: estadoNorm,
-        cursoId: a.cursoId || a.curso_id || a.curso?.id,
+        cursoId: a.cursoId || a.curso_id,
         cursoNombre: a.cursoNombre || a.curso?.nombre,
       } as TareaAsignadaMovil;
     });
-    return mapped;
   }
-
-  // No usar /tareas aquí: corresponde al Banco de Tareas, no a asignaciones por curso
-
-  // Fallback: historial (para tareas ya entregadas/calificadas)
+  // Fallback: usar historial para mostrar tareas ya entregadas/calificadas
   try {
-    if (typeof estudianteId !== 'number') return [];
     const hist = await listarHistorialEstudiante(estudianteId, opts);
     if (!Array.isArray(hist) || hist.length === 0) return [];
     const mapped: TareaAsignadaMovil[] = hist.map((h: any) => {
@@ -110,6 +103,7 @@ export async function listarTareasEstudiante(estudianteId: number | 'me', opts: 
         cursoNombre: asign.cursoNombre || asign.curso?.nombre,
       } as TareaAsignadaMovil;
     });
+    // Evitar duplicados por id
     const unique = new Map<number, TareaAsignadaMovil>();
     for (const m of mapped) { if (typeof m.id === 'number') unique.set(m.id, m); }
     return Array.from(unique.values());

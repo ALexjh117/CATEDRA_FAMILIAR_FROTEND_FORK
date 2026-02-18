@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { getSession } from '../api/endpoints';
 import { httpService } from '../api/httpService';
-import { createCategoria, createTarea, getCategorias, getTareaById, getTareas, getGradosPublic } from '../api/endpointsDocente-orinetador';
-import { listarCursos, listarPeriodos, crearAsignacion, crearAsignacionOrientador, updateBancoTarea, deleteBancoTarea } from '../api/docentes';
+import { createCategoria, createTarea, getCategorias, getTareaById, getTareas } from '../api/endpointsDocente-orinetador';
 import DashboardLayout from '../components/DashboardLayout';
 import OrientadorLayout from '../components/orientador-acudiente/OrientadorLayout';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -72,25 +71,8 @@ export default function TareasPage() {
   const [loadingDetalle, setLoadingDetalle] = useState(false);
   const [fileBlobUrl, setFileBlobUrl] = useState<string | null>(null);
   const [loadingFile, setLoadingFile] = useState(false);
-  const [asignCursos, setAsignCursos] = useState<Array<{ id: number; nombre: string; docenteId?: number | null }>>([]);
-  const [asignPeriodos, setAsignPeriodos] = useState<{ id: number; nombre: string }[]>([]);
-  const [asignCursoId, setAsignCursoId] = useState<number>(0);
-  const [asignCursoIds, setAsignCursoIds] = useState<number[]>([]);
-  const [asignPeriodoId, setAsignPeriodoId] = useState<number>(0);
-  const [asignFechaInicio, setAsignFechaInicio] = useState<string>('');
-  const [asignFechaVenc, setAsignFechaVenc] = useState<string>('');
-  const [asignando, setAsignando] = useState(false);
-
-  // Edición/eliminación de plantilla (Banco) para orientador/docente
-  const [editingBanco, setEditingBanco] = useState<BancoTarea | null>(null);
-  const [editTitulo, setEditTitulo] = useState('');
-  const [editDescripcion, setEditDescripcion] = useState('');
-  const [editTema, setEditTema] = useState('');
-  const [editFile, setEditFile] = useState<File | null>(null);
-  const [savingEdit, setSavingEdit] = useState(false);
 
   const [categorias, setCategorias] = useState<{ id: number; nombre: string }[]>(CATEGORIAS_MOCK);
-  const [grados, setGrados] = useState<{ id: number; nombre: string }[]>(GRADOS);
 
   const [savingCategoria, setSavingCategoria] = useState(false);
   const [savingTarea, setSavingTarea] = useState(false);
@@ -118,7 +100,6 @@ export default function TareasPage() {
   useEffect(() => {
     loadTareas();
     loadCategorias();
-    loadGrados();
   }, []);
 
   useEffect(() => {
@@ -127,91 +108,10 @@ export default function TareasPage() {
     };
   }, [fileBlobUrl]);
 
-  const loadAsignacionContext = async () => {
-    try {
-      const [per, cursos] = await Promise.all([
-        listarPeriodos(),
-        (async () => {
-          // Usar el mismo origen de datos que el sidebar para consistencia (JWT filtra por institución del orientador)
-          const propios = await listarCursos();
-          return Array.isArray(propios)
-            ? propios.map((c: any) => ({ id: Number(c.id), nombre: c.nombre || `Curso #${c.id}`, docenteId: c.docenteId ?? c.docente_id ?? null }))
-            : [];
-        })()
-      ]);
-      const perArr = Array.isArray(per) ? per : [];
-      setAsignPeriodos(perArr.map((p: any)=>({ id: Number(p.id), nombre: p.nombre || `Periodo #${p.id}` })));
-      const cursosArr = Array.isArray(cursos) ? cursos : [];
-      setAsignCursos(cursosArr);
-      setAsignPeriodoId((perArr[0]?.id) ? Number(perArr[0].id) : 0);
-      setAsignCursoId((cursosArr[0]?.id) ? Number(cursosArr[0].id) : 0);
-      setAsignCursoIds([]);
-    } catch {}
-  };
-
-  const onAsignarDesdeNueva = async () => {
-    if (!tareaSeleccionada) return;
-    const isOri = userRole === 'orientador';
-    const hasMulti = isOri && Array.isArray(asignCursoIds) && asignCursoIds.length > 0;
-    if (!asignPeriodoId || (!hasMulti && !asignCursoId)) {
-      await Swal.fire({ title: 'Faltan datos', text: 'Selecciona período y al menos un curso', icon: 'warning', confirmButtonText: 'OK', confirmButtonColor: '#4f46e5' });
-      return;
-    }
-    // Permitir que el orientador asigne incluso si el curso no tiene docente
-    try {
-      setAsignando(true);
-      const payload: any = {
-        bancoTareaId: tareaSeleccionada.id,
-        periodoId: Number(asignPeriodoId),
-        ...(hasMulti ? { cursoIds: asignCursoIds.map(Number) } : { cursoId: Number(asignCursoId) }),
-        fechaInicio: asignFechaInicio || new Date().toISOString().slice(0,10),
-        fechaVencimiento: asignFechaVenc || undefined,
-        // opcionales
-        titulo: tareaSeleccionada?.titulo || undefined,
-        descripcion: tareaSeleccionada?.descripcion || undefined,
-        tema: (tareaSeleccionada as any)?.tema || undefined,
-      };
-      if (isOri) payload.docenteId = (session as any)?.user?.id;
-      const res = isOri ? await crearAsignacionOrientador(payload) : await crearAsignacion(payload);
-      const ok = (res as any)?.success !== false;
-      if (!ok) {
-        await Swal.fire({ title: 'No se pudo asignar', text: (res as any)?.message || 'Error al asignar', icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#4f46e5' });
-        return;
-      }
-      await Swal.fire({ title: 'Asignación creada', icon: 'success', confirmButtonText: 'OK', confirmButtonColor: '#4f46e5' });
-      setModalAsignar(false);
-      setTareaSeleccionada(null);
-      loadTareas();
-    } catch (e: any) {
-      await Swal.fire({ title: 'Error', text: e?.message || 'Error al asignar', icon: 'error', confirmButtonText: 'OK', confirmButtonColor: '#4f46e5' });
-    } finally {
-      setAsignando(false);
-    }
-  };
-
-  const loadGrados = async () => {
-    try {
-      const res = await getGradosPublic();
-      if (res.success && Array.isArray(res.data) && res.data.length > 0) {
-        const mapped = res.data
-          .map((g: any) => ({ id: Number(g.id), nombre: g.nombre || `Grado #${g.id}` }))
-          .filter((g: any) => Number.isFinite(g.id) && g.nombre);
-        if (mapped.length > 0) {
-          setGrados(mapped);
-          return;
-        }
-      }
-      setGrados(GRADOS);
-    } catch {
-      setGrados(GRADOS);
-    }
-  };
-
   const normalizeTarea = (raw: any): BancoTarea => {
     const categoriaId = Number(raw?.categoriaId ?? raw?.categoria_id ?? 0);
 
     const gradosRaw = raw?.gradosObjetivo ?? raw?.grados_objetivo;
-    console.log("gradosRaw:", gradosRaw);
     const gradosObjetivo: number[] | null =
       Array.isArray(gradosRaw)
         ? gradosRaw.map((x: any) => Number(x)).filter((x: any) => Number.isFinite(x))
@@ -379,26 +279,15 @@ export default function TareasPage() {
       console.log('📥 [Tareas] Respuesta crear:', result);
 
       if (result.success) {
+        await Swal.fire({
+          title: 'Tarea creada correctamente',
+          icon: 'success',
+          confirmButtonText: 'OK',
+          confirmButtonColor: '#4f46e5'
+        });
         setModalCrear(false);
-        const creada = (result as any)?.data || (result as any)?.tarea || null;
         resetForm();
-        if (creada) {
-          const tNorm = normalizeTarea(creada);
-          setTareaSeleccionada(tNorm);
-          const today = new Date().toISOString().slice(0,10);
-          setAsignFechaInicio(today);
-          await loadAsignacionContext();
-          setModalAsignar(true);
-        } else {
-          await Swal.fire({
-            title: 'Tarea creada',
-            text: 'Ahora puedes asignarla desde el banco o usando el botón Asignar.',
-            icon: 'success',
-            confirmButtonText: 'OK',
-            confirmButtonColor: '#4f46e5'
-          });
-          loadTareas();
-        }
+        loadTareas();
       } else {
         const status = (result as any)?.status;
         const msg = result.message || 'Error al crear la tarea';
@@ -528,10 +417,7 @@ export default function TareasPage() {
 
   const handleAsignarTarea = (tarea: BancoTarea) => {
     setTareaSeleccionada(tarea);
-    const today = new Date().toISOString().slice(0,10);
-    setAsignFechaInicio(today);
-    setAsignFechaVenc('');
-    loadAsignacionContext().finally(() => setModalAsignar(true));
+    setModalAsignar(true);
   };
 
   const handleVerDetalleTarea = async (tarea: BancoTarea) => {
@@ -700,37 +586,7 @@ export default function TareasPage() {
 
   const getGradosText = (gradosIds: number[] | null) => {
     if (!gradosIds || gradosIds.length === 0) return 'Todos los grados';
-    return gradosIds.map(id => grados.find(g => g.id === id)?.nombre || id).join(', ');
-  };
-
-  const onSaveEditBanco = async () => {
-    if (!editingBanco) return;
-    try {
-      setSavingEdit(true);
-      console.log('[Banco][Editar][save] tarea', editingBanco.id);
-      if (editFile) {
-        const fd = new FormData();
-        if (editTitulo) fd.append('titulo', editTitulo);
-        if (editDescripcion) fd.append('descripcion', editDescripcion);
-        if (editTema) fd.append('tema', editTema);
-        fd.append('archivo', editFile);
-        await updateBancoTarea(Number(editingBanco.id), fd as any, 'PUT');
-      } else {
-        await updateBancoTarea(Number(editingBanco.id), {
-          titulo: editTitulo || undefined,
-          descripcion: editDescripcion || undefined,
-          tema: editTema || undefined,
-        }, 'PATCH');
-      }
-      await Swal.fire({ icon: 'success', title: 'Plantilla actualizada', confirmButtonText: 'OK', confirmButtonColor: '#14b8a6' });
-      setEditingBanco(null);
-      await loadTareas();
-    } catch (e: any) {
-      console.error('[Banco][Editar][error] tarea', editingBanco?.id, e);
-      await Swal.fire({ icon: 'error', title: 'No se pudo actualizar', text: e?.message || 'Error al guardar cambios', confirmButtonText: 'Entendido', confirmButtonColor: '#ef4444' });
-    } finally {
-      setSavingEdit(false);
-    }
+    return gradosIds.map(id => GRADOS.find(g => g.id === id)?.nombre || id).join(', ');
   };
 
   if (loading) {
@@ -890,61 +746,24 @@ export default function TareasPage() {
 
                 <div className="flex gap-2">
                   <button
-                    onClick={() => { console.log('[Banco][Ver] tarea', tarea.id, tarea.titulo); handleVerDetalleTarea(tarea); }}
+                    onClick={() => handleVerDetalleTarea(tarea)}
                     className="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
                     title="Ver detalle"
                   >
                     <IconEye size={16} />
                   </button>
                   <button
-                    onClick={() => { console.log('[Banco][Asignar] tarea', tarea.id); handleAsignarTarea(tarea); }}
+                    onClick={() => handleAsignarTarea(tarea)}
                     className="flex-1 px-3 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium"
                   >
                     Asignar
                   </button>
                   {(userRole === 'orientador' || userRole === 'docente_aula') && (
                     <>
-                      <button className="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
-                        title="Editar"
-                        onClick={() => {
-                          console.log('[Banco][Editar][open] tarea', tarea.id);
-                          setEditingBanco(tarea);
-                          setEditTitulo(tarea.titulo || '');
-                          setEditDescripcion(tarea.descripcion || '');
-                          setEditTema(tarea.tema || '');
-                          setEditFile(null);
-                        }}
-                      >
+                      <button className="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors">
                         <IconEdit size={16} />
                       </button>
-                      <button className="px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
-                        title="Eliminar"
-                        onClick={async () => {
-                          console.log('[Banco][Eliminar][click] tarea', tarea.id);
-                          const res = await Swal.fire({
-                            title: 'Eliminar plantilla',
-                            text: '¿Estás seguro? Esta acción no se puede deshacer.',
-                            icon: 'warning',
-                            showCancelButton: true,
-                            confirmButtonText: 'Eliminar',
-                            cancelButtonText: 'Cancelar',
-                            confirmButtonColor: '#ef4444'
-                          });
-                          if (!res.isConfirmed) return;
-                          try {
-                            console.log('[Banco][Eliminar][start] tarea', tarea.id);
-                            await deleteBancoTarea(Number(tarea.id));
-                            console.log('[Banco][Eliminar][ok] tarea', tarea.id);
-                            await Swal.fire({ icon: 'success', title: 'Eliminada', text: 'La plantilla fue eliminada.', confirmButtonText: 'OK', confirmButtonColor: '#14b8a6' });
-                            await loadTareas();
-                          } catch (e: any) {
-                            console.error('[Banco][Eliminar][error] tarea', tarea.id, e);
-                            const status = e?.status || e?.response?.status;
-                            const msg = status === 409 ? 'No se puede eliminar: está referenciada por asignaciones.' : (e?.message || 'Error al eliminar');
-                            await Swal.fire({ icon: 'error', title: 'No se pudo eliminar', text: msg, confirmButtonText: 'Entendido', confirmButtonColor: '#ef4444' });
-                          }
-                        }}
-                      >
+                      <button className="px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors">
                         <IconTrash size={16} />
                       </button>
                     </>
@@ -1073,14 +892,8 @@ export default function TareasPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">Grados Objetivo</label>
-                  {grados.length === 0 && (
-                    <div className="mb-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                      No hay grados disponibles actualmente. Si eres orientador, verifica que tu institución tenga grados configurados. 
-                      Los cursos se seleccionan en el paso de asignación, después de crear la tarea.
-                    </div>
-                  )}
                   <div className="grid grid-cols-3 gap-2">
-                    {grados.map(grado => (
+                    {GRADOS.map(grado => (
                       <label key={grado.id} className="flex items-center gap-2 text-sm">
                         <input
                           type="checkbox"
@@ -1098,7 +911,6 @@ export default function TareasPage() {
                       </label>
                     ))}
                   </div>
-                  <p className="mt-2 text-xs text-slate-500">Nota: la selección de cursos específicos se realiza al momento de asignar la tarea al/los curso(s).</p>
                 </div>
 
                 <div className="flex items-center gap-4">
@@ -1201,7 +1013,7 @@ export default function TareasPage() {
           </div>
         )}
 
-        {/* Modal Asignar inmediata */}
+        {/* Modal Asignar (Placeholder) */}
         {modalAsignar && tareaSeleccionada && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
@@ -1211,59 +1023,20 @@ export default function TareasPage() {
               </div>
               
               <div className="p-6">
-                <div className="text-sm text-slate-700 mb-4">Selecciona el período y el curso para asignar "{tareaSeleccionada.titulo}".</div>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Periodo</label>
-                    <select className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-teal-500" value={asignPeriodoId} onChange={(e)=> setAsignPeriodoId(Number(e.target.value))}>
-                      {asignPeriodos.map(p => (
-                        <option key={p.id} value={p.id}>{p.nombre}</option>
-                      ))}
-                    </select>
-                    {asignPeriodos.length === 0 && (
-                      <div className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">No hay períodos disponibles. Configura un período activo.</div>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Curso</label>
-                    <select className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-teal-500" value={asignCursoId} onChange={(e)=> setAsignCursoId(Number(e.target.value))}>
-                      {asignCursos.map(c => (
-                        <option key={c.id} value={c.id}>{c.nombre}</option>
-                      ))}
-                    </select>
-                    {asignCursos.length === 0 && (
-                      <div className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">No hay cursos visibles. Verifica que existan grados/cursos en tu institución.</div>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Fecha inicio</label>
-                      <input type="date" className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-teal-500" value={asignFechaInicio} onChange={(e)=> setAsignFechaInicio(e.target.value)} />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Fecha vencimiento (opcional)</label>
-                      <input type="date" className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-teal-500" value={asignFechaVenc} onChange={(e)=> setAsignFechaVenc(e.target.value)} />
-                    </div>
-                  </div>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+                  <p className="font-semibold mb-2">🚧 Funcionalidad en desarrollo</p>
+                  <p>El backend está preparando el endpoint <code className="bg-blue-100 px-1 rounded">POST /asignaciones</code></p>
+                  <p className="mt-2">Tarea seleccionada: <strong>{tareaSeleccionada.titulo}</strong></p>
                 </div>
               </div>
 
               <div className="bg-slate-50 border-t border-slate-200 px-6 py-4 rounded-b-2xl">
-                <div className="flex gap-2 justify-end">
-                  <button
-                    onClick={() => { setModalAsignar(false); setTareaSeleccionada(null); }}
-                    className="px-4 py-2 bg-slate-200 text-slate-800 rounded-lg hover:bg-slate-300 transition-colors font-medium"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={onAsignarDesdeNueva}
-                    disabled={asignando || asignPeriodos.length===0 || asignCursos.length===0}
-                    className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors font-medium disabled:opacity-60"
-                  >
-                    {asignando ? 'Asignando...' : 'Asignar'}
-                  </button>
-                </div>
+                <button
+                  onClick={() => { setModalAsignar(false); setTareaSeleccionada(null); }}
+                  className="w-full px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors font-medium"
+                >
+                  Cerrar
+                </button>
               </div>
             </div>
           </div>
@@ -1388,40 +1161,6 @@ export default function TareasPage() {
                 >
                   Cerrar
                 </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Modal Editar Banco Tarea */}
-        {editingBanco && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full">
-              <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between rounded-t-2xl">
-                <h2 className="text-xl font-bold text-slate-800">Editar plantilla</h2>
-                <button onClick={() => setEditingBanco(null)} className="text-slate-400 hover:text-slate-600">✕</button>
-              </div>
-              <div className="p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Título</label>
-                  <input className="w-full px-4 py-2 border border-slate-300 rounded-lg" value={editTitulo} onChange={(e)=> setEditTitulo(e.target.value)} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Tema</label>
-                  <input className="w-full px-4 py-2 border border-slate-300 rounded-lg" value={editTema} onChange={(e)=> setEditTema(e.target.value)} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Descripción</label>
-                  <textarea className="w-full px-4 py-2 border border-slate-300 rounded-lg min-h-[100px]" value={editDescripcion} onChange={(e)=> setEditDescripcion(e.target.value)} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Reemplazar archivo (opcional)</label>
-                  <input type="file" onChange={(e)=> setEditFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} />
-                </div>
-              </div>
-              <div className="bg-slate-50 border-t border-slate-200 px-6 py-4 flex gap-3 rounded-b-2xl">
-                <button onClick={() => setEditingBanco(null)} className="flex-1 px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors">Cancelar</button>
-                <button onClick={onSaveEditBanco} className="flex-1 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50" disabled={savingEdit}>{savingEdit ? 'Guardando...' : 'Guardar'}</button>
               </div>
             </div>
           </div>

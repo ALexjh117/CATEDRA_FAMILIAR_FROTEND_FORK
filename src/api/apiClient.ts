@@ -446,6 +446,68 @@ class ApiClient {
   }
 
   /**
+   * Login Acudiente (App Móvil)
+   * POST /acudientes/login
+   */
+  async loginAcudiente(documento: string, password: string): Promise<LoginResponse> {
+    try {
+      const response = await httpService.post<LoginResponse>('/acudientes/login', {
+        documento: documento.trim(),
+        password: password.trim()
+      });
+      
+      if (response.data.success && response.data.data?.token) {
+        httpService.setAuthToken(response.data.data.token);
+        
+        const sessionData = {
+          user: {
+            id: response.data.data.usuario.id,
+            correo: response.data.data.usuario.correo,
+            nombre: response.data.data.usuario.nombre || 'Acudiente',
+            apellidos: response.data.data.usuario.apellido || '',
+            rol: 'acudiente',
+            rolId: response.data.data.usuario.rolId,
+            activo: response.data.data.usuario.estaActivo,
+            debe_cambiar_contrasena: response.data.data.usuario.debeCambiarContrasena,
+            institucionId: response.data.data.usuario.institucionId
+          },
+          token: response.data.data.token,
+          isPreview: false
+        };
+        
+        localStorage.setItem('session', JSON.stringify(sessionData));
+      }
+      
+      return response.data;
+    } catch (error: any) {
+      console.error('Login acudiente error:', error);
+      return {
+        success: false,
+        message: error.response?.data?.message || error.message || 'Error de conexión'
+      };
+    }
+  }
+
+  /**
+   * Reset Password Acudiente
+   * POST /acudientes/reset-password
+   */
+  async resetPasswordAcudiente(documento: string): Promise<ApiResponse> {
+    try {
+      const response = await httpService.post<ApiResponse>('/acudientes/reset-password', {
+        numeroDocumento: documento
+      });
+      
+      return response.data;
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.response?.data?.message || error.message || 'Error al resetear contraseña'
+      };
+    }
+  }
+
+  /**
    * Login Coordinador
    * POST /coordinadores/login
    */

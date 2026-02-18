@@ -25,10 +25,9 @@ class HttpService {
   private config: ApiConfig;
 
   constructor(config: Partial<ApiConfig> = {}) {
-    const envBase = (typeof import.meta !== 'undefined' ? (import.meta as any)?.env?.VITE_API_URL : undefined) as string | undefined;
     this.config = {
-      // Preferir VITE_API_URL; si no, usar '/api' para aprovechar el proxy de Vite
-      baseURL: config.baseURL || envBase || '/api',
+      // Usar '/api' como baseURL por defecto para aprovechar el proxy de Vite
+      baseURL: config.baseURL || '/api',
       timeout: config.timeout || 15000,
       headers: {
         'Content-Type': 'application/json',
@@ -36,9 +35,6 @@ class HttpService {
         ...config.headers
       }
     };
-    try {
-      console.log('[HTTP][INIT] Base URL:', this.config.baseURL);
-    } catch {}
   }
 
   private getAuthToken(): string | null {
@@ -88,34 +84,6 @@ class HttpService {
       if (typeof data === 'object' && data !== null && 'message' in data) {
         error.message = (data as any).message;
       }
-      // Adjuntar detalles útiles del backend para mapeo aguas arriba
-      try {
-        (error as any).body = data;
-        const maybeCode = (data as any)?.code ?? (data as any)?.error_code ?? (data as any)?.error?.code;
-        if (maybeCode) error.code = String(maybeCode);
-      } catch {}
-
-      try {
-        const url = response.url;
-        const isAuth = typeof window !== 'undefined' ? Boolean(localStorage.getItem('session')) : false;
-        const hint = typeof data === 'string' ? data.slice(0, 200) : JSON.stringify(data)?.slice(0, 200);
-        if (response.status === 401 || response.status === 403) {
-          console.warn(`[DEBUG][API] Respuesta no autorizada/forbidden`, {
-            url,
-            status: response.status,
-            statusText: response.statusText,
-            tieneSesion: isAuth,
-            cuerpoPreview: hint
-          });
-        } else {
-          console.error(`[DEBUG][API] Error HTTP`, {
-            url,
-            status: response.status,
-            statusText: response.statusText,
-            cuerpoPreview: hint
-          });
-        }
-      } catch {}
 
       throw error;
     }
@@ -147,20 +115,10 @@ if (params) {
     const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
 
     try {
-      const headers = this.getHeaders();
-      try {
-        const hasAuth = Boolean((headers as any)['Authorization']);
-        const authLen = hasAuth ? String((headers as any)['Authorization']).length : 0;
-        console.log(`[DEBUG][API] GET:`, {
-          url: url.toString(),
-          tieneAuthorization: hasAuth,
-          authorizationLen: authLen,
-          contentType: (headers as any)['Content-Type']
-        });
-      } catch {}
+      console.log(`[DEBUG][API] GET:`, url.toString());
       const response = await fetch(url, {
         method: 'GET',
-        headers,
+        headers: this.getHeaders(),
         signal: controller.signal
       });
       console.log(`[DEBUG][API] GET Response:`, response.status, response.statusText);
@@ -217,29 +175,6 @@ if (params) {
     }
 
     try {
-      try {
-        const hasAuth = Boolean((headers as any)['Authorization']);
-        const authLen = hasAuth ? String((headers as any)['Authorization']).length : 0;
-        const isLogin = path.includes('/login');
-        let bodyPreview: any = undefined;
-        if (!isFormData && data && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
-          const clone: any = { ...data };
-          if ('password' in clone) clone.password = '***';
-          if ('contrasena' in clone) clone.contrasena = '***';
-          bodyPreview = clone;
-        } else if (isFormData) {
-          bodyPreview = '[FormData]';
-        }
-        console.log(`[DEBUG][API] ${method}:`, {
-          url: url.toString(),
-          endpoint: path,
-          isLogin,
-          tieneAuthorization: hasAuth,
-          authorizationLen: authLen,
-          contentType: (headers as any)['Content-Type'],
-          bodyPreview
-        });
-      } catch {}
       console.log(`[DEBUG][API] ${method}:`, url.toString());
       const response = await fetch(url, options);
       console.log(`[DEBUG][API] ${method} Response:`, response.status, response.statusText);
