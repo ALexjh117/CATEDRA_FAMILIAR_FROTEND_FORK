@@ -55,12 +55,13 @@ export interface DetalleAsignacionMovil {
   } | null;
 }
 
-export async function listarTareasEstudiante(estudianteId: number, opts: { periodo?: number | string; periodoId?: number | string } = {}): Promise<TareaAsignadaMovil[]> {
+export async function listarTareasEstudiante(estudianteId: number | 'me', opts: { periodo?: number | string; periodoId?: number | string } = {}): Promise<TareaAsignadaMovil[]> {
   const params: any = {};
   const periodoParam = opts.periodoId ?? opts.periodo;
-  if (periodoParam) params.periodoId = periodoParam;
+  if (periodoParam) params.periodo = periodoParam;
   // Endpoint general
-  const res = await httpService.get(`/estudiantes/${estudianteId}/tareas`, params);
+  const idSeg = typeof estudianteId === 'string' ? estudianteId : String(estudianteId);
+  const res = await httpService.get(`/estudiantes/${idSeg}/tareas`, params);
   const body: any = res.data;
   const dataGeneral = (body && typeof body === 'object' && 'data' in body) ? (body as any).data : body;
 
@@ -88,6 +89,7 @@ export async function listarTareasEstudiante(estudianteId: number, opts: { perio
 
   // Fallback: historial (para tareas ya entregadas/calificadas)
   try {
+    if (typeof estudianteId !== 'number') return [];
     const hist = await listarHistorialEstudiante(estudianteId, opts);
     if (!Array.isArray(hist) || hist.length === 0) return [];
     const mapped: TareaAsignadaMovil[] = hist.map((h: any) => {

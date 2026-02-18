@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import TeacherLayout from '../components/TeacherLayout';
 import Button from '../components/ui/Button';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
-import { listarAsignaciones, listarCursos, listarPeriodos, listarAsignacionesOrientador, type AsignacionBackend, type CursoBackend, type PeriodoBackend } from '../api/docentes';
+import { listarAsignaciones, listarCursos, listarPeriodos, listarAsignacionesOrientador, updateAsignacion, deleteAsignacion, type AsignacionBackend, type CursoBackend, type PeriodoBackend } from '../api/docentes';
 import { getSession, getCursos } from '../api/endpoints';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import Swal from 'sweetalert2';
+import Modal from '../components/ui/Modal';
 
 export default function DocenteAsignacionesListPage(){
   const session = getSession();
@@ -26,7 +28,62 @@ export default function DocenteAsignacionesListPage(){
   const [detallePorCurso, setDetallePorCurso] = useState<boolean>(searchParams.get('detallePorCurso') === 'true');
   const [page, setPage] = useState<number>(Number(searchParams.get('page')) || 1);
   const [perPage, setPerPage] = useState<number>(Number(searchParams.get('perPage')) || 10);
+const [editing, setEditing] = useState<AsignacionBackend | null>(null);
+const [editTitulo, setEditTitulo] = useState('');
+const [editFechaInicio, setEditFechaInicio] = useState('');
+const [editFechaVenc, setEditFechaVenc] = useState('');
+const [editInBoletin, setEditInBoletin] = useState<boolean>(false);
+const [saving, setSaving] = useState(false);
+const openEdit = (a: AsignacionBackend) => {
+  setEditing(a);
+  setEditTitulo(a.titulo || '');
+  setEditFechaInicio(a.fechaInicio ? String(a.fechaInicio).slice(0,10) : '');
+  setEditFechaVenc(a.fechaVencimiento ? String(a.fechaVencimiento).slice(0,10) : '');
+  setEditInBoletin(Boolean((a as any)?.incluirEnBoletin));
+};
 
+const onSaveEdit = async () => {
+  if (!editing) return;
+  setSaving(true);
+  try {
+    const payload: any = {
+      titulo: editTitulo || undefined,
+      incluirEnBoletin: editInBoletin || undefined,
+      fechaInicio: editFechaInicio || undefined,
+      fechaVencimiento: editFechaVenc || undefined,
+    };
+    await updateAsignacion(Number(editing.id), payload, 'PATCH');
+    await Swal.fire({ icon: 'success', title: 'Asignación actualizada', confirmButtonText: 'OK', confirmButtonColor: '#14b8a6' });
+    setEditing(null);
+    load();
+  } catch (e: any) {
+    await Swal.fire({ icon: 'error', title: 'No se pudo actualizar', text: e?.message || 'Error al guardar cambios', confirmButtonText: 'Entendido', confirmButtonColor: '#ef4444' });
+  } finally { setSaving(false); }
+};
+
+const onDelete = async (a: AsignacionBackend) => {
+  const res = await Swal.fire({
+    icon: 'warning',
+    title: 'Eliminar asignación',
+    text: 'Esta acción no se puede deshacer. ¿Deseas continuar?',
+    showCancelButton: true,
+    confirmButtonColor: '#ef4444',
+    confirmButtonText: 'Eliminar',
+    cancelButtonText: 'Cancelar'
+  });
+  if (!res.isConfirmed) return;
+  try {
+    await deleteAsignacion(Number(a.id));
+    await Swal.fire({ icon: 'success', title: 'Asignación eliminada', confirmButtonText: 'OK', confirmButtonColor: '#14b8a6' });
+    load();
+  } catch (e: any) {
+    const status = e?.status || e?.response?.status;
+    const msg = status === 409
+      ? 'No se puede eliminar: existen entregas o calificaciones asociadas.'
+      : (e?.message || 'Error al eliminar');
+    await Swal.fire({ icon: 'error', title: 'No se pudo eliminar', text: msg, confirmButtonText: 'Entendido', confirmButtonColor: '#ef4444' });
+  }
+};
   const actualizarQuery = () => {
     const params: Record<string, string> = {};
     if (periodo) params.periodo = String(periodo);
@@ -299,9 +356,11 @@ export default function DocenteAsignacionesListPage(){
                             )}
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-right">
-                          <Link to={`/docente/asignaciones/${a.id}`}><Button size="sm">Ver resumen</Button></Link>
-                        </td>
+                        <td className="px-4 py-3 text-right space-x-2">
+  <Link to={`/docente/asignaciones/${a.id}`}><Button size="sm">Ver</Button></Link>
+  <Button size="sm" variant="secondary" onClick={()=> openEdit(a)}>Editar</Button>
+  <Button size="sm" variant="ghost" onClick={()=> onDelete(a)}>Eliminar</Button>
+</td>
                       </tr>
                     );
                   })}
@@ -320,6 +379,34 @@ export default function DocenteAsignacionesListPage(){
           </div>
         )}
       </div>
+      <Modal isOpen={!!editing} onClose={()=> setEditing(null)} title="Editar asignación" size="md">
+        {!!editing && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Título</label>
+              <input className="w-full px-3 py-2 rounded-xl border-2 border-gray-200" value={editTitulo} onChange={(e)=> setEditTitulo(e.target.value)} />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Fecha inicio</label>
+                <input type="date" className="w-full px-3 py-2 rounded-xl border-2 border-gray-200" value={editFechaInicio} onChange={(e)=> setEditFechaInicio(e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Fecha vencimiento</label>
+                <input type="date" className="w-full px-3 py-2 rounded-xl border-2 border-gray-200" value={editFechaVenc} onChange={(e)=> setEditFechaVenc(e.target.value)} />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <input id="editBoletin" type="checkbox" className="w-4 h-4" checked={editInBoletin} onChange={(e)=> setEditInBoletin(e.target.checked)} />
+              <label htmlFor="editBoletin" className="text-sm text-slate-700">Incluir en boletín</label>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={()=> setEditing(null)}>Cancelar</Button>
+              <Button onClick={onSaveEdit} loading={saving}>Guardar</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </TeacherLayout>
   );
 }
