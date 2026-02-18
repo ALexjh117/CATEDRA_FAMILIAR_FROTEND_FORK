@@ -6,7 +6,7 @@ import Modal from '../components/ui/Modal';
 import FormFieldInput from '../components/ui/FormFieldInput';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { useToast } from '../components/ui/ToastGlobal';
-import { listarBancoTareas, listarCursos, listarPeriodos, crearAsignacion, crearAsignacionOrientador, type BancoTareaBackend, type CursoBackend, type PeriodoBackend } from '../api/docentes';
+import { listarBancoTareas, listarCursos, listarPeriodos, crearAsignacion, crearAsignacionOrientador, updateBancoTarea, deleteBancoTarea, type BancoTareaBackend, type CursoBackend, type PeriodoBackend } from '../api/docentes';
 import { getCursosPorInstitucion, getGradosPublic } from '../api/endpointsDocente-orinetador';
 import { getSession } from '../api/endpoints';
 
@@ -26,6 +26,7 @@ export default function BancoTareasDocentePage(){
 
   const [selected, setSelected] = useState<BancoTareaBackend | null>(null);
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<BancoTareaBackend | null>(null);
   const session = getSession();
 
   // Campos del modal
@@ -38,6 +39,12 @@ export default function BancoTareasDocentePage(){
   const [titulo, setTitulo] = useState('');
   const [descripcionExtra, setDescripcionExtra] = useState('');
   const [enlaces, setEnlaces] = useState<string[]>(['']);
+  // Edición de plantilla
+  const [editTitulo, setEditTitulo] = useState('');
+  const [editDescripcion, setEditDescripcion] = useState('');
+  const [editTema, setEditTema] = useState('');
+  const [editFile, setEditFile] = useState<File | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -232,8 +239,49 @@ export default function BancoTareasDocentePage(){
                   </div>
                   <p className="text-sm text-slate-600 line-clamp-3">{t.descripcion}</p>
                   {t.enlace && <a className="text-teal-600 text-sm underline" href={t.enlace} target="_blank">Recurso sugerido</a>}
-                  <div className="mt-auto flex justify-end">
-                    <Button size="sm" onClick={()=> openAsignar(t)}>Asignar</Button>
+                  <div className="mt-auto flex items-center justify-end gap-2">
+                    <button
+                      className="p-2 rounded-xl border-2 border-gray-200 hover:border-teal-300 text-slate-600"
+                      aria-label="Ver"
+                      title="Ver"
+                      onClick={()=> { console.log('[Banco][Ver] plantilla', t.id, t.titulo); showToast(`Vista previa: ${t.titulo}`, 'info'); }}
+                    >
+                      <span role="img" aria-hidden>👁️</span>
+                    </button>
+
+                    <Button size="sm" onClick={()=> { console.log('[Banco][Asignar] plantilla', t.id); openAsignar(t); }}>Asignar</Button>
+
+                    <button
+                      className="p-2 rounded-xl border-2 border-gray-200 hover:border-teal-300 text-slate-600"
+                      aria-label="Editar"
+                      title="Editar"
+                      onClick={()=> { console.log('[Banco][Editar][open] plantilla', t.id); setEditing(t); setEditTitulo(t.titulo || ''); setEditDescripcion(t.descripcion || ''); setEditTema(t.tema || ''); setEditFile(null); }}
+                    >
+                      <span role="img" aria-hidden>✏️</span>
+                    </button>
+
+                    <button
+                      className="p-2 rounded-xl border-2 border-rose-200 hover:border-rose-400 text-rose-600"
+                      aria-label="Eliminar"
+                      title="Eliminar"
+                      onClick={async ()=>{
+                        console.log('[Banco][Eliminar][click] plantilla', t.id);
+                        try {
+                          console.log('[Banco][Eliminar][start] plantilla', t.id);
+                          await deleteBancoTarea(Number(t.id));
+                          console.log('[Banco][Eliminar][ok] plantilla', t.id);
+                          showToast('Plantilla eliminada', 'success');
+                          load();
+                        } catch (e: any) {
+                          console.error('[Banco][Eliminar][error] plantilla', t.id, e);
+                          const status = e?.status || e?.response?.status;
+                          const msg = status === 409 ? 'No se puede eliminar: está referenciada por asignaciones.' : (e?.message || 'Error al eliminar');
+                          showToast(msg, 'error');
+                        }
+                      }}
+                    >
+                      <span role="img" aria-hidden>🗑️</span>
+                    </button>
                   </div>
                 </div>
               ))}
@@ -328,6 +376,53 @@ export default function BancoTareasDocentePage(){
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" onClick={()=> setSelected(null)}>Cancelar</Button>
                 <Button onClick={onAsignar} disabled={saving || !periodoId || cursoIds.length===0}>{saving ? 'Asignando...' : 'Asignar'}</Button>
+              </div>
+            </div>
+          )}
+        </Modal>
+
+        <Modal isOpen={!!editing} onClose={()=> setEditing(null)} title="Editar plantilla" size="lg">
+          {!!editing && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormFieldInput label="Título" name="editTitulo" value={editTitulo} onChange={(e)=> setEditTitulo(e.target.value)} />
+                <FormFieldInput label="Tema" name="editTema" value={editTema} onChange={(e)=> setEditTema(e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Descripción</label>
+                <textarea className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-teal-500 min-h-[100px]" value={editDescripcion} onChange={(e)=> setEditDescripcion(e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Reemplazar archivo (opcional)</label>
+                <input type="file" onChange={(e)=> setEditFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" onClick={()=> setEditing(null)}>Cancelar</Button>
+                <Button onClick={async ()=>{
+                  try {
+                    setSavingEdit(true);
+                    if (!editing) return;
+                    if (editFile) {
+                      const fd = new FormData();
+                      if (editTitulo) fd.append('titulo', editTitulo);
+                      if (editDescripcion) fd.append('descripcion', editDescripcion);
+                      if (editTema) fd.append('tema', editTema);
+                      fd.append('archivo', editFile);
+                      await updateBancoTarea(Number(editing.id), fd as any, 'PUT');
+                    } else {
+                      await updateBancoTarea(Number(editing.id), {
+                        titulo: editTitulo || undefined,
+                        descripcion: editDescripcion || undefined,
+                        tema: editTema || undefined,
+                      }, 'PATCH');
+                    }
+                    showToast('Plantilla actualizada', 'success');
+                    setEditing(null);
+                    load();
+                  } catch (e: any) {
+                    showToast(e?.message || 'No se pudo actualizar la plantilla', 'error');
+                  } finally { setSavingEdit(false); }
+                }} loading={savingEdit}>{savingEdit ? 'Guardando...' : 'Guardar'}</Button>
               </div>
             </div>
           )}

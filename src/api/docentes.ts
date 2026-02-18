@@ -19,6 +19,31 @@ export interface EstudianteBackend {
   cursoId?: number;
 }
 
+// Bandeja de entregas para Orientador
+export async function listarEntregasOrientador(params?: { cursoId?: number; asignacionId?: number; soloPendientes?: boolean }) {
+  const parse = (body: any): { data: EntregaBackend[]; meta?: any } => {
+    if (body && typeof body === 'object') {
+      if (Array.isArray(body.entregas)) return { data: body.entregas };
+      if (Array.isArray(body.items)) return { data: body.items };
+      if ('data' in body) {
+        const inner = (body as any).data;
+        if (inner && typeof inner === 'object' && 'data' in inner) return inner as { data: EntregaBackend[]; meta?: any };
+        if (Array.isArray(inner)) return { data: inner as EntregaBackend[] };
+        if (inner && typeof inner === 'object' && Array.isArray((inner as any).items)) return { data: (inner as any).items };
+      }
+    }
+    return { data: Array.isArray(body) ? (body as EntregaBackend[]) : [] };
+  };
+
+  try {
+    const response = await httpService.get<any>('/orientador/entregas', params);
+    const parsed = parse(response.data);
+    return { data: parsed.data, meta: parsed.meta };
+  } catch (err: any) {
+    throw err;
+  }
+}
+
 // =====================
 // ORIENTADOR ENDPOINTS
 // =====================
@@ -267,6 +292,33 @@ export async function listarBancoTareas(params?: { page?: number; limit?: number
   return response.data;
 }
 
+// Editar Banco de Tareas (PUT o PATCH). Admitir reemplazo de archivo con PUT vía FormData desde la llamada de UI.
+export async function updateBancoTarea(
+  id: number,
+  payload: Partial<{
+    titulo: string;
+    descripcion: string;
+    categoriaId: number;
+    tema: string;
+    entregableEsperado: string;
+    gradosObjetivo: any;
+    tipoCalificacion: string;
+    criteriosAutomaticos: any;
+    enlace: string;
+  }>,
+  method: 'PUT' | 'PATCH' = 'PATCH'
+) {
+  const ep = `/tareas/${id}`;
+  const res = method === 'PUT' ? await httpService.put(ep, payload) : await httpService.patch(ep, payload);
+  return res.data;
+}
+
+// Eliminar del Banco de Tareas
+export async function deleteBancoTarea(id: number) {
+  const res = await httpService.delete(`/tareas/${id}`);
+  return res.data;
+}
+
 // Periodos
 export async function listarPeriodos(params?: { page?: number; limit?: number; activo?: boolean }) {
   const response = await httpService.get<PeriodoBackend[]>('/periodos', params);
@@ -450,6 +502,34 @@ export async function crearAsignacion(payload: {
   // El backend acepta snake_case o camelCase, mantenemos camelCase
   const response = await httpService.post('/asignaciones', payload);
   return response.data;
+}
+
+// Editar asignación (PUT o PATCH)
+export async function updateAsignacion(
+  id: number,
+  payload: Partial<{
+    titulo: string;
+    descripcion: string;
+    frecuencia: string;
+    incluirEnBoletin: boolean;
+    tema: string;
+    fechaInicio: string; // ISO
+    fechaVencimiento: string; // ISO
+    cursoId: number;
+    cursoIds: number[];
+    periodoId: number;
+  }>,
+  method: 'PUT' | 'PATCH' = 'PATCH'
+) {
+  const ep = `/asignaciones/${id}`;
+  const res = method === 'PUT' ? await httpService.put(ep, payload) : await httpService.patch(ep, payload);
+  return res.data;
+}
+
+// Eliminar asignación
+export async function deleteAsignacion(id: number) {
+  const res = await httpService.delete(`/asignaciones/${id}`);
+  return res.data;
 }
 
 // Entregas del docente (bandeja), con filtros opcionales

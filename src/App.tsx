@@ -29,6 +29,7 @@ import EstudiantesDocentePage from './pages/EstudiantesDocentePage'
 import PadresDocentePage from './pages/PadresDocentePage'
 import BancoTareasDocentePage from './pages/BancoTareasDocentePage'
 import EntregasDocentePage from './pages/EntregasDocentePage'
+import EntregasOrientadorPage from './pages/EntregasOrientadorPage'
 import DocenteAsignacionesListPage from './pages/DocenteAsignacionesListPage'
 import DocenteAsignacionResumenPage from './pages/DocenteAsignacionResumenPage'
 import ReporteEntregasCursoPage from './pages/ReporteEntregasCursoPage'
@@ -257,6 +258,8 @@ export default function App(){
           {/* Docente - Entregas con layout docente */}
           <Route path="/entregas" element={<ProtectedRoute allowedRoles={['docente','docente_aula']}><EntregasDocentePage /></ProtectedRoute>} />
           <Route path="/docente/entregas" element={<ProtectedRoute allowedRoles={['docente','docente_aula']}><EntregasDocentePage /></ProtectedRoute>} />
+          {/* Orientador - Entregas */}
+          <Route path="/orientador/entregas" element={<ProtectedRoute allowedRoles={['orientador']}><EntregasOrientadorPage /></ProtectedRoute>} />
 <Route path="/estudiantes" element={
   <ProtectedRoute allowedRoles={['orientador']}>
     <OrientadorLayout>
