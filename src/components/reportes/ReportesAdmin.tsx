@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getSession } from '../../api/endpoints';
-import apiClient from '../../api/apiClient';
+import { getSession, getInstituciones, getUsuarios } from '../../api/endpoints';
 import DashboardLayout from '../DashboardLayout';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import { ErrorBoundary } from '../ui/ErrorBoundary';
@@ -79,22 +78,14 @@ export default function ReportesAdmin() {
     setLoading(true);
     setError(null);
     try {
-      const [instRes, usersRes] = await Promise.all([
-        apiClient.getInstituciones(),
-        apiClient.getUsuarios()
+      const [institucionesData, usuariosData] = await Promise.all([
+        getInstituciones(),
+        getUsuarios()
       ]);
 
-      if (instRes.success && instRes.data) {
-        setInstituciones(Array.isArray(instRes.data) ? instRes.data : []);
-      } else {
-        throw new Error('Error al cargar instituciones');
-      }
+      setInstituciones(Array.isArray(institucionesData) ? institucionesData : []);
 
-      if (usersRes.success && usersRes.data) {
-        setUsuarios(Array.isArray(usersRes.data) ? usersRes.data : []);
-      } else {
-        throw new Error('Error al cargar usuarios');
-      }
+      setUsuarios(Array.isArray(usuariosData) ? usuariosData : []);
     } catch (error) {
       console.error('Error loading data:', error);
       setError(error instanceof Error ? error.message : 'Error desconocido');
