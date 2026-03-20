@@ -34,11 +34,12 @@ export default function TeacherSidebar({ open, onClose }: { open: boolean; onClo
     { path: '/dashboard', label: 'Inicio', icon: 'home' },
     { path: '/dashboard/docente', label: 'Mi Panel', icon: 'dashboard' },
     { path: '/docente/banco-tareas', label: 'Banco de Tareas', icon: 'tasks' },
+    { path: '/docente/estudiantes', label: 'Mis Estudiantes', icon: 'users' },
     { path: '/docente/asignaciones', label: 'Asignaciones', icon: 'tasks' },
+    { path: '/docente/notas', label: 'Notas', icon: 'reports' },
     { path: '/docente/especiales', label: 'Asignaciones especiales', icon: 'tasks' },
     { path: '/docente/especiales/nueva', label: 'Nueva especial', icon: 'plus' },
     { path: '/entregas', label: 'Entregas', icon: 'inbox' },
-    { path: '/docente/estudiantes', label: 'Estudiantes (mis cursos)', icon: 'users' },
     { path: '/docente/acudientes', label: 'Acudientes (mis estudiantes)', icon: 'users' },
     { path: '/reportes/docente', label: 'Reportes', icon: 'reports' },
   ];
@@ -64,14 +65,28 @@ export default function TeacherSidebar({ open, onClose }: { open: boolean; onClo
       >
         <div className="h-16 flex items-center justify-between px-4 border-b border-slate-200/70">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-sm font-medium text-slate-700 truncate max-w-[9rem]">{
-              (user?.nombre && user?.nombre !== 'Usuario')
-                ? `${user?.nombre} ${user?.apellidos || ''}`.trim()
-                : (user?.correo ? String(user.correo).split('@')[0] : 'Docente')
-            }</span>
-            <span className="px-2 py-0.5 rounded-md text-[10px] bg-teal-50 text-teal-700 border border-teal-200">
-              {(((user?.rol || 'docente') as string) === 'docente_aula' ? 'Docente' : ((user?.rol || 'docente') as string).replace('_',' '))}
-            </span>
+            {/* Foto de perfil para Alex Jhoan en el sidebar */}
+            {(user?.nombre?.toLowerCase().includes('alex') && user?.apellidos?.toLowerCase().includes('jhoan')) ? (
+              <img 
+                src="/src/assets/img_familias/foto-git-3.png" 
+                alt="Foto de Alex Jhoan"
+                className="w-8 h-8 rounded-full object-cover border-2 border-teal-200 flex-shrink-0"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center text-white font-bold text-sm shadow-md flex-shrink-0">
+                {user?.nombre?.charAt(0) || 'D'}
+              </div>
+            )}
+            <div className="min-w-0">
+              <span className="text-sm font-medium text-slate-700 truncate block">{
+                (user?.nombre && user?.nombre !== 'Usuario')
+                  ? `${user?.nombre} ${user?.apellidos || ''}`.trim()
+                  : (user?.correo ? String(user.correo).split('@')[0] : 'Docente')
+              }</span>
+              <span className="px-2 py-0.5 rounded-md text-[10px] bg-teal-50 text-teal-700 border border-teal-200 inline-block mt-1">
+                {(((user?.rol || 'docente') as string) === 'docente_aula' ? 'Docente' : ((user?.rol || 'docente') as string).replace('_',' '))}
+              </span>
+            </div>
           </div>
           <button className="lg:hidden p-2 rounded-lg hover:bg-slate-100" onClick={onClose}>
             <IconX size={18} />

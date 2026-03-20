@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import DashboardLayout from '../components/DashboardLayout';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import Button from '../components/ui/Button';
-import { listarAsignacionesOrientador, getResumenAsignacionOrientadorRaw, type AsignacionBackend } from '../api/docentes';
+import { listarAsignacionesOrientador, getResumenAsignacionOrientadorRaw, listarPeriodos, type AsignacionBackend, type PeriodoBackend } from '../api/docentes';
 import { getGradosPublic } from '../api/endpointsDocente-orinetador';
 import { getSession } from '../api/endpoints';
 
@@ -11,9 +11,11 @@ export default function EntregasOrientadorPage(){
   const [error, setError] = useState<string|null>(null);
   const [cursos, setCursos] = useState<Array<{ id: number; nombre: string }>>([]);
   const [asignaciones, setAsignaciones] = useState<AsignacionBackend[]>([]);
+  const [periodos, setPeriodos] = useState<PeriodoBackend[]>([]);
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const [asignacionId, setAsignacionId] = useState<number | ''>('');
+  const [periodoId, setPeriodoId] = useState<number | ''>('');
   const [soloPendientes, setSoloPendientes] = useState<boolean>(true);
 
   // Datos de resumen de entregas
@@ -22,6 +24,16 @@ export default function EntregasOrientadorPage(){
   const [noEntregados, setNoEntregados] = useState<any[]>([]);
 
   const session = getSession();
+
+  const loadPeriodos = async () => {
+    try {
+      const periodosData = await listarPeriodos({ solo_activos: false });
+      setPeriodos(Array.isArray(periodosData) ? periodosData : []);
+    } catch (err: any) {
+      console.error('Error cargando períodos:', err);
+      setPeriodos([]);
+    }
+  };
 
   const loadCursos = async () => {
     try {
@@ -59,8 +71,13 @@ export default function EntregasOrientadorPage(){
     setLoading(true);
     setError(null);
     try {
-      // 1) Cargar asignaciones del orientador
-      const asig = await listarAsignacionesOrientador({ page: 1, perPage: 50 });
+      // 1) Cargar asignaciones del orientador filtrando por período si está seleccionado
+      const params: any = { page: 1, perPage: 50 };
+      if (periodoId) {
+        params.periodoId = Number(periodoId);
+      }
+      
+      const asig = await listarAsignacionesOrientador(params);
       const asigList = Array.isArray((asig as any)?.data) ? (asig as any).data : (Array.isArray(asig as any) ? (asig as any) : []);
       setAsignaciones(asigList as any);
 
@@ -86,8 +103,8 @@ export default function EntregasOrientadorPage(){
     }
   };
 
-  useEffect(() => { loadCursos(); }, []);
-  useEffect(() => { load(); }, [asignacionId, soloPendientes]);
+  useEffect(() => { loadCursos(); loadPeriodos(); }, []);
+  useEffect(() => { load(); }, [asignacionId, periodoId, soloPendientes]);
 
   return (
     <DashboardLayout>
@@ -106,7 +123,14 @@ export default function EntregasOrientadorPage(){
         </div>
 
         <div className="bg-white rounded-2xl border border-slate-100 p-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Período</label>
+              <select className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 focus:border-teal-500" value={periodoId} onChange={(e)=> setPeriodoId(e.target.value ? Number(e.target.value) : '')}>
+                <option value="">Todos los períodos</option>
+                {periodos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              </select>
+            </div>
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1">Asignación</label>
               <select className="w-full px-3 py-2 rounded-xl border-2 border-gray-200 focus:border-teal-500" value={asignacionId} onChange={(e)=> setAsignacionId(e.target.value ? Number(e.target.value) : '')}>

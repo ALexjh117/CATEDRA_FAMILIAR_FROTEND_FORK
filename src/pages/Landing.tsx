@@ -1,14 +1,19 @@
 import React, { useState } from 'react'
+import { Link } from 'react-router-dom'
 import Header from '../components/Header'
 import Hero from '../components/Hero'
 import Steps from '../components/Steps'
-import DemoCTA from '../components/DemoCTA'
 import ModalRegister from '../components/ModalRegister'
+
+const aliadosLogos = [
+  { name: 'Secretaría de Educación', src: '/src/assets/img_familias/secretaria.png' },
+  { name: 'Secretaría de Salud', src: '/src/assets/img_familias/secre-salud.png' },
+  { name: 'SENA', src: '/src/assets/img_familias/sena-familia.png' },
+]
 
 export default function Landing(){
   const [modalOpen, setModalOpen] = useState(false)
   const [role, setRole] = useState<string | undefined>(undefined)
-  const [toast, setToast] = useState<string | null>(null)
 
   function openRole(r?:string){ setRole(r); setModalOpen(true) }
 
@@ -16,8 +21,30 @@ export default function Landing(){
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-brand-50/30 to-blue-50/20 text-gray-900">
       <Header onOpenRegister={()=>openRole(undefined)} />
       <main>
-        <Hero onPrimary={()=>openRole(undefined)} onSecondary={()=>{ const el = document.getElementById('demo'); el && el.scrollIntoView({behavior:'smooth'}) }} />
+        <Hero />
         <div className="max-w-6xl mx-auto px-4">
+          <section className="py-12 md:py-16">
+            <div className="rounded-3xl border border-slate-200 bg-white/90 px-6 py-10 shadow-sm backdrop-blur-sm md:px-10 md:py-12">
+              <div className="text-center">
+                <p className="text-sm font-semibold uppercase tracking-[0.22em] text-teal-700">Aliados y respaldos</p>
+                <h2 className="mt-3 text-3xl font-display font-bold text-gray-900 md:text-4xl">Instituciones que respaldan esta iniciativa</h2>
+                <p className="mx-auto mt-4 max-w-3xl text-base text-gray-600 md:text-lg">
+                  Esta plataforma se fortalece gracias al trabajo articulado entre entidades comprometidas con la educación, el bienestar y el desarrollo social de la comunidad.
+                </p>
+              </div>
+              <div className="mt-10 grid gap-5 md:grid-cols-3">
+                {aliadosLogos.map((logo) => (
+                  <div key={logo.name} className="flex min-h-[190px] items-center justify-center rounded-3xl border border-slate-200 bg-white px-6 py-8 text-center shadow-sm md:min-h-[220px]">
+                    <div>
+                      <img src={logo.src} alt={logo.name} className="mx-auto h-24 w-auto object-contain md:h-28" />
+                      <p className="mt-5 text-base font-semibold text-slate-700">{logo.name}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
           <Steps />
 
           {/* Sección de Impacto con Galería */}
@@ -76,7 +103,7 @@ export default function Landing(){
                 {/* Imagen del Colectivo */}
                 <div className="flex justify-center">
                   <img 
-                    src="/src/assets/pj.png" 
+                    src="/rcs/assets/pj.png" 
                     alt="Colectivo Parchando Juntos" 
                     className="w-48 h-48 rounded-2xl shadow-lg object-cover object-center"
                   />
@@ -148,9 +175,41 @@ export default function Landing(){
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
                   </div>
-                  <h3 className="text-3xl md:text-4xl font-display font-bold mb-4 text-white">¿Listo para comenzar?</h3>
-                  <p className="text-gray-200 mb-8 text-lg max-w-xl mx-auto font-medium">Explora la plataforma con datos de demostración. Navega como docente, coordinador o administrador.</p>
-                  <DemoCTA onDone={(s)=>setToast(`Demo creada: ${s.students} estudiantes`)} />
+                  <h3 className="text-3xl md:text-4xl font-display font-bold mb-4 text-white">Una plataforma para fortalecer familia y escuela</h3>
+                  <p className="text-gray-200 mb-8 text-lg max-w-xl mx-auto font-medium">Conoce una experiencia pensada para acompañar procesos educativos, fortalecer vínculos y facilitar la participación de toda la comunidad.</p>
+                  <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
+                    <Link
+                      to="/login"
+                      className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-lg font-bold text-brand-700 shadow-xl transition-all duration-200 hover:scale-105 hover:shadow-2xl"
+                    >
+                      Ingresar a la plataforma
+                    </Link>
+                    <Link
+                      to="/equipo-desarrollo"
+                      className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-8 py-4 text-lg font-bold text-white backdrop-blur-sm transition-all duration-200 hover:bg-white/20"
+                    >
+                      Conocer al equipo
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="pb-16">
+            <div className="max-w-3xl mx-auto">
+              <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-lg">
+                <h3 className="text-2xl font-display font-bold text-gray-900">Conoce al equipo detrás de la plataforma</h3>
+                <p className="mt-3 text-gray-600">
+                  Visita la página de equipo para ver a las personas que lideran y desarrollan Cátedra de Familia.
+                </p>
+                <div className="mt-6">
+                  <Link
+                    to="/equipo-desarrollo"
+                    className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-teal-700"
+                  >
+                    Ir a Equipo de Desarrollo
+                  </Link>
                 </div>
               </div>
             </div>
@@ -176,7 +235,7 @@ export default function Landing(){
                 <li><a href="#inicio" className="hover:text-brand-300 transition">Inicio</a></li>
                 <li><a href="#como" className="hover:text-brand-300 transition">Cómo funciona</a></li>
                 <li><a href="#sobre-colectivo" className="hover:text-brand-300 transition">Sobre Nosotros</a></li>
-                <li><a href="#demo" className="hover:text-brand-300 transition">Demo</a></li>
+                <li><Link to="/equipo-desarrollo" className="hover:text-brand-300 transition">Equipo de Desarrollo</Link></li>
               </ul>
             </div>
             <div>
@@ -219,7 +278,6 @@ export default function Landing(){
       </footer>
 
       <ModalRegister open={modalOpen} role={role} onClose={()=>setModalOpen(false)} />
-      {toast ? <div className="fixed bottom-6 right-6 bg-white p-3 rounded shadow">{toast}</div> : null}
     </div>
   )
 }

@@ -176,6 +176,8 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 import Modal from '../components/ui/Modal';
 
+import AlertaDetalle from '../components/AlertaDetalle';
+
 import Button from '../components/ui/Button';
 
 import FormFieldInput from '../components/ui/FormFieldInput';
@@ -445,6 +447,18 @@ export default function DashboardCoordinadorPage() {
   const [docentesCoord, setDocentesCoord] = useState<any[]>([]);
 
   const [orientadoresCoord, setOrientadoresCoord] = useState<any[]>([]);
+
+  const alertasLista = Array.isArray(alertasCoord?.alertas)
+    ? alertasCoord.alertas
+    : Array.isArray(alertasCoord?.data?.alertas)
+      ? alertasCoord.data.alertas
+      : [];
+
+  const alertasResumen = alertasCoord?.resumen || alertasCoord?.data?.resumen || {
+    criticas: 0,
+    moderadas: 0,
+    leves: 0,
+  };
 
 
 
@@ -1896,27 +1910,69 @@ export default function DashboardCoordinadorPage() {
 
                 {/* Alertas Académicas */}
 
-                {stats.tareasVencidas > 0 && (
+                {(stats.tareasVencidas > 0 || alertasLista.length > 0) && (
 
-                  <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
+                  <div className="space-y-4">
 
-                    <div className="flex items-center gap-3">
+                    <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
 
-                      <IconAlertTriangle className="text-red-600" size={24} />
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
 
-                      <div>
+                        <div className="flex items-center gap-3">
 
-                        <h3 className="font-semibold text-red-800">Atención Requerida</h3>
+                          <IconAlertTriangle className="text-red-600" size={24} />
 
-                        <p className="text-sm text-red-700">
+                          <div>
 
-                          Hay {stats.tareasVencidas} tarea(s) vencida(s) que requieren seguimiento.
+                            <h3 className="font-semibold text-red-800">Alertas académicas mejoradas</h3>
 
-                        </p>
+                            <p className="text-sm text-red-700">
+
+                              {alertasLista.length > 0
+                                ? `Hay ${alertasLista.length} alerta(s) priorizadas para seguimiento.`
+                                : `Hay ${stats.tareasVencidas} tarea(s) vencida(s) que requieren seguimiento.`}
+
+                            </p>
+
+                          </div>
+
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 text-xs font-semibold">
+
+                          <span className="rounded-full border border-rose-200 bg-white px-3 py-1 text-rose-700">Críticas: {alertasResumen.criticas || 0}</span>
+
+                          <span className="rounded-full border border-amber-200 bg-white px-3 py-1 text-amber-700">Moderadas: {alertasResumen.moderadas || 0}</span>
+
+                          <span className="rounded-full border border-sky-200 bg-white px-3 py-1 text-sky-700">Leves: {alertasResumen.leves || 0}</span>
+
+                        </div>
 
                       </div>
 
                     </div>
+
+                    {alertasLista.length > 0 ? (
+
+                      <div className="grid gap-4">
+
+                        {alertasLista.map((alerta: any, index: number) => (
+
+                          <AlertaDetalle key={alerta?.id ?? `${alerta?.titulo || 'alerta'}-${index}`} alerta={alerta} />
+
+                        ))}
+
+                      </div>
+
+                    ) : (
+
+                      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+
+                        El backend aún no envía alertas detalladas, pero ya existen tareas vencidas que requieren atención prioritaria.
+
+                      </div>
+
+                    )}
 
                   </div>
 

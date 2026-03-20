@@ -1,13 +1,14 @@
-import { useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ReCAPTCHA from 'react-google-recaptcha';
 import { useNavigate, Link } from 'react-router-dom';
-import { setPreviewRole } from '../api/endpoints';
 import { loginUnicoMultiRol } from '../api/endpointsDocente-orinetador';
 import FormFieldInput from '../components/ui/FormFieldInput';
 import Button from '../components/ui/Button';
 import ForgotPasswordModal from '../components/ForgotPasswordModal';
 import ForceChangePasswordModal from '../components/ForceChangePasswordModal';
 import { isBypassValidationsEnabled } from '../utils/dev';
+
+import { ensureOfflineSession, getOfflineSession, isOfflineSessionExpired, loginWithOfflineSession, type OfflineSessionData } from '../services/offlineSessionService';
 
 // Componente Mock de reCAPTCHA (en producción usar react-google-recaptcha)
 const ReCAPTCHAMock = ({ onChange }: { onChange: (token: string | null) => void }) => {
@@ -49,6 +50,12 @@ const ReCAPTCHAMock = ({ onChange }: { onChange: (token: string | null) => void 
 const DOMINIOS_ADMIN = ['@educacionpopayan.gov.co', '@secretariaed.gov.co'];
 const DOMINIOS_INSTITUCIONAL = ['.edu.co', '@educativo.gov.co'];
 
+const logosInstitucionales = [
+  { name: 'Secretaría de Educación', src: '/src/assets/img_familias/secretaria.png' },
+  { name: 'Secretaría de Salud', src: '/src/assets/img_familias/secre-salud.png' },
+  { name: 'SENA', src: '/src/assets/img_familias/sena-familia.png' },
+];
+
 export default function LoginPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -64,6 +71,10 @@ export default function LoginPage() {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [showForceChange, setShowForceChange] = useState(false);
   const [userToChange, setUserToChange] = useState<{id: number; nombre: string} | null>(null);
+  const [isOnline, setIsOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
+  const [offlineSession, setOfflineSession] = useState<OfflineSessionData | null>(() => getOfflineSession());
+  const [offlineModeLoading, setOfflineModeLoading] = useState(false);
+  const [showOfflineDetails, setShowOfflineDetails] = useState(false);
 
   // Detectar tipo de dominio del correo
   const getDomainType = (email: string): 'admin' | 'institucional' | 'otro' => {
@@ -74,6 +85,68 @@ export default function LoginPage() {
   };
 
   const domainType = getDomainType(formData.correo);
+
+  const navigateByRole = (rol?: string) => {
+    switch (rol) {
+      case 'admin':
+      case 'admin_sistema':
+        navigate('/dashboard/admin');
+        return;
+      case 'rector':
+        navigate('/dashboard/rector');
+        return;
+      case 'coordinador':
+        navigate('/dashboard/coordinador');
+        return;
+      case 'orientador':
+        navigate('/dashboard/orientador');
+        return;
+      case 'docente_aula':
+      case 'docente':
+        navigate('/dashboard/docente');
+        return;
+      case 'acudiente':
+        navigate('/dashboard/acudiente');
+        return;
+      default:
+        navigate('/dashboard/docente');
+    }
+  };
+
+  useEffect(() => {
+    const syncOfflineState = async () => {
+      setOfflineModeLoading(true);
+      try {
+        const session = await ensureOfflineSession();
+        setOfflineSession(session);
+      } finally {
+        setOfflineModeLoading(false);
+      }
+    };
+
+    syncOfflineState();
+
+    if (typeof window === 'undefined') return;
+
+    const handleOnline = async () => {
+      setIsOnline(true);
+      const session = await ensureOfflineSession();
+      setOfflineSession(session);
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      setOfflineSession(getOfflineSession());
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const target = e.target;
@@ -135,30 +208,7 @@ export default function LoginPage() {
         }
         
         // Redirigir según el rol
-        const rol = result.user.rol;
-        switch (rol) {
-          case 'admin':
-          case 'admin_sistema':
-            navigate('/dashboard/admin');
-            break;
-          case 'rector':
-            navigate('/dashboard/rector');
-            break;
-          case 'coordinador':
-            navigate('/dashboard/coordinador');
-            break;
-          case 'orientador':
-            navigate('/dashboard/orientador');
-            break;
-          case 'docente_aula':
-            navigate('/dashboard/docente');
-            break;
-          case 'acudiente':
-            navigate('/dashboard/acudiente');
-            break;
-          default:
-            navigate('/dashboard/docente');
-        }
+        navigateByRole(result.user.rol);
       } else {
         try {
           console.warn('[UI][LOGIN] Fallo login', {
@@ -178,6 +228,32 @@ export default function LoginPage() {
     }
   };
 
+  const handleOfflineLogin = async () => {
+    if (!offlineSession || isOfflineSessionExpired(offlineSession)) {
+      setError('No hay una sesión offline válida en este dispositivo.');
+      return;
+    }
+
+    const enteredEmail = (formData.correo || '').trim().toLowerCase();
+    const offlineEmail = (offlineSession.email || '').trim().toLowerCase();
+    if (enteredEmail && offlineEmail && enteredEmail !== offlineEmail) {
+      setError(`La sesión offline disponible corresponde a ${offlineSession.email}.`);
+      return;
+    }
+
+    setLoading(true);
+    const session = await loginWithOfflineSession(enteredEmail || offlineSession.email);
+    setLoading(false);
+
+    if (!session) {
+      setError('No se pudo activar la sesión offline.');
+      return;
+    }
+
+    setError('');
+    navigateByRole(session.user.rol);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-brand-50/30 to-blue-50/20 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -194,6 +270,89 @@ export default function LoginPage() {
             Bienvenido a <span className="text-teal-600">Cátedra de Familia</span>
           </h1>
           <p className="text-gray-600 mt-2">Ingresa a tu cuenta para continuar</p>
+        </div>
+
+        <div className="mb-6 grid grid-cols-3 gap-3">
+          {logosInstitucionales.map((logo) => (
+            <div key={logo.name} className="flex min-h-[84px] items-center justify-center rounded-2xl border border-slate-200 bg-white/80 px-2 text-center shadow-sm backdrop-blur-sm">
+              <div>
+                <img src={logo.src} alt={logo.name} className="mx-auto h-10 w-auto object-contain" />
+                <p className="mt-2 text-[11px] font-semibold text-slate-700">{logo.name}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mb-6">
+          <button
+            type="button"
+            onClick={() => setShowOfflineDetails((prev) => !prev)}
+            className="w-full rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 shadow-sm backdrop-blur transition hover:border-teal-200 hover:bg-white text-left"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-slate-900">Modo offline</div>
+                <div className="mt-1 text-xs text-slate-600">
+                  {offlineSession && !isOfflineSessionExpired(offlineSession)
+                    ? 'Tu dispositivo ya tiene una sesión offline lista.'
+                    : 'Inicia sesión con internet para habilitar el modo offline.'}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold border ${isOnline ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+                  {isOnline ? 'En línea' : 'Offline'}
+                </span>
+                <svg className={`w-4 h-4 text-slate-500 transition-transform ${showOfflineDetails ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </div>
+          </button>
+
+          {showOfflineDetails && (
+            <div className="mt-3 rounded-2xl border border-slate-100 bg-white p-4 text-sm text-slate-700 shadow-sm">
+              {offlineModeLoading ? (
+                <div>Cargando estado offline...</div>
+              ) : offlineSession && !isOfflineSessionExpired(offlineSession) ? (
+                <div className="space-y-2">
+                  <div className="font-semibold text-slate-900">Sesión disponible sin internet</div>
+                  <div>Usuario: <span className="font-medium">{offlineSession.email}</span></div>
+                  <div>Rol: <span className="font-medium">{offlineSession.tipo}</span></div>
+                  <div>Institución: <span className="font-medium">{offlineSession.institucionId ?? offlineSession.datosEspecificos?.institucionId ?? 'No disponible'}</span></div>
+                  <div>Expira: <span className="font-medium">{offlineSession.expiresAt}</span></div>
+                  <div className="text-xs text-slate-500">
+                    Aquí se guarda quién eres, tu rol y tu institución para soportar entregas y sincronización sin internet.
+                  </div>
+                  <Link
+                    to="/lab/offline"
+                    className="mt-2 flex w-full items-center justify-center rounded-xl border border-teal-200 bg-teal-50 px-4 py-2.5 text-sm font-semibold text-teal-700 transition hover:bg-teal-100"
+                  >
+                    Abrir laboratorio offline
+                  </Link>
+                  {!isOnline && (
+                    <button
+                      type="button"
+                      onClick={handleOfflineLogin}
+                      className="mt-2 w-full rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-600"
+                    >
+                      Entrar en modo offline
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="font-semibold text-slate-900">Aún no hay sesión offline válida</div>
+                  <div>Inicia sesión con internet para guardar localmente tu identidad y habilitar todo lo offline.</div>
+                  <Link
+                    to="/lab/offline"
+                    className="mt-2 flex w-full items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                  >
+                    Abrir laboratorio offline
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Formulario */}
@@ -297,6 +456,16 @@ export default function LoginPage() {
             >
               Iniciar Sesión
             </Button>
+
+            {!isOnline && offlineSession && !isOfflineSessionExpired(offlineSession) && (
+              <button
+                type="button"
+                onClick={handleOfflineLogin}
+                className="w-full rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700 transition hover:bg-amber-100"
+              >
+                Entrar con la sesión offline guardada
+              </button>
+            )}
           </form>
 
           <div className="mt-6 text-center">
@@ -307,87 +476,6 @@ export default function LoginPage() {
               </span>
             </p>
           </div>
-
-          {/* Modo Demo */}
-          <div className="mt-6 pt-6 border-t border-gray-100">
-            <p className="text-center text-xs text-gray-500 mb-3">
-              O prueba con credenciales de demo:
-            </p>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => { setFormData({ ...formData, correo: 'coordinador@instituciontest.edu.co', password: 'Coord123!' }); setCaptchaToken('demo-token'); }}
-                className="p-2 bg-gray-50 rounded-lg hover:bg-gray-100 text-gray-700 transition-colors"
-              >
-                📋 Coordinador
-              </button>
-              <button
-                type="button"
-                onClick={() => { setFormData({ ...formData, correo: 'rector@instituciontest.edu.co', password: 'Rector123!' }); setCaptchaToken('demo-token'); }}
-                className="p-2 bg-gray-50 rounded-lg hover:bg-gray-100 text-gray-700 transition-colors"
-              >
-                🏛️ Rector
-              </button>
-              <button
-                type="button"
-                onClick={() => { setFormData({ ...formData, correo: 'admin@educacionpopayan.gov.co', password: 'Admin123!' }); setCaptchaToken('demo-token'); }}
-                className="p-2 bg-purple-50 rounded-lg hover:bg-purple-100 text-purple-700 transition-colors col-span-2 font-medium"
-              >
-                🏛️ Admin Secretaría
-              </button>
-            </div>
-          </div>
-
-          {/* Modo Desarrollo: Saltar directamente como rol (preview) */}
-          {bypassValidations && (
-            <div className="mt-4 pt-4 border-t border-dashed border-gray-200">
-              <p className="text-center text-xs text-gray-500 mb-2">Modo Desarrollo: entrar como rol</p>
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                <button
-                  type="button"
-                  onClick={() => { setPreviewRole('admin'); window.location.href = '/dashboard/admin'; }}
-                  className="p-2 bg-purple-50 rounded-lg hover:bg-purple-100 text-purple-700 transition-colors"
-                >
-                  Admin
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setPreviewRole('rector'); window.location.href = '/dashboard/rector'; }}
-                  className="p-2 bg-gray-50 rounded-lg hover:bg-gray-100 text-gray-700 transition-colors"
-                >
-                  Rector
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setPreviewRole('docente_aula'); window.location.href = '/dashboard/docente'; }}
-                  className="p-2 bg-gray-50 rounded-lg hover:bg-gray-100 text-gray-700 transition-colors"
-                >
-                  Docente
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setPreviewRole('orientador'); window.location.href = '/dashboard/orientador'; }}
-                  className="p-2 bg-gray-50 rounded-lg hover:bg-gray-100 text-gray-700 transition-colors"
-                >
-                  Orientador
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setPreviewRole('coordinador'); window.location.href = '/dashboard/coordinador'; }}
-                  className="p-2 bg-gray-50 rounded-lg hover:bg-gray-100 text-gray-700 transition-colors"
-                >
-                  Coordinador
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setPreviewRole('acudiente'); window.location.href = '/dashboard'; }}
-                  className="p-2 bg-gray-50 rounded-lg hover:bg-gray-100 text-gray-700 transition-colors"
-                >
-                  Acudiente
-                </button>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Link a landing */}

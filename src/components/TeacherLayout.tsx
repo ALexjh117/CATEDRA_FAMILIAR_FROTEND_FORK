@@ -45,11 +45,25 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden md:flex flex-col items-end">
-              <div className="text-sm font-medium text-slate-700">{
-                (user?.nombre && user?.nombre !== 'Usuario')
-                  ? `${user?.nombre} ${user?.apellidos || ''}`.trim()
-                  : (user?.correo ? String(user.correo).split('@')[0] : 'Docente')
-              }</div>
+              <div className="flex items-center gap-2">
+                {/* Foto de perfil para Alex Jhoan */}
+                {(user?.nombre?.toLowerCase().includes('alex') && user?.apellidos?.toLowerCase().includes('jhoan')) ? (
+                  <img 
+                    src="/src/assets/img_familias/foto-git-3.png" 
+                    alt="Foto de Alex Jhoan"
+                    className="w-8 h-8 rounded-full object-cover border-2 border-teal-200"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
+                    {user?.nombre?.charAt(0) || 'D'}
+                  </div>
+                )}
+                <div className="text-sm font-medium text-slate-700">{
+                  (user?.nombre && user?.nombre !== 'Usuario')
+                    ? `${user?.nombre} ${user?.apellidos || ''}`.trim()
+                    : (user?.correo ? String(user.correo).split('@')[0] : 'Docente')
+                }</div>
+              </div>
               <div className="mt-0.5">
                 <span className="px-2 py-0.5 rounded-lg text-[11px] bg-teal-50 text-teal-700 border border-teal-200">
                   Rol: {(((user?.rol || 'docente') as string) === 'docente_aula' ? 'docente' : ((user?.rol || 'docente') as string).replace('_',' '))}

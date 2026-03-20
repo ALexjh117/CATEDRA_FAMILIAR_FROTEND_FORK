@@ -20,6 +20,7 @@ export default function AcudienteHijosPage(){
     <AcudienteLayout>
       <div className="max-w-lg space-y-4">
         <h1 className="text-xl font-semibold text-slate-800">Mis hijos</h1>
+        
         <p className="text-sm text-slate-600">Configura qué estudiante deseas ver por defecto en el menú Tareas.</p>
         <div className="bg-white rounded-2xl border p-4 space-y-3">
           <label className="block text-xs font-semibold text-slate-600 mb-1">ID de estudiante</label>

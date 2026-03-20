@@ -12,6 +12,8 @@ import Button from '../components/ui/Button';
 
 import { listarTareasEstudiante, type TareaAsignadaMovil } from '../api/acudiente';
 
+import { listarPeriodos, type PeriodoBackend } from '../api/docentes';
+
 
 
 export default function AcudienteTareasEstudiantePage(){
@@ -29,6 +31,8 @@ export default function AcudienteTareasEstudiantePage(){
   const [items, setItems] = useState<TareaAsignadaMovil[]>([]);
 
   const [periodo, setPeriodo] = useState<string|number>('');
+
+  const [periodos, setPeriodos] = useState<PeriodoBackend[]>([]);
 
   const [soloEspeciales, setSoloEspeciales] = useState(false);
 
@@ -80,6 +84,34 @@ export default function AcudienteTareasEstudiantePage(){
 
   };
 
+  const loadPeriodos = async () => {
+    try {
+      console.log('[ACUDIENTE][TAREAS_ESTUDIANTE][LOAD_PERIODOS] Iniciando carga de períodos...');
+      
+      // Para acudientes, vamos a crear una lista de períodos manualmente
+      // ya que la API de períodos puede requerir permisos de docente
+      const periodosManuales = [
+        { id: 1, nombre: '2026', fechaInicio: '2026-01-01', fechaFin: '2026-12-31' },
+        { id: 2, nombre: 'Período 2', fechaInicio: '2026-06-01', fechaFin: '2026-08-31' },
+        { id: 3, nombre: 'Período 3', fechaInicio: '2026-09-01', fechaFin: '2026-11-30' },
+        { id: 4, nombre: 'Período 4', fechaInicio: '2026-10-01', fechaFin: '2026-12-31' }
+      ];
+      
+      console.log('[ACUDIENTE][TAREAS_ESTUDIANTE][LOAD_PERIODOS] Usando períodos manuales:', periodosManuales);
+      setPeriodos(periodosManuales);
+      
+    } catch (error) {
+      console.error('[ACUDIENTE][TAREAS_ESTUDIANTE][LOAD_PERIODOS] Error cargando períodos:', error);
+      // Si todo falla, crear períodos por defecto
+      const periodosDefecto = [
+        { id: 1, nombre: '2026', fechaInicio: '2026-01-01', fechaFin: '2026-12-31' },
+        { id: 2, nombre: 'Período 2', fechaInicio: '2026-06-01', fechaFin: '2026-08-31' }
+      ];
+      console.log('[ACUDIENTE][TAREAS_ESTUDIANTE][LOAD_PERIODOS] Usando períodos por defecto:', periodosDefecto);
+      setPeriodos(periodosDefecto);
+    }
+  };
+
 
 
   useEffect(() => { load(); }, [estudianteId, periodo]);
@@ -99,6 +131,9 @@ export default function AcudienteTareasEstudiantePage(){
     if (estudianteId) {
 
       try { localStorage.setItem('acudiente_estudiante_id', String(estudianteId)); } catch {}
+
+      console.log('[ACUDIENTE][TAREAS_ESTUDIANTE][MOUNT] Llamando a loadPeriodos...');
+      loadPeriodos(); // Cargar los períodos disponibles
 
     }
 
@@ -132,7 +167,15 @@ export default function AcudienteTareasEstudiantePage(){
 
               <option value="">Todos los periodos</option>
 
-              {/* Si se requiere, poblar periodos desde API */}
+              {periodos.map((p) => (
+
+                <option key={p.id} value={p.id}>
+
+                  {p.nombre}
+
+                </option>
+
+              ))}
 
             </select>
 

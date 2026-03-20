@@ -50,8 +50,10 @@ export default function AcudienteTareasAutoPage(){
   return (
     <AcudienteLayout>
       <div className="h-64 flex items-center justify-center">
+        
         <LoadingSpinner size="lg" text="Redirigiendo a tus tareas..." />
       </div>
+      
     </AcudienteLayout>
   );
 }

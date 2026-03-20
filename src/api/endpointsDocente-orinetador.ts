@@ -6,6 +6,8 @@
 import httpService from './httpService';
 import type { RolUsuario, Usuario } from '../mocks/data';
 
+import { fetchOfflineSession } from '../services/offlineSessionService';
+
 type LoginUnicoResult = {
   success: boolean;
   user?: Usuario;
@@ -296,6 +298,11 @@ export async function loginUnicoMultiRol(correo: string, contrasena: string, cap
         try {
           httpService.setAuthToken(token);
         } catch {}
+        try {
+          await fetchOfflineSession();
+        } catch (offlineSessionError) {
+          console.warn('[LOGIN][DEBUG] No se pudo persistir la sesión offline', offlineSessionError);
+        }
         try { console.log('[LOGIN][DEBUG] JWT obtenido en intento', attempt.label); } catch {}
         return { success: true, user, token, message, context };
       } catch (err: any) {

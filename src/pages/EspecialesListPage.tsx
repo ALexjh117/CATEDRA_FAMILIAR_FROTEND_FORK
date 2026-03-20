@@ -9,6 +9,14 @@ import { Link } from 'react-router-dom';
 export default function EspecialesListPage(){
   const session = getSession();
   const user = session?.user;
+  const rawUser = typeof window !== 'undefined' ? window.localStorage.getItem('user') : null;
+  const parsedUser = rawUser ? JSON.parse(rawUser) : null;
+  const institucionId = Number(
+    (user as any)?.institucionId ??
+    (session as any)?.context?.institucionId ??
+    parsedUser?.institucionId ??
+    0
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string|null>(null);
   const [items, setItems] = useState<AsignacionBackend[]>([]);
@@ -25,7 +33,7 @@ export default function EspecialesListPage(){
         isOrientador
           ? listarAsignacionesOrientador({ page, perPage, estado: estado as any })
           : listarAsignaciones({ page, perPage, estado: estado as any }),
-        listarPeriodos().catch(()=> [])
+        listarPeriodos({ institucionId }).catch(()=> [])
       ]);
       const resAny: any = res as any;
       const list = Array.isArray(resAny?.data) ? resAny.data : (Array.isArray(resAny?.data?.data) ? resAny.data.data : (Array.isArray(resAny) ? resAny : []));

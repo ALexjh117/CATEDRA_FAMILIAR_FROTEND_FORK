@@ -4,6 +4,7 @@ import AcudienteLayout from '../components/AcudienteLayout';
 import Button from '../components/ui/Button';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { getMisEstudiantesAcudiente, listarTareasEspeciales, type TareaAsignadaMovil } from '../api/acudiente';
+import { listarPeriodos, type PeriodoBackend } from '../api/docentes';
 
 export default function AcudienteEspecialesPage(){
   const [searchParams] = useSearchParams();
@@ -12,6 +13,7 @@ export default function AcudienteEspecialesPage(){
   const [estudiantes, setEstudiantes] = useState<Array<{ id: number; nombres?: string; apellidos?: string }>>([]);
   const [estudianteId, setEstudianteId] = useState<number | ''>('');
   const [periodo, setPeriodo] = useState<string|number>('');
+  const [periodos, setPeriodos] = useState<PeriodoBackend[]>([]);
   const [estado, setEstado] = useState<string>('');
   const [items, setItems] = useState<TareaAsignadaMovil[]>([]);
   const effectiveId = typeof estudianteId === 'number' && estudianteId > 0 ? estudianteId : (estudiantes[0]?.id || null);
@@ -32,13 +34,30 @@ export default function AcudienteEspecialesPage(){
     } catch {}
   }, [searchParams]);
 
+  // Cargar períodos al montar el componente
+  useEffect(() => {
+    loadPeriodos();
+  }, []);
+
   const load = async () => {
     setLoading(true); setError(null);
     try {
       // cargar hijos (para selector) y elegir por defecto
       try {
+        console.log('[ACUDIENTE][ESPECIALES][LOAD_ESTUDIANTES] Iniciando carga de estudiantes...');
         const es = await getMisEstudiantesAcudiente();
-        if (Array.isArray(es)) setEstudiantes(es);
+        console.log('[ACUDIENTE][ESPECIALES][LOAD_ESTUDIANTES] Estudiantes recibidos:', es);
+        console.log('[ACUDIENTE][ESPECIALES][LOAD_ESTUDIANTES] Tipo de datos:', typeof es);
+        console.log('[ACUDIENTE][ESPECIALES][LOAD_ESTUDIANTES] Es array:', Array.isArray(es));
+        console.log('[ACUDIENTE][ESPECIALES][LOAD_ESTUDIANTES] Longitud:', es?.length);
+        
+        if (Array.isArray(es)) {
+          setEstudiantes(es);
+          console.log('[ACUDIENTE][ESPECIALES][LOAD_ESTUDIANTES] Estudiantes seteados correctamente:', es.length);
+        } else {
+          console.log('[ACUDIENTE][ESPECIALES][LOAD_ESTUDIANTES] Los datos no son un array, usando array vacío');
+          setEstudiantes([]);
+        }
         // preferir id proveniente de query/localStorage/estado actual
         const fromState = (typeof estudianteId === 'number' && estudianteId > 0) ? estudianteId : null;
         const eidLocal = fromState ?? (Array.isArray(es) && es[0]?.id ? Number(es[0].id) : null);
@@ -61,6 +80,34 @@ export default function AcudienteEspecialesPage(){
       setError(e?.message || 'Error al cargar especiales');
       setItems([]);
     } finally { setLoading(false); }
+  };
+
+  const loadPeriodos = async () => {
+    try {
+      console.log('[ACUDIENTE][ESPECIALES][LOAD_PERIODOS] Iniciando carga de períodos...');
+      
+      // Para acudientes, vamos a crear una lista de períodos manualmente
+      // ya que la API de períodos puede requerir permisos de docente
+      const periodosManuales = [
+        { id: 1, nombre: '2026', fechaInicio: '2026-01-01', fechaFin: '2026-12-31' },
+        { id: 2, nombre: 'Período 2', fechaInicio: '2026-06-01', fechaFin: '2026-08-31' },
+        { id: 3, nombre: 'Período 3', fechaInicio: '2026-09-01', fechaFin: '2026-11-30' },
+        { id: 4, nombre: 'Período 4', fechaInicio: '2026-10-01', fechaFin: '2026-12-31' }
+      ];
+      
+      console.log('[ACUDIENTE][ESPECIALES][LOAD_PERIODOS] Usando períodos manuales:', periodosManuales);
+      setPeriodos(periodosManuales);
+      
+    } catch (error) {
+      console.error('[ACUDIENTE][ESPECIALES][LOAD_PERIODOS] Error cargando períodos:', error);
+      // Si todo falla, crear períodos por defecto
+      const periodosDefecto = [
+        { id: 1, nombre: '2026', fechaInicio: '2026-01-01', fechaFin: '2026-12-31' },
+        { id: 2, nombre: 'Período 2', fechaInicio: '2026-06-01', fechaFin: '2026-08-31' }
+      ];
+      console.log('[ACUDIENTE][ESPECIALES][LOAD_PERIODOS] Usando períodos por defecto:', periodosDefecto);
+      setPeriodos(periodosDefecto);
+    }
   };
 
   useEffect(()=>{ load(); }, [periodo, estudianteId]);
@@ -94,6 +141,11 @@ export default function AcudienteEspecialesPage(){
             )}
             <select className="px-3 py-2 rounded-xl border-2 border-gray-200" value={periodo} onChange={(e)=> setPeriodo(e.target.value)}>
               <option value="">Todos los periodos</option>
+              {periodos.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nombre}
+                </option>
+              ))}
             </select>
             <select className="px-3 py-2 rounded-xl border-2 border-gray-200" value={estado} onChange={(e)=> setEstado(e.target.value)}>
               <option value="">Todos</option>

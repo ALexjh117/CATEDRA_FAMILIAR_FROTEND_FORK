@@ -18,6 +18,7 @@ export default function Header({ onOpenRegister }: Props){
           <a href="#inicio" className="text-gray-800 hover:text-brand-600 font-medium transition-colors">Inicio</a>
           <a href="#como" className="text-gray-800 hover:text-brand-600 font-medium transition-colors">Cómo funciona</a>
           <a href="#sobre-colectivo" className="text-gray-800 hover:text-brand-600 font-medium transition-colors">Sobre Nosotros</a>
+          <Link to="/equipo-desarrollo" className="text-gray-800 hover:text-brand-600 font-medium transition-colors">Equipo de Desarrollo</Link>
           <Link
             to="/login"
             className="inline-flex items-center gap-2 bg-teal-600 text-white px-6 py-2.5 rounded-xl hover:bg-teal-700 transition-all shadow-md hover:shadow-lg font-bold"

@@ -6,6 +6,24 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 import { httpService } from '../api/httpService';
 import { listarPeriodos, type PeriodoBackend, getReporteCalificacionesCurso, type ReporteCalificacionesCurso, listarCursos, type CursoBackend } from '../api/docentes';
 
+function resolveInstitucionId() {
+  try {
+    const rawSession = typeof window !== 'undefined' ? window.localStorage.getItem('session') : null;
+    const parsedSession = rawSession ? JSON.parse(rawSession) : null;
+    const rawUser = typeof window !== 'undefined' ? window.localStorage.getItem('user') : null;
+    const parsedUser = rawUser ? JSON.parse(rawUser) : null;
+    return Number(
+      parsedSession?.user?.institucionId ??
+      parsedSession?.context?.institucionId ??
+      parsedSession?.institucionId ??
+      parsedUser?.institucionId ??
+      0
+    );
+  } catch {
+    return 0;
+  }
+}
+
 export default function ReporteCalificacionesCursoPage(){
   const { id } = useParams();
   const initialCursoId = id ? Number(id) : NaN;
@@ -16,9 +34,10 @@ export default function ReporteCalificacionesCursoPage(){
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string|null>(null);
   const [data, setData] = useState<ReporteCalificacionesCurso | null>(null);
+  const institucionId = resolveInstitucionId();
 
   useEffect(() => { 
-    listarPeriodos().then(setPeriodos).catch(()=>{});
+    listarPeriodos({ institucionId }).then(setPeriodos).catch(()=>{});
     listarCursos().then(setCursos).catch(()=>{});
   }, []);
 

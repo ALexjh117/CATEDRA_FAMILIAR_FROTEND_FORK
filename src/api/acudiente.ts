@@ -18,14 +18,64 @@ export async function getMisEstudiantesAcudiente(): Promise<Array<{ id: number; 
   try {
     const res = await httpService.get('/api/movil/acudientes/mis-estudiantes');
     const body: any = res.data;
-    const data = (body && typeof body === 'object' && 'data' in body) ? (body as any).data : body;
-    return Array.isArray(data?.estudiantes) ? data.estudiantes : (Array.isArray(data) ? data : []);
+    console.log('[API][ACUDIENTES][MIS_ESTUDIANTES] Respuesta cruda:', body);
+    
+    // Manejar diferentes estructuras de respuesta
+    let estudiantes = [];
+    
+    if (body?.data?.estudiantes) {
+      // Estructura: { data: { estudiantes: [...] } }
+      estudiantes = body.data.estudiantes;
+    } else if (body?.data?.estudiante) {
+      // Estructura: { data: { estudiante: {...} } } - convertir a array
+      estudiantes = [body.data.estudiante];
+    } else if (body?.estudiantes) {
+      // Estructura: { estudiantes: [...] }
+      estudiantes = body.estudiantes;
+    } else if (body?.estudiante) {
+      // Estructura: { estudiante: {...} } - convertir a array
+      estudiantes = [body.estudiante];
+    } else if (Array.isArray(body?.data)) {
+      // Estructura: { data: [...] }
+      estudiantes = body.data;
+    } else if (Array.isArray(body)) {
+      // Estructura: [...]
+      estudiantes = body;
+    }
+    
+    console.log('[API][ACUDIENTES][MIS_ESTUDIANTES] Estudiantes extraídos:', estudiantes);
+    return Array.isArray(estudiantes) ? estudiantes : [];
   } catch (e: any) {
+    console.log('[API][ACUDIENTES][MIS_ESTUDIANTES] Error en ruta principal, intentando fallback...');
     // Alias de compatibilidad
-    const res2 = await httpService.get('/api/acudientes/mis-estudiantes');
-    const body2: any = res2.data;
-    const data2 = (body2 && typeof body2 === 'object' && 'data' in body2) ? (body2 as any).data : body2;
-    return Array.isArray(data2?.estudiantes) ? data2.estudiantes : (Array.isArray(data2) ? data2 : []);
+    try {
+      const res2 = await httpService.get('/api/acudientes/mis-estudiantes');
+      const body2: any = res2.data;
+      console.log('[API][ACUDIENTES][MIS_ESTUDIANTES] Respuesta fallback:', body2);
+      
+      // Manejar diferentes estructuras de respuesta
+      let estudiantes = [];
+      
+      if (body2?.data?.estudiantes) {
+        estudiantes = body2.data.estudiantes;
+      } else if (body2?.data?.estudiante) {
+        estudiantes = [body2.data.estudiante];
+      } else if (body2?.estudiantes) {
+        estudiantes = body2.estudiantes;
+      } else if (body2?.estudiante) {
+        estudiantes = [body2.estudiante];
+      } else if (Array.isArray(body2?.data)) {
+        estudiantes = body2.data;
+      } else if (Array.isArray(body2)) {
+        estudiantes = body2;
+      }
+      
+      console.log('[API][ACUDIENTES][MIS_ESTUDIANTES] Estudiantes fallback extraídos:', estudiantes);
+      return Array.isArray(estudiantes) ? estudiantes : [];
+    } catch (e2: any) {
+      console.error('[API][ACUDIENTES][MIS_ESTUDIANTES] Error en ambas rutas:', e, e2);
+      return [];
+    }
   }
 }
 
@@ -184,6 +234,8 @@ export async function enviarEntregaMovil(asignacionId: number, payload: {
   archivos?: File[];
   archivosUrl?: string[];
   nombreEnvio?: string;
+  offlineId?: string;
+  createdAt?: string;
 }): Promise<any> {
   const hasFiles = (payload.archivos && payload.archivos.length > 0);
   if (hasFiles) {
@@ -191,6 +243,12 @@ export async function enviarEntregaMovil(asignacionId: number, payload: {
     form.append('estudianteId', String(payload.estudianteId));
     if (payload.descripcion) form.append('descripcion', payload.descripcion);
     if (payload.nombreEnvio) form.append('nombreEnvio', payload.nombreEnvio);
+    if (payload.offlineId) form.append('offlineId', payload.offlineId);
+    if (payload.createdAt) {
+      form.append('createdAt', payload.createdAt);
+      form.append('offlineCreatedAt', payload.createdAt);
+      form.append('fechaEntregaOriginal', payload.createdAt);
+    }
     (payload.archivos || []).forEach((f) => form.append('archivos', f));
     (payload.archivosUrl || []).forEach((u) => form.append('archivosUrl', u));
 
@@ -212,6 +270,10 @@ export async function enviarEntregaMovil(asignacionId: number, payload: {
       descripcion: payload.descripcion,
       archivosUrl: payload.archivosUrl,
       nombreEnvio: payload.nombreEnvio,
+      offlineId: payload.offlineId,
+      createdAt: payload.createdAt,
+      offlineCreatedAt: payload.createdAt,
+      fechaEntregaOriginal: payload.createdAt,
     } as const;
     try {
       const response = await httpService.post(`/api/movil/asignaciones/${asignacionId}/entregas`, body);

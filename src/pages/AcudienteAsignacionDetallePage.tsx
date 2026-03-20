@@ -10,6 +10,8 @@ import Button from '../components/ui/Button';
 
 import { getDetalleAsignacionMovil, enviarEntregaMovil, type DetalleAsignacionMovil } from '../api/acudiente';
 
+import { getPendingEntregaOffline, saveEntregaOffline, syncPendingEntregas, type OfflineEntregaRecord } from '../services/offlineEntregaSync';
+
 import Swal from 'sweetalert2';
 
 
@@ -53,6 +55,12 @@ export default function AcudienteAsignacionDetallePage(){
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [enviando, setEnviando] = useState(false);
+
+  const [isOnline, setIsOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
+
+  const [offlineEntrega, setOfflineEntrega] = useState<OfflineEntregaRecord | null>(null);
+
+  const [syncingOffline, setSyncingOffline] = useState(false);
 
 
 
@@ -146,6 +154,118 @@ export default function AcudienteAsignacionDetallePage(){
 
 
 
+  useEffect(() => {
+
+    if (!asignacionId || !estudianteIdEff) return;
+
+    getPendingEntregaOffline(asignacionId, estudianteIdEff)
+
+      .then(setOfflineEntrega)
+
+      .catch(() => setOfflineEntrega(null));
+
+  }, [asignacionId, estudianteIdEff]);
+
+
+
+  useEffect(() => {
+
+    const refreshOfflineState = async () => {
+
+      if (!asignacionId || !estudianteIdEff) return;
+
+      const pending = await getPendingEntregaOffline(asignacionId, estudianteIdEff);
+
+      setOfflineEntrega(pending);
+
+      if (!pending) {
+
+        await load();
+
+      }
+
+    };
+
+
+
+    const handleOnline = async () => {
+
+      setIsOnline(true);
+
+      const currentOfflineId = offlineEntrega?.id;
+
+      setSyncingOffline(true);
+
+      try {
+
+        const results = await syncPendingEntregas();
+
+        await refreshOfflineState();
+
+        if (currentOfflineId) {
+
+          const currentResult = results.find((item) => item.offlineId === currentOfflineId);
+
+          if (currentResult?.status === 'success') {
+
+            await Swal.fire({ icon: 'success', title: 'Entrega sincronizada', text: 'La entrega pendiente ya fue enviada al servidor con su fecha original.' });
+
+          } else if (currentResult?.status === 'error') {
+
+            await Swal.fire({ icon: 'error', title: 'No se pudo sincronizar', text: currentResult.error || 'La entrega sigue guardada y se volverá a intentar cuando haya conexión.' });
+
+          }
+
+        }
+
+      } finally {
+
+        setSyncingOffline(false);
+
+      }
+
+    };
+
+
+
+    const handleOffline = () => {
+
+      setIsOnline(false);
+
+    };
+
+
+
+    if (typeof window === 'undefined') return;
+
+
+
+    window.addEventListener('online', handleOnline);
+
+    window.addEventListener('offline', handleOffline);
+
+
+
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+
+      handleOnline();
+
+    }
+
+
+
+    return () => {
+
+      window.removeEventListener('online', handleOnline);
+
+      window.removeEventListener('offline', handleOffline);
+
+    };
+
+  }, [asignacionId, estudianteIdEff, offlineEntrega?.id]);
+
+
+
   // Resolver estudianteId desde query o localStorage si falta
 
   useEffect(() => {
@@ -184,13 +304,17 @@ export default function AcudienteAsignacionDetallePage(){
 
     if (!estudianteIdEff) { alert('Falta estudianteId'); return; }
 
-    if (detalle?.entrega) {
+    const urls = archivosUrl.split('\n').map(s => s.trim()).filter(Boolean);
+
+    if (detalle?.entrega || offlineEntrega) {
 
       // Ya existe entrega: mostrar aviso y no permitir nuevo envío
 
-      const v = detalle.fechaVencimiento ? new Date(detalle.fechaVencimiento) : null;
+      const fechaEntregaRef = detalle?.entrega?.fechaEntrega || offlineEntrega?.createdAt;
 
-      const f = detalle.entrega.fechaEntrega ? new Date(detalle.entrega.fechaEntrega) : null;
+      const v = detalle?.fechaVencimiento ? new Date(detalle.fechaVencimiento) : null;
+
+      const f = fechaEntregaRef ? new Date(fechaEntregaRef) : null;
 
       const esTardia = v && f ? (f.getTime() > v.getTime()) : false;
 
@@ -202,7 +326,7 @@ export default function AcudienteAsignacionDetallePage(){
 
         html: `<div style="text-align:left">`+
 
-              `<div><b>Estado:</b> ${esTardia ? 'Entregada con retraso' : 'Entregada'}</div>`+
+              `<div><b>Estado:</b> ${offlineEntrega ? 'Pendiente de sincronización' : (esTardia ? 'Entregada con retraso' : 'Entregada')}</div>`+
 
               `${detalle.calificacion ? `<div><b>Calificación:</b> ${(detalle.calificacion.nota as any)?.toFixed ? (detalle.calificacion.nota as any).toFixed(1) : detalle.calificacion.nota} • ${detalle.calificacion.escala}${detalle.calificacion.esAutomatica ? ' (Automática)' : ''}</div>` : ''}`+
 
@@ -220,7 +344,41 @@ export default function AcudienteAsignacionDetallePage(){
 
     try {
 
-      const urls = archivosUrl.split('\n').map(s => s.trim()).filter(Boolean);
+      if (!isOnline) {
+
+        const pending = await saveEntregaOffline({
+
+          asignacionId,
+
+          estudianteId: estudianteIdEff,
+
+          descripcion: descripcion || undefined,
+
+          nombreEnvio: nombreEnvio || undefined,
+
+          archivos: archivos.length ? archivos : undefined,
+
+          archivosUrl: urls.length ? urls : undefined,
+
+        });
+
+        setOfflineEntrega(pending);
+
+        setDescripcion('');
+
+        setNombreEnvio('');
+
+        setArchivos([]);
+
+        setArchivosUrl('');
+
+        if (fileInputRef.current) fileInputRef.current.value = '';
+
+        await Swal.fire({ icon: 'success', title: 'Entrega guardada sin internet', text: 'Se sincronizará automáticamente cuando vuelva la conexión.' });
+
+        return;
+
+      }
 
       const res = await enviarEntregaMovil(asignacionId, {
 
@@ -283,6 +441,8 @@ export default function AcudienteAsignacionDetallePage(){
       setArchivos([]);
 
       setArchivosUrl('');
+
+      setOfflineEntrega(null);
 
       if (fileInputRef.current) fileInputRef.current.value = '';
 
@@ -368,11 +528,31 @@ export default function AcudienteAsignacionDetallePage(){
 
               <p className="mt-1 text-slate-700">{detalle.descripcion}</p>
 
+              <div className={`mt-3 rounded-2xl border px-3 py-2 text-sm ${isOnline ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+
+                {isOnline ? 'Con conexión a internet.' : 'Sin conexión. Las entregas nuevas se guardarán en este dispositivo.'}
+
+              </div>
+
+              {offlineEntrega && (
+
+                <div className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-3 text-sm text-sky-800">
+
+                  <div className="font-semibold">Entrega pendiente de sincronización</div>
+
+                  <div className="mt-1">Fecha original guardada: {offlineEntrega.createdAt}</div>
+
+                  <div className="mt-1">Estado: {syncingOffline ? 'Sincronizando...' : 'Pendiente'}</div>
+
+                </div>
+
+              )}
+
               <div className="mt-2 text-sm text-slate-500">Curso: {detalle.curso?.nombre || '-'}</div>
 
               <div className="mt-1 text-sm text-slate-500">Vence: {detalle.fechaVencimiento || '-'}</div>
 
-              {detalle.entrega && (
+              {detalle.entrega && !offlineEntrega && (
 
                 <div className="mt-2">
 
@@ -394,7 +574,33 @@ export default function AcudienteAsignacionDetallePage(){
 
               <h2 className="font-semibold text-slate-800">Mi entrega</h2>
 
-              {detalle.entrega ? (
+              {offlineEntrega ? (
+
+                <div className="mt-2 text-sm text-sky-800">
+
+                  <div>Estado: <span className="font-medium">Pendiente de sincronización</span></div>
+
+                  <div>Fecha original de envío: {offlineEntrega.createdAt}</div>
+
+                  {offlineEntrega.nombreEnvio && <div>Nombre del envío: {offlineEntrega.nombreEnvio}</div>}
+
+                  {offlineEntrega.descripcion && <div className="mt-1">Descripción: {offlineEntrega.descripcion}</div>}
+
+                  {Array.isArray(offlineEntrega.archivos) && offlineEntrega.archivos.length > 0 && (
+
+                    <div className="mt-2">Archivos: {offlineEntrega.archivos.map((archivo) => archivo.name).join(', ')}</div>
+
+                  )}
+
+                  {Array.isArray(offlineEntrega.archivosUrl) && offlineEntrega.archivosUrl.length > 0 && (
+
+                    <div className="mt-2">URLs: {offlineEntrega.archivosUrl.join(', ')}</div>
+
+                  )}
+
+                </div>
+
+              ) : detalle.entrega ? (
 
                 <div className="mt-2 text-sm">
 
@@ -522,7 +728,7 @@ export default function AcudienteAsignacionDetallePage(){
 
               <div className="pt-2">
 
-                <Button onClick={onSubmit} disabled={enviando || !estudianteIdEff || !!detalle?.entrega}>{enviando ? 'Enviando...' : 'Enviar'}</Button>
+                <Button onClick={onSubmit} disabled={enviando || syncingOffline || !estudianteIdEff || !!detalle?.entrega || !!offlineEntrega}>{enviando ? 'Enviando...' : syncingOffline ? 'Sincronizando...' : !isOnline ? 'Guardar sin internet' : 'Enviar'}</Button>
 
               </div>
 
