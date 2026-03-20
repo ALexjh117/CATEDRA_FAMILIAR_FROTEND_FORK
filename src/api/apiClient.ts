@@ -330,8 +330,9 @@ class ApiClient {
   }
 
   // Periodos
-  async getPeriodos() {
-    return await httpService.get('/periodos');
+  async getPeriodos(institucionId?: number) {
+    const params = institucionId ? { institucionid: institucionId } : undefined;
+    return await httpService.get('/periodos', params);
   }
 
   async createPeriodo(data: any) {

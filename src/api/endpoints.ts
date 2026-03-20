@@ -4997,7 +4997,7 @@ export const getPerfilUsuario = async (usuarioId?: number): Promise<{ success: b
 
 export const getPeriodos = async (institucionId?: number): Promise<Periodo[]> => {
 
-  const result = await apiClient.getPeriodos();
+  const result = await apiClient.getPeriodos(institucionId);
 
   if (result.success && result.data) {
 

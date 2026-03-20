@@ -408,6 +408,9 @@ export default function DashboardAdminPage() {
 
       // Los demás endpoints retornan arrays vacíos porque aún no existen en el backend
 
+      const session = getSession();
+      const institucionIdReal = session?.user?.institucionId || 1;
+
       const [institucionesData, cursosData, tareasData, usuariosData, periodosData, gradosData] = await Promise.all([
 
         getInstituciones(),
@@ -418,7 +421,7 @@ export default function DashboardAdminPage() {
 
         getUsuarios(),
 
-        getPeriodos(),
+        getPeriodos(institucionIdReal),
 
         getGrados()
 

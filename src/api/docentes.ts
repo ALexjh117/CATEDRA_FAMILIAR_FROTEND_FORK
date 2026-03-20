@@ -1242,6 +1242,32 @@ export async function updateAcudienteDocente(id: number, payload: Partial<Acudie
 
 // Banco de Tareas
 
+// Obtiene el banco público de tareas (de todas las instituciones)
+export async function listarBancoPublicoTareas(params?: { page?: number; limit?: number; q?: string; categoria?: string; institucion?: string }) {
+  try {
+    const response = await httpService.get<any>('/tareas/banco-publico', params);
+    
+    if (response.data?.success === false) {
+      throw new Error(response.data?.message || 'Error obteniendo banco público de tareas');
+    }
+    
+    return {
+      data: response.data?.data || [],
+      total: response.data?.total || 0,
+      estadisticas: response.data?.estadisticas || null,
+      meta: response.data?.meta || {}
+    };
+  } catch (error) {
+    console.error('Error en listarBancoPublicoTareas:', error);
+    return {
+      data: [],
+      total: 0,
+      estadisticas: null,
+      meta: {}
+    };
+  }
+}
+
 export async function listarBancoTareas(params?: { page?: number; limit?: number; q?: string; categoriaId?: number }) {
 
   const response = await httpService.get<BancoTareaBackend[]>('/tareas', params);
@@ -1327,17 +1353,10 @@ export async function listarBancoTareasDocenteInstitucion(institucionIdOverride?
       tareas: []
     };
   }
-
 }
 
-
-
-// Editar Banco de Tareas (PUT o PATCH). Admitir reemplazo de archivo con PUT vía FormData desde la llamada de UI.
-
 export async function updateBancoTarea(
-
   id: number,
-
   payload: Partial<{
 
     titulo: string;

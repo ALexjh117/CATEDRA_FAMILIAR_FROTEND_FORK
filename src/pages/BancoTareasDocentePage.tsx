@@ -16,7 +16,7 @@ import { useToast } from '../components/ui/ToastGlobal';
 
 import EmptyState404 from '../components/ui/EmptyState404';
 
-import { listarBancoTareas, listarBancoTareasDocenteInstitucion, listarCursos, listarPeriodos, crearAsignacion, crearAsignacionOrientador, updateBancoTarea, deleteBancoTarea, crearAsignacionEspecial, crearAsignacionOrientadorEspecial, listarEstudiantesDocente, type BancoTareaBackend, type CursoBackend, type PeriodoBackend } from '../api/docentes';
+import { listarBancoTareas, listarBancoPublicoTareas, listarBancoTareasDocenteInstitucion, listarCursos, listarPeriodos, crearAsignacion, crearAsignacionOrientador, updateBancoTarea, deleteBancoTarea, crearAsignacionEspecial, crearAsignacionOrientadorEspecial, listarEstudiantesDocente, type BancoTareaBackend, type CursoBackend, type PeriodoBackend } from '../api/docentes';
 
 import { getCursosPorInstitucion, getGradosPublic, getEstudiantesInstitucionOrientador } from '../api/endpointsDocente-orinetador';
 
@@ -309,15 +309,25 @@ export default function BancoTareasDocentePage(){
     
     const baseInst = items.filter((t: any) => {
       if (isDocente) {
-        const belongsToInstitution = institutionSet.has(Number((t as any)?.id));
-        return bankTab === 'mias' ? belongsToInstitution : !belongsToInstitution;
+        // Para docentes: 
+        // "mias" = solo tareas de mi institución
+        // "otras" = TODAS las tareas (incluyendo las mías)
+        const tareaInstitucionId = (t as any)?.institucionId ?? (t as any)?.institucion_id ?? (t as any)?.institucion?.id ?? null;
+        const belongsToInstitution = tareaInstitucionId !== null && Number(tareaInstitucionId) === Number(instId);
+        console.log('[BANCO_TAREAS][FILTER] Tarea:', t.titulo, 'Institución:', tareaInstitucionId, 'Mi institución:', instId, 'Pertenece:', belongsToInstitution, 'Tab:', bankTab);
+        
+        if (bankTab === 'mias') {
+          return belongsToInstitution; // Solo tareas de mi institución
+        } else {
+          return true; // "Otras instituciones" = TODAS las tareas
+        }
       }
 
       const rawTid = (t as any)?.institucionId ?? (t as any)?.institucion_id ?? (t as any)?.institucion?.id ?? null;
       const tid = rawTid == null || rawTid === '' ? null : Number(rawTid);
       if (!instId) return bankTab === 'mias';
       if (bankTab === 'mias') return tid === Number(instId);
-      return tid == null || tid !== Number(instId);
+      return true; // "Otras instituciones" = TODAS las tareas
     });
     
     const base = baseInst.filter(t => {
@@ -427,11 +437,35 @@ export default function BancoTareasDocentePage(){
 
             const [generalTasksRes, institucionRes] = await Promise.all([
 
-              listarBancoTareas().catch(() => [] as any[]),
+              (async () => {
+                if (bankTab === 'otras') {
+                  // Para "Otras instituciones", usar el banco público
+                  console.log('[BANCO_TAREAS][LOAD] Cargando banco público de tareas...');
+                  try {
+                    const publicRes = await listarBancoPublicoTareas();
+                    console.log('[BANCO_TAREAS][LOAD] Banco público recibido COMPLETO:', publicRes);
+                    console.log('[BANCO_TAREAS][LOAD] Banco público - data.length:', publicRes?.data?.length);
+                    console.log('[BANCO_TAREAS][LOAD] Banco público - total:', publicRes?.total);
+                    return publicRes.data || [];
+                  } catch (error) {
+                    console.error('[BANCO_TAREAS][LOAD] Error cargando banco público:', error);
+                    return [];
+                  }
+                } else {
+                  // Para "Mi institución", usar el banco general
+                  console.log('[BANCO_TAREAS][LOAD] Cargando banco general de tareas...');
+                  return listarBancoTareas().catch(() => [] as any[]);
+                }
+              })(),
 
               listarBancoTareasDocenteInstitucion(loadInstId || undefined).catch(() => ({ docente: undefined, institucion: undefined, totalTareas: 0, tareas: [] as any[] }))
 
             ]);
+
+            console.log('[BANCO_TAREAS][LOAD] Tareas cargadas:', bankTab === 'otras' ? '(banco público)' : '(banco general)', generalTasksRes);
+            console.log('[BANCO_TAREAS][LOAD] Cantidad tareas generales:', Array.isArray(generalTasksRes) ? generalTasksRes.length : 'No es array');
+            console.log('[BANCO_TAREAS][LOAD] Tareas de mi institución:', institucionRes);
+            console.log('[BANCO_TAREAS][LOAD] Cantidad tareas institución:', Array.isArray(institucionRes?.tareas) ? institucionRes.tareas.length : 'No es array');
 
 
 
@@ -454,6 +488,9 @@ export default function BancoTareasDocentePage(){
               ...generalTasks.filter((t: any) => !institucionTaskIds.has(Number(t?.id)))
 
             ];
+
+            console.log('[BANCO_TAREAS][LOAD] Tareas combinadas (antes de procesar):', mergedTasks);
+            console.log('[BANCO_TAREAS][LOAD] Total tareas combinadas:', mergedTasks.length);
 
 
 
@@ -716,7 +753,7 @@ export default function BancoTareasDocentePage(){
 
 
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [bankTab]);
 
 
 
