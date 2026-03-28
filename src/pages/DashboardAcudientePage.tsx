@@ -46,32 +46,33 @@ export default function DashboardAcudientePage() {
 
   return (
     <AcudienteLayout>
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div className="relative overflow-hidden bg-gradient-to-br from-slate-50 via-teal-50/40 to-emerald-50/30 rounded-2xl p-6 border border-teal-100/50">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-teal-200/20 to-transparent rounded-full -translate-y-1/2 translate-x-1/2" />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
+        <div className="relative overflow-hidden rounded-3xl p-8 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 border border-emerald-100 shadow-lg">
+        <div className="absolute inset-0 bg-white/10 backdrop-blur-[2px]" />
+        <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-white/10" />
           <div className="relative">
-            <h1 className="text-2xl md:text-3xl font-display font-bold text-slate-800">Mi Panel (Acudiente)</h1>
-            <p className="text-slate-600 mt-1 text-sm">Consulta la información de tus estudiantes asociados.</p>
+            <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">Mi Panel (Acudiente)</h1>
+            <p className="mt-2 text-sm md:text-base text-white/90">Consulta la información de tus estudiantes asociados.</p>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-100 p-6">
-          <h2 className="text-lg font-semibold text-slate-800 mb-4">Mis Estudiantes</h2>
+        <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
+          <h2 className="text-xl font-bold text-slate-800 mb-5">Mis Estudiantes</h2>
           {loading ? (
-            <div className="text-slate-600">Cargando...</div>
+            <div className="text-slate-500 text-center py-6 bg-slate-50 rounded-2xl">Cargando...</div>
           ) : !estudiantes || estudiantes.length === 0 ? (
-            <div className="text-slate-600">No se encontraron estudiantes asociados.</div>
+            <div className="text-slate-500 text-center py-6 bg-slate-50 rounded-2xl">No se encontraron estudiantes asociados.</div>
           ) : (
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
               {estudiantes.map((e) => (
-                <div key={e.id} className="rounded-xl border border-slate-200 p-4 bg-slate-50/50">
-                  <div className="font-semibold text-slate-800">
+                <div key={e.id} className="rounded-2xl border border-slate-200 p-5 bg-gradient-to-b from-white to-slate-50 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md">
+                  <div className="text-lg font-semibold text-slate-800">
                     {e.nombres || e.nombre} {e.apellidos}
                   </div>
-                  <div className="text-sm text-slate-600 mt-1">
+                  <div className="text-sm text-slate-600 mt-2">
                     Documento: {(e.tipoDocumento ?? e.tipo_documento) || '—'} {(e.numeroDocumento ?? e.numero_documento) || '—'}
                   </div>
-                  <div className="text-sm text-slate-600">
+                  <div className="text-sm text-slate-600 mt-1">
                     Curso: {e.cursoNombre || `ID ${e.cursoId ?? e.curso_id ?? '—'}`}
                   </div>
                 </div>
@@ -80,27 +81,27 @@ export default function DashboardAcudientePage() {
           )}
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-100 p-6">
-          <h2 className="text-lg font-semibold text-slate-800 mb-4">Tareas asignadas</h2>
+        <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
+          <h2 className="text-xl font-bold text-slate-800 mb-5">Tareas asignadas</h2>
           {loading ? (
-            <div className="text-slate-600">Cargando...</div>
+            <div className="text-slate-500 text-center py-6 bg-slate-50 rounded-2xl">Cargando...</div>
           ) : asignaciones.length === 0 ? (
-            <div className="text-slate-600">No hay tareas asignadas actualmente.</div>
+            <div className="text-slate-500 text-center py-6 bg-slate-50 rounded-2xl">No hay tareas asignadas actualmente.</div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-8">
               {Object.entries(tareasPorCurso).map(([cursoId, items]) => (
-                <div key={cursoId} className="space-y-3">
-                  <div className="text-sm font-semibold text-slate-700">Curso: {cursoId}</div>
-                  <div className="grid md:grid-cols-2 gap-4">
+                <div key={cursoId} className="space-y-4">
+                  <div className="text-sm font-semibold text-slate-800">Curso: {cursoId}</div>
+                  <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-5">
                     {items.map((t: any) => (
-                      <div key={t.id} className="rounded-xl border border-slate-200 p-4 bg-slate-50/50">
-                        <div className="font-semibold text-slate-800">{t.titulo || t.nombre || 'Tarea'}</div>
+                      <div key={t.id} className="rounded-2xl border border-slate-200 p-5 bg-gradient-to-b from-white to-slate-50 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md">
+                        <div className="font-semibold text-slate-800 text-base">{t.titulo || t.nombre || 'Tarea'}</div>
                         {t.tema && (
-                          <div className="text-xs mt-1 text-teal-700 bg-teal-50 inline-block px-2 py-0.5 rounded">
+                          <div className="text-xs mt-2 text-teal-700 bg-teal-50 inline-block px-3 py-1 rounded-full font-medium">
                             {t.tema}
                           </div>
                         )}
-                        <div className="text-sm text-slate-600 mt-2">
+                        <div className="text-sm text-slate-600 mt-3">
                           Vence: {t.fechaVencimiento || t.fecha_vencimiento || '—'}
                         </div>
                         <div className="text-xs text-slate-500 mt-1">
