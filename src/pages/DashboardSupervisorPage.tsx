@@ -60,42 +60,37 @@ export default function DashboardSupervisorPage() {
   // Función para obtener el nombre de la institución
   const getInstitucionNombre = async (institucionId: number) => {
     try {
-      console.log(`[DEBUG][Institucion] Buscando nombre para institución ID: ${institucionId}`);
-      
-      // Intentar obtener desde el endpoint de instituciones
+      // 1) Intentar desde sesión (más confiable y sin llamada extra)
+      const fromSession =
+        (user as any)?.institucionNombre ||
+        (user as any)?.institucion?.nombre ||
+        (session as any)?.context?.institucionNombre ||
+        (session as any)?.user?.institucionNombre;
+      if (fromSession && typeof fromSession === 'string') return fromSession;
+
+      // 2) Intentar desde el listado de instituciones
       const response = await apiClient.getInstituciones();
-      console.log('[DEBUG][Institucion] Respuesta de getInstituciones:', response);
-      
-      if (response.success && Array.isArray(response.data)) {
-        const institucion = response.data.find((inst: any) => 
-          inst.id === institucionId || inst.institucionId === institucionId
+      if (response?.success && Array.isArray(response?.data)) {
+        const institucion = response.data.find((inst: any) =>
+          Number(inst?.id ?? inst?.institucionId) === Number(institucionId)
         );
-        
-        if (institucion && institucion.nombre) {
-          console.log('[DEBUG][Institucion] Nombre encontrado:', institucion.nombre);
-          return institucion.nombre;
-        }
+        const nombreListado = institucion?.nombre || institucion?.nombreInstitucion || institucion?.name;
+        if (nombreListado) return String(nombreListado);
       }
-      
-      // Si no se encuentra en la lista, intentar con el endpoint específico
+
+      // 3) Intentar con endpoint específico (manejar múltiples formas de respuesta)
       try {
-        const responseDirect = await httpService.get(`/instituciones/${institucionId}`);
-        console.log('[DEBUG][Institucion] Respuesta directa:', responseDirect.data);
-        
-        if (responseDirect.data && responseDirect.data.nombre) {
-          console.log('[DEBUG][Institucion] Nombre encontrado en endpoint directo:', responseDirect.data.nombre);
-          return responseDirect.data.nombre;
-        }
-      } catch (error) {
-        console.log('[DEBUG][Institucion] Error en endpoint directo:', error);
-      }
-      
-      // Si no se encuentra el nombre, usar un nombre por defecto
-      console.log('[DEBUG][Institucion] No se encontró nombre, usando por defecto');
-      return `Institución ${institucionId}`;
-    } catch (error) {
-      console.error('[DEBUG][Institucion] Error obteniendo nombre:', error);
-      return `Institución ${institucionId}`;
+        const resp = await httpService.get(`/instituciones/${institucionId}`);
+        const body = (resp as any)?.data ?? resp;
+        const data = (body && typeof body === 'object' && 'data' in body) ? (body as any).data : body;
+        const nombreDirecto = data?.nombre || data?.nombreInstitucion || data?.name;
+        if (nombreDirecto) return String(nombreDirecto);
+      } catch {}
+
+      // 4) Fallback genérico sin ID numérico visible
+      return 'Institución';
+    } catch {
+      return 'Institución';
     }
   };
 
@@ -125,6 +120,17 @@ export default function DashboardSupervisorPage() {
           })
         : [];
 
+      // Sanitizar nombres de cursos para remover prefijos como "59_" o "59-" a nivel de dashboard (todas las vistas de rol)
+      const sanitizeCursoNombre = (n: any): string => {
+        const s = String(n ?? '').trim();
+        return s.replace(/^\s*\d+\s*[_-]\s*/, '').trim();
+      };
+
+      const cursosNorm = cursosFiltrados.map((c: any) => ({
+        ...c,
+        nombre: sanitizeCursoNombre(c?.nombre ?? c?.nombreCurso ?? c?.nombre_curso ?? ''),
+      }));
+
       console.log('[DEBUG][Dashboard] Cursos:', {
         total: cursosData?.length || 0,
         filtrados: cursosFiltrados.length,
@@ -142,7 +148,7 @@ export default function DashboardSupervisorPage() {
         primeras: entregasData?.slice(0, 3)
       });
 
-      setCursos(cursosFiltrados);
+      setCursos(cursosNorm);
       setTareas(Array.isArray(tareasData) ? tareasData : []);
       setEntregas(Array.isArray(entregasData) ? entregasData : []);
       setEstadisticas(statsData || null);
@@ -652,167 +658,9 @@ export default function DashboardSupervisorPage() {
               </div>
             </div>
 
-            {/* Intervenciones Recientes - Nueva funcionalidad */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-indigo-50/50">
-                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-3">
-                  <IconClock className="text-blue-500" size={22} />
-                  Intervenciones Recientes
-                  <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
-                    Esta semana
-                  </span>
-                </h2>
-              </div>
-              <div className="p-6">
-                {intervencionesRecientes.length === 0 ? (
-                  <div className="text-center py-8 text-slate-500">
-                    <IconClipboard className="mx-auto text-slate-400 mb-3" size={48} />
-                    <p className="font-medium">Sin intervenciones recientes</p>
-                    <p className="text-sm mt-1">Las intervenciones aparecerán aquí cuando las realices</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {intervencionesRecientes.map((intervencion) => (
-                      <div key={intervencion.id} className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-indigo-50/30 border border-blue-200/60 rounded-xl hover:shadow-md transition-shadow">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                            intervencion.estado === 'completada' 
-                              ? 'bg-green-100' 
-                              : 'bg-amber-100'
-                          }`}>
-                            {intervencion.estado === 'completada' 
-                              ? <IconCheckCircle className="text-green-600" size={18} />
-                              : <IconClock className="text-amber-600" size={18} />
-                            }
-                          </div>
-                          <div>
-                            <div className="font-semibold text-slate-800">{intervencion.estudiante}</div>
-                            <div className="text-sm text-slate-600">{intervencion.tipo} - {intervencion.motivo}</div>
-                            <div className="text-xs text-slate-500 mt-1">
-                              {new Date(intervencion.fecha).toLocaleDateString('es-CO', { 
-                                weekday: 'long', 
-                                year: 'numeric', 
-                                month: 'short', 
-                                day: 'numeric' 
-                              })}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                            intervencion.estado === 'completada' 
-                              ? 'bg-green-100 text-green-700' 
-                              : 'bg-amber-100 text-amber-700'
-                          }`}>
-                            {intervencion.estado === 'completada' ? 'Completada' : 'Pendiente'}
-                          </span>
-                          <button className="px-3 py-1.5 bg-white text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 border border-blue-200 transition-colors">
-                            Ver detalles
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
+            
 
-            {/* Resumen de Cursos Asignados */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-teal-50 to-cyan-50/50">
-                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-3">
-                  <IconBook className="text-teal-500" size={22} />
-                  Cursos a mi Cargo
-                  <span className="px-2 py-1 bg-teal-100 text-teal-700 rounded-full text-xs font-semibold">
-                    {cursos.length} cursos
-                  </span>
-                </h2>
-              </div>
-              <div className="p-6">
-                {cursos.length === 0 ? (
-                  <div className="text-center py-8">
-                    <IconBook className="mx-auto text-slate-400 mb-3" size={48} />
-                    <p className="font-medium text-slate-700">No hay cursos asignados</p>
-                    <p className="text-sm text-slate-500 mt-1">
-                      {institucionInfo 
-                        ? `No se encontraron cursos para ${institucionInfo.nombre}. Puede que necesites que te asignen cursos o que no estén configurados correctamente.`
-                        : 'No se encontraron cursos para tu institución. Contacta al administrador.'
-                      }
-                    </p>
-                    {institucionInfo && (
-                      <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                        <p className="text-sm text-amber-800">
-                          <strong>Verificación:</strong> Asegúrate de que los cursos estén correctamente configurados para tu institución (ID: {institucionInfo.id})
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {cursos.slice(0, 6).map((curso) => {
-                        const estudiantesDelCurso = estudiantes.filter(e => 
-                          e.cursoId === curso.id || 
-                          e.curso_id === curso.id || 
-                          e.idCurso === curso.id ||
-                          e.curso?.id === curso.id
-                        ).length;
-                        const tareasDelCurso = tareas.filter(t => 
-                          t.cursoId === curso.id || 
-                          t.curso_id === curso.id || 
-                          t.idCurso === curso.id ||
-                          t.curso?.id === curso.id
-                        ).length;
-                        
-                        console.log('[DEBUG][Dashboard] Contando para curso:', {
-                          cursoId: curso.id,
-                          cursoNombre: curso.nombre,
-                          estudiantesDelCurso,
-                          tareasDelCurso,
-                          muestraEstudiantes: estudiantes.slice(0, 2).map(e => ({
-                            id: e.id,
-                            nombres: e.nombres,
-                            cursoId: e.cursoId,
-                            curso_id: e.curso_id,
-                            idCurso: e.idCurso,
-                            curso: e.curso?.id
-                          }))
-                        });
-                        
-                        return (
-                          <div key={curso.id} className="p-4 border border-slate-200 rounded-xl hover:shadow-md transition-all hover:border-teal-300 cursor-pointer">
-                            <div className="flex items-center justify-between mb-3">
-                              <h3 className="font-semibold text-slate-800">{curso.nombre}</h3>
-                              <IconBook className="text-teal-500" size={16} />
-                            </div>
-                            <div className="space-y-2 text-sm">
-                              <div className="flex justify-between">
-                                <span className="text-slate-500">Estudiantes:</span>
-                                <span className="font-medium text-slate-700">{estudiantesDelCurso}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-slate-500">Tareas activas:</span>
-                                <span className="font-medium text-slate-700">{tareasDelCurso}</span>
-                              </div>
-                            </div>
-                            <button className="w-full mt-3 px-3 py-1.5 bg-teal-50 text-teal-700 rounded-lg text-sm font-medium hover:bg-teal-100 transition-colors">
-                              Ver detalles
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {cursos.length > 6 && (
-                      <div className="mt-4 text-center">
-                        <button className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200 transition-colors">
-                          Ver todos los cursos ({cursos.length - 6} más)
-                        </button>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
+            
           </>
         )}
 

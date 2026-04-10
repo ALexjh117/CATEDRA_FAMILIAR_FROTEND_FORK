@@ -2,19 +2,17 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
 import { getInstituciones, getSession } from '../api/endpoints';
-import { PageLoading, StatsCardSkeleton, ButtonLoading } from '../components/ui/LoadingStates';
+import { PageLoading, StatsCardSkeleton } from '../components/ui/LoadingStates';
 import { ErrorState } from '../components/ui/ErrorStates';
-import { IconUsers, IconBuilding, IconSettings, IconRefresh } from '../components/ui/Icons';
+import { IconUsers, IconSettings } from '../components/ui/Icons';
+import { FaSchool, FaUserShield, FaUserCog, FaChartLine, FaLock, FaRocket, FaBuilding, FaServer, FaGraduationCap } from 'react-icons/fa';
 
 export default function DashboardAdminHome() {
   const session = getSession();
   const [counts, setCounts] = useState({ instituciones: 0, pendientes: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteLoading, setInviteLoading] = useState(false);
-  const [inviteSuccess, setInviteSuccess] = useState(false);
+  
 
   useEffect(() => { load(); }, []);
 
@@ -44,32 +42,17 @@ export default function DashboardAdminHome() {
     load();
   };
 
-  const handleInviteAdmin = async () => {
-    if (!inviteEmail || !inviteEmail.includes('@')) return;
-    setInviteLoading(true);
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      console.log('Invitación enviada a:', inviteEmail);
-      setInviteSuccess(true);
-      setTimeout(() => {
-        setShowInviteModal(false);
-        setInviteEmail('');
-        setInviteSuccess(false);
-      }, 2000);
-    } catch (error) {
-      console.error('Error:', error);
-    } finally {
-      setInviteLoading(false);
-    }
-  };
+  
 
   const poderes = [
-    { icono: '🏫', titulo: 'Gestionar Instituciones', desc: 'Crear, editar, aprobar y eliminar instituciones educativas del sistema.' },
-    { icono: '👥', titulo: 'Administrar Usuarios', desc: 'Crear rectores, coordinadores y gestionar todos los usuarios del sistema.' },
-    { icono: '✅', titulo: 'Aprobar Solicitudes', desc: 'Revisar y aprobar instituciones pendientes de verificación.' },
-    { icono: '⚙️', titulo: 'Configurar Sistema', desc: 'Acceder a configuraciones avanzadas y parámetros del sistema.' },
-    { icono: '📊', titulo: 'Ver Reportes', desc: 'Acceso completo a estadísticas y reportes de toda la plataforma.' },
-    { icono: '🔐', titulo: 'Control Total', desc: 'Máximo nivel de acceso y permisos en toda la plataforma.' },
+    { icono: <FaSchool className="text-teal-600" />, titulo: 'Gestionar Instituciones', desc: 'Crear, editar y eliminar instituciones educativas del sistema.' },
+    { icono: <FaUserShield className="text-blue-600" />, titulo: 'Administrar Usuarios', desc: 'Crear rectores, coordinadores y gestionar todos los usuarios del sistema.' },
+    { icono: <FaUserCog className="text-purple-600" />, titulo: 'Configurar Roles', desc: 'Asignar permisos y roles específicos para cada tipo de usuario.' },
+    { icono: <FaChartLine className="text-orange-600" />, titulo: 'Ver Estadísticas', desc: 'Acceder a reportes y métricas del sistema completo.' },
+    { icono: <FaServer className="text-indigo-600" />, titulo: 'Gestión de Datos', desc: 'Administrar respaldos, exportación y migración de información.' },
+    { icono: <FaLock className="text-slate-600" />, titulo: 'Seguridad', desc: 'Controlar accesos, auditorías y políticas de seguridad.' },
+    { icono: <FaGraduationCap className="text-cyan-600" />, titulo: 'Gestionar Cursos', desc: 'Crear, editar y administrar cursos académicos por grado y jornada.' },
+    
   ];
 
   if (loading) {
@@ -109,7 +92,7 @@ export default function DashboardAdminHome() {
                 </div>
                 
                 <h1 className="text-3xl md:text-4xl font-bold mb-3">
-                  Bienvenido, {session?.user?.nombre || 'Administrador'} 👋
+                  Bienvenido, {session?.user?.nombre || 'Administrador'} <FaUserShield className="inline-block text-teal-400" />
                 </h1>
                 
                 <p className="text-slate-300 text-lg max-w-xl mb-6">
@@ -117,12 +100,12 @@ export default function DashboardAdminHome() {
                   Gestiona instituciones, usuarios y configura el sistema según las necesidades.
                 </p>
 
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-3">
                   <Link 
                     to="/dashboard/admin/manage?tab=instituciones" 
                     className="inline-flex items-center gap-2 bg-teal-500 hover:bg-teal-600 text-white px-5 py-2.5 rounded-xl font-medium transition-all shadow-lg shadow-teal-500/25"
                   >
-                    <IconBuilding size={18} /> Ver Instituciones
+                    <FaBuilding size={18} /> Ver Instituciones
                   </Link>
                   <Link 
                     to="/dashboard/admin/manage?tab=usuarios" 
@@ -130,16 +113,6 @@ export default function DashboardAdminHome() {
                   >
                     <IconUsers size={18} /> Ver Usuarios
                   </Link>
-                  <ButtonLoading
-                    loading={inviteLoading}
-                    onClick={() => setShowInviteModal(true)}
-                    className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white px-5 py-2.5 rounded-xl font-medium transition-all shadow-lg shadow-amber-500/25"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                    </svg>
-                    {inviteLoading ? 'Enviando...' : 'Invitar Admin'}
-                  </ButtonLoading>
                 </div>
               </div>
 
@@ -163,38 +136,23 @@ export default function DashboardAdminHome() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {loading ? (
-            Array.from({ length: 2 }).map((_, index) => (
+            Array.from({ length: 1 }).map((_, index) => (
               <StatsCardSkeleton key={index} />
             ))
           ) : (
-            <>
-              <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-teal-100 rounded-xl flex items-center justify-center">
-                    <IconBuilding size={24} className="text-teal-600" />
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold text-slate-800">{counts.instituciones}</div>
-                    <div className="text-sm text-slate-500">Instituciones Registradas</div>
-                  </div>
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-teal-100 rounded-xl flex items-center justify-center">
+                  <FaBuilding size={24} className="text-teal-600" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-slate-800">{counts.instituciones}</div>
+                  <div className="text-sm text-slate-500">Instituciones Registradas</div>
                 </div>
               </div>
-              <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
-                    <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold text-slate-800">{counts.pendientes}</div>
-                    <div className="text-sm text-slate-500">Pendientes de Aprobación</div>
-                  </div>
-                </div>
-              </div>
-            </>
+            </div>
           )}
         </div>
 
@@ -202,7 +160,7 @@ export default function DashboardAdminHome() {
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
           <div className="bg-gradient-to-r from-slate-50 to-white px-6 py-5 border-b border-slate-100">
             <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-              <span className="text-2xl">⚡</span> Tus Poderes como Administrador
+              <FaRocket className="text-teal-600" /> Tus Poderes como Administrador
             </h2>
             <p className="text-sm text-slate-500 mt-1">Como administrador del sistema, tienes acceso a las siguientes capacidades</p>
           </div>
@@ -235,7 +193,7 @@ export default function DashboardAdminHome() {
                 <p className="text-teal-100 text-sm">Gestionar instituciones educativas</p>
               </div>
               <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center group-hover:bg-white/30 transition-colors">
-                <IconBuilding size={24} />
+                <FaBuilding size={24} />
               </div>
             </div>
             <div className="mt-4 flex items-center gap-2 text-sm text-teal-100">
@@ -289,126 +247,11 @@ export default function DashboardAdminHome() {
           </Link>
         </div>
 
-        {/* Card de Invitar Admin */}
-        <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl p-6 border border-amber-100">
-          <div className="flex items-center gap-6">
-            <div className="hidden md:flex w-16 h-16 bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl items-center justify-center text-white text-3xl shadow-lg shadow-amber-500/25">
-              🤝
-            </div>
-            <div className="flex-1">
-              <h3 className="text-lg font-bold text-slate-800 mb-1">¿Necesitas ayuda administrando?</h3>
-              <p className="text-slate-600 text-sm">Invita a otro administrador para compartir las responsabilidades de gestión de la plataforma.</p>
-            </div>
-            <button
-              onClick={() => setShowInviteModal(true)}
-              className="flex-shrink-0 inline-flex items-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white px-5 py-2.5 rounded-xl font-medium transition-all shadow-lg shadow-amber-500/25"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-              </svg>
-              Invitar Admin
-            </button>
-          </div>
-        </div>
+        {/* Sección de invitación a admin removida por política de seguridad */}
 
       </div>
 
-      {/* Modal Invitar Admin */}
-      {showInviteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !inviteLoading && setShowInviteModal(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl p-6 max-w-md w-full">
-            {inviteSuccess ? (
-              <div className="text-center py-8">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-bold text-slate-800 mb-2">¡Invitación Enviada!</h3>
-                <p className="text-slate-600 text-sm">
-                  Se ha enviado un correo a <span className="font-medium">{inviteEmail}</span> con las instrucciones.
-                </p>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-amber-400 to-orange-500 rounded-xl flex items-center justify-center text-white text-xl">
-                    🤝
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-slate-800">Invitar Administrador</h3>
-                    <p className="text-sm text-slate-500">Envía una invitación por correo</p>
-                  </div>
-                </div>
-                
-                <p className="text-slate-600 text-sm mb-4">
-                  Ingresa el correo electrónico de la persona que deseas invitar como administrador del sistema.
-                </p>
-                
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Correo Electrónico
-                    </label>
-                    <input
-                      type="email"
-                      value={inviteEmail}
-                      onChange={(e) => setInviteEmail(e.target.value)}
-                      placeholder="admin@educacion.gov.co"
-                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all"
-                      disabled={inviteLoading}
-                    />
-                  </div>
-                  
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
-                    <div className="flex gap-2">
-                      <svg className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                      </svg>
-                      <p className="text-sm text-amber-800">
-                        El nuevo administrador tendrá acceso completo al sistema. Asegúrate de que sea una persona autorizada.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="flex gap-3 mt-6">
-                  <button
-                    onClick={() => setShowInviteModal(false)}
-                    disabled={inviteLoading}
-                    className="flex-1 py-2.5 px-4 border border-slate-200 rounded-xl text-slate-700 font-medium hover:bg-slate-50 transition-colors disabled:opacity-50"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={handleInviteAdmin}
-                    disabled={inviteLoading || !inviteEmail || !inviteEmail.includes('@')}
-                    className="flex-1 py-2.5 px-4 bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl text-white font-medium hover:from-amber-600 hover:to-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    {inviteLoading ? (
-                      <>
-                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <span>Enviando...</span>
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                        </svg>
-                        <span>Enviar Invitación</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Modal de invitación eliminado */}
     </DashboardLayout>
   );
 }

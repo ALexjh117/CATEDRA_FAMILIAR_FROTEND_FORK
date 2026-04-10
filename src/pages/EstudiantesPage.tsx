@@ -91,6 +91,17 @@ export default function EstudiantesPage() {
   const [acudientes, setAcudientes] = useState<any[]>([]);
   const [estudianteAcudientes, setEstudianteAcudientes] = useState<EstudianteRow | null>(null);
 
+  const limpiarCurso = (nombre?: string) => {
+    if (!nombre) return '-';
+    return String(nombre).replace(/^\d+_/, '');
+  };
+
+  const gradoDesdeCurso = (nombre?: string) => {
+    const limpio = limpiarCurso(nombre);
+    const match = String(limpio).match(/^(\d{1,2})/); // toma 1-2 dígitos iniciales
+    return match ? match[1] : '-';
+  };
+
   useEffect(() => {
     const run = async () => {
       setLoading(true);
@@ -103,8 +114,19 @@ export default function EstudiantesPage() {
           return;
         }
 
-        const data = await getEstudiantesInstitucionOrientador();
-        setEstudiantes(Array.isArray(data) ? data : []);
+        const res = await getEstudiantesInstitucionOrientador();
+        const raw = (res as any)?.data ?? res;
+        const arr = Array.isArray(raw) ? raw : [];
+        // Filtro adicional por institución desde sesión (por si el backend trae de más)
+        const instId = (session as any)?.context?.institucionId || session?.user?.institucionId || (session as any)?.user?.institucion;
+        const pref = instId ? `${String(instId)}_` : '';
+        const onlyInst = pref
+          ? arr.filter((e: any) => {
+              const cursoNombre = e?.curso || e?.cursoNombre || e?.curso_nombre || e?.curso?.nombre;
+              return typeof cursoNombre === 'string' ? cursoNombre.startsWith(pref) : true;
+            })
+          : arr;
+        setEstudiantes(onlyInst as any);
       } catch (e: any) {
         setEstudiantes([]);
         setError(e?.message || 'Error al cargar estudiantes');
@@ -345,8 +367,8 @@ export default function EstudiantesPage() {
                   const estrato = s.estrato === null || s.estrato === undefined ? '-' : String(s.estrato);
                   const etnia = s.etnia ?? '-';
                   const eps = s.eps ?? '-';
-                  const curso = s.curso ?? '-';
-                  const grado = String(s.grado_id ?? s.gradoId ?? '-');
+                  const curso = limpiarCurso(s.curso);
+                  const grado = gradoDesdeCurso(s.curso);
 
                   return (
                     <tr key={s.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
@@ -372,7 +394,9 @@ export default function EstudiantesPage() {
                       <td className="text-center py-4 px-4 text-slate-600 text-sm">{estrato}</td>
                       <td className="text-center py-4 px-4 text-slate-600 text-sm">{etnia}</td>
                       <td className="text-center py-4 px-4 text-slate-600 text-sm">{eps}</td>
-                      <td className="text-center py-4 px-4 text-slate-600 text-sm">{curso}</td>
+                      <td className="text-center py-4 px-4 text-slate-600 text-sm">
+                        <span className="inline-block max-w-[80px] truncate align-middle">{curso}</span>
+                      </td>
                       <td className="text-center py-4 px-4 text-slate-600 text-sm">{grado}</td>
                       <td className="text-center py-4 px-4">
                         <div className="flex items-center justify-center gap-2">

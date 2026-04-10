@@ -50,6 +50,22 @@ interface InstitutionInfo {
   codigoDane?: string;
 }
 
+interface Periodo {
+  id: number;
+  nombre: string;
+  anioLectivo: string;
+  fechaInicio: string;
+  fechaFin: string;
+  activo: boolean;
+}
+
+interface Grado {
+  id: number;
+  nombre: string;
+  nivel: string;
+  descripcion?: string;
+}
+
 export default function RectorDashboardEnhanced() {
   const session = getSession();
   let user = session?.user;
@@ -68,6 +84,8 @@ export default function RectorDashboardEnhanced() {
     tasaActivacion: 0
   });
   const [miInstitucion, setMiInstitucion] = useState<InstitutionInfo | null>(null);
+  const [periodos, setPeriodos] = useState<Periodo[]>([]);
+  const [grados, setGrados] = useState<Grado[]>([]);
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [pendingTasks, setPendingTasks] = useState<TaskItem[]>([]);
   const [showGuide, setShowGuide] = useState(false);
@@ -92,8 +110,21 @@ export default function RectorDashboardEnhanced() {
         institucion: user.institucion,
         'institucion.id': user.institucion?.id,
         'institucion_id': user.institucion_id,
-        todosLosCampos: Object.keys(user)
+        todosLosCampos: Object.keys(user),
+        valoresCompletos: Object.entries(user).reduce((acc, [key, value]) => {
+          acc[key] = value;
+          return acc;
+        }, {} as any)
       });
+      
+      // Revisar la sesión cruda también
+      const sessionRaw = localStorage.getItem('session');
+      if (sessionRaw) {
+        const sessionParsed = JSON.parse(sessionRaw);
+        console.log('[DEBUG][RectorDashboard] Sesión completa:', sessionParsed);
+        console.log('[DEBUG][RectorDashboard] Usuario en sesión:', sessionParsed.user);
+        console.log('[DEBUG][RectorDashboard] Todos los campos del usuario en sesión:', Object.keys(sessionParsed.user || {}));
+      }
 
       // Cargar la institución del rector primero
       let institucionRector: InstitutionInfo | null = null;
@@ -124,13 +155,29 @@ export default function RectorDashboardEnhanced() {
           console.log('[DEBUG][RectorDashboard] Datos actualizados del usuario:', userData);
           
           if (userData.success && userData.data) {
-            const updatedUser = userData.data;
+            // Extraer correctamente el usuario desde la envoltura { data: { usuario, funcionarioDirecto, ... } }
+            const updatedUser = userData.data.usuario || userData.data;
             
             // Actualizar la sesión con los datos nuevos
-            const updatedSession = {
+            const updatedSession: any = {
               ...session,
               user: updatedUser
             };
+
+            // Intentar establecer context.institucionId desde las fuentes devueltas en el debug
+            const funcionarioAnidado = userData.data?.usuario?.funcionario;
+            const funcionarioDirecto = userData.data?.funcionarioDirecto;
+            const resolvedInstId = funcionarioAnidado?.institucionId || funcionarioAnidado?.institucion_id || funcionarioDirecto?.institucionId || funcionarioDirecto?.institucion_id;
+            if (resolvedInstId) {
+              updatedSession.context = {
+                ...(updatedSession.context || {}),
+                institucionId: resolvedInstId
+              };
+              // Establecer inmediatamente el institucionId local para continuar el flujo actual
+              if (!institucionId) {
+                institucionId = resolvedInstId;
+              }
+            }
             localStorage.setItem('session', JSON.stringify(updatedSession));
             
             // Actualizar el user local
@@ -150,64 +197,80 @@ export default function RectorDashboardEnhanced() {
           console.warn('[DEBUG][RectorDashboard] Error obteniendo datos actualizados:', error);
         }
       }
-      
-      if (institucionId) {
-        // El rector tiene institución asignada, cargarla
+
+      // Fallback adicional: si aún no hay institucionId, intentar cargar institución usando apiClient.getInstitucionCompleta()
+      if (!institucionId) {
+        console.log('[DEBUG][RectorDashboard] Intentando resolver institución vía apiClient.getInstitucionCompleta como fallback...');
         try {
-          // Usar el endpoint correcto para rector
-          console.log('[DEBUG][RectorDashboard] Intentando getMiInstitucionRector...');
-          const instRes = await apiClient.getMiInstitucionRector();
-          console.log('[DEBUG][RectorDashboard] Respuesta getMiInstitucionRector:', instRes);
-          
-          if (instRes.success && instRes.data) {
+          const instRes = await apiClient.getInstitucionCompleta();
+          if (instRes?.data) {
             institucionRector = {
               nombre: instRes.data.nombre || 'Institución',
               municipio: instRes.data.municipio?.nombre || instRes.data.municipio,
               departamento: instRes.data.departamento?.nombre || instRes.data.departamento,
               codigoDane: instRes.data.codigoDane
             };
-            console.log('[DEBUG][RectorDashboard] Institución cargada con getMiInstitucionRector:', institucionRector);
+            institucionId = instRes.data.id || instRes.data.institucionId || instRes.data.institucion_id;
+            console.log('[DEBUG][RectorDashboard] Institución resuelta por fallback getInstitucionCompleta. ID:', institucionId);
+          }
+        } catch (e) {
+          console.warn('[DEBUG][RectorDashboard] Fallback getInstitucionCompleta no disponible:', e);
+        }
+      }
+      
+      if (institucionId) {
+        // El rector tiene institución asignada, cargarla
+        try {
+          // Usar el endpoint correcto para rector
+          console.log('[DEBUG][RectorDashboard] Intentando getInstitucionCompleta...');
+          const instRes = await apiClient.getInstitucionCompleta();
+          console.log('[DEBUG][RectorDashboard] Respuesta getInstitucionCompleta:', instRes);
+          
+          // Desempaquetar respuesta tolerante a diferentes formas
+          const raw1: any = (instRes as any)?.data ?? instRes;
+          const instData1: any = (raw1 && typeof raw1 === 'object' && 'data' in raw1) ? raw1.data : raw1;
+          if (instData1) {
+            institucionRector = {
+              nombre: instData1.nombre || 'Institución',
+              municipio: instData1.municipio?.nombre || instData1.municipio,
+              departamento: instData1.departamento?.nombre || instData1.departamento,
+              codigoDane: instData1.codigoDane
+            };
+            console.log('[DEBUG][RectorDashboard] Institución cargada con getInstitucionCompleta (tolerante):', institucionRector);
           } else {
-            console.warn('[DEBUG][RectorDashboard] getMiInstitucionRector falló, intentando fallback...');
-            // Intentar con el endpoint alternativo
-            const instRes = await apiClient.getInstitucionById(institucionId);
-            console.log('[DEBUG][RectorDashboard] Respuesta getInstitucionById:', instRes);
-            
-            if (instRes.success && instRes.data) {
+            console.warn('[DEBUG][RectorDashboard] getInstitucionCompleta sin datos claros, intentando getInstitucionById...');
+            const byIdRes = await apiClient.getInstitucionById(Number(institucionId));
+            console.log('[DEBUG][RectorDashboard] Respuesta getInstitucionById:', byIdRes);
+            const raw2: any = (byIdRes as any)?.data ?? byIdRes;
+            const instData2: any = (raw2 && typeof raw2 === 'object' && 'data' in raw2) ? raw2.data : raw2;
+            if (instData2) {
               institucionRector = {
-                nombre: instRes.data.nombre || 'Institución',
-                municipio: instRes.data.municipio?.nombre || instRes.data.municipio,
-                departamento: instRes.data.departamento?.nombre || instRes.data.departamento,
-                codigoDane: instRes.data.codigoDane
+                nombre: instData2.nombre || 'Institución',
+                municipio: instData2.municipio?.nombre || instData2.municipio,
+                departamento: instData2.departamento?.nombre || instData2.departamento,
+                codigoDane: instData2.codigoDane
               };
-              console.log('[DEBUG][RectorDashboard] Institución cargada con getInstitucionById:', institucionRector);
+              console.log('[DEBUG][RectorDashboard] Institución cargada con getInstitucionById (tolerante):', institucionRector);
             }
           }
         } catch (instError) {
           console.warn('[DEBUG][RectorDashboard] Error cargando institución, intentando fallback:', instError);
           // Intentar con el endpoint alternativo
             try {
-              const instRes = await apiClient.getInstitucionById(institucionId);
-              console.log('[DEBUG][RectorDashboard] Respuesta getInstitucionById (fallback):', instRes);
-              console.log('[DEBUG][RectorDashboard] Estructura de la respuesta:', {
-                success: instRes.success,
-                data: instRes.data,
-                status: instRes.status,
-                'typeof success': typeof instRes.success,
-                'typeof data': typeof instRes.data,
-                'data keys': instRes.data ? Object.keys(instRes.data) : 'null'
-              });
-              
-              if (instRes.data) {
+              const byIdRes = await apiClient.getInstitucionById(Number(institucionId));
+              console.log('[DEBUG][RectorDashboard] Respuesta getInstitucionById (fallback):', byIdRes);
+              const raw3: any = (byIdRes as any)?.data ?? byIdRes;
+              const instData3: any = (raw3 && typeof raw3 === 'object' && 'data' in raw3) ? raw3.data : raw3;
+              if (instData3) {
                 institucionRector = {
-                  nombre: instRes.data.nombre || 'Institución',
-                  municipio: instRes.data.municipio?.nombre || instRes.data.municipio,
-                  departamento: instRes.data.departamento?.nombre || instRes.data.departamento,
-                  codigoDane: instRes.data.codigoDane
+                  nombre: instData3.nombre || 'Institución',
+                  municipio: instData3.municipio?.nombre || instData3.municipio,
+                  departamento: instData3.departamento?.nombre || instData3.departamento,
+                  codigoDane: instData3.codigoDane
                 };
-                console.log('[DEBUG][RectorDashboard] Institución cargada con fallback:', institucionRector);
+                console.log('[DEBUG][RectorDashboard] Institución cargada con fallback (tolerante):', institucionRector);
               } else {
-                console.warn('[DEBUG][RectorDashboard] El fallback no cumplió las condiciones success && data');
+                console.warn('[DEBUG][RectorDashboard] El fallback no devolvió datos utilizables');
               }
             } catch (fallbackError) {
               console.warn('[DEBUG][RectorDashboard] Error en fallback:', fallbackError);
@@ -220,6 +283,40 @@ export default function RectorDashboardEnhanced() {
         }
         
         setMiInstitucion(institucionRector);
+
+        // Cargar períodos y grados de la institución
+        console.log('[DEBUG][RectorDashboard] Cargando períodos y grados...');
+        
+        try {
+          // Cargar períodos
+          const periodosRes = await apiClient.getPeriodos(institucionId as number);
+          console.log('[DEBUG][RectorDashboard] Períodos cargados:', periodosRes);
+          
+          if (periodosRes?.success && Array.isArray(periodosRes.data)) {
+            setPeriodos(periodosRes.data);
+            console.log('[DEBUG][RectorDashboard] Períodos establecidos:', periodosRes.data.length);
+          } else {
+            console.warn('[DEBUG][RectorDashboard] No se pudieron cargar los períodos:', periodosRes);
+            setPeriodos([]);
+          }
+
+          // Cargar grados
+          const gradosRes = await apiClient.getGrados();
+          console.log('[DEBUG][RectorDashboard] Grados cargados:', gradosRes);
+          
+          if (gradosRes?.success && Array.isArray(gradosRes.data)) {
+            setGrados(gradosRes.data);
+            console.log('[DEBUG][RectorDashboard] Grados establecidos:', gradosRes.data.length);
+          } else {
+            console.warn('[DEBUG][RectorDashboard] No se pudieron cargar los grados:', gradosRes);
+            setGrados([]);
+          }
+        } catch (error) {
+          console.error('[DEBUG][RectorDashboard] Error cargando períodos y grados:', error);
+          // No lanzar error, solo dejar vacíos los arrays
+          setPeriodos([]);
+          setGrados([]);
+        }
       } else {
         // El rector no tiene institución asignada - mostrar mensaje amigable
         throw new Error('El rector no está asignado a ninguna institución. Por favor, contacte al administrador del sistema para asignarle una institución.');
@@ -513,6 +610,128 @@ export default function RectorDashboardEnhanced() {
             </button>
           </div>
         </div>
+
+        {/* Información de la Institución */}
+        {miInstitucion && (
+          <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                <IconInstitution className="text-purple-600" size={20} />
+                Mi Institución
+              </h3>
+              <span className="text-sm text-slate-500">
+                Configuración académica
+              </span>
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Información básica */}
+              <div className="space-y-4">
+                <div>
+                  <h4 className="font-medium text-slate-700 mb-2">📋 Información General</h4>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                      <span className="text-sm text-slate-600">Nombre:</span>
+                      <span className="text-sm font-medium text-slate-800">{miInstitucion.nombre}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                      <span className="text-sm text-slate-600">Municipio:</span>
+                      <span className="text-sm font-medium text-slate-800">{miInstitucion.municipio || 'No especificado'}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                      <span className="text-sm text-slate-600">Departamento:</span>
+                      <span className="text-sm font-medium text-slate-800">{miInstitucion.departamento || 'No especificado'}</span>
+                    </div>
+                    {miInstitucion.codigoDane && (
+                      <div className="flex justify-between items-center py-2 border-b border-slate-100">
+                        <span className="text-sm text-slate-600">Código DANE:</span>
+                        <span className="text-sm font-medium text-slate-800">{miInstitucion.codigoDane}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Períodos Académicos */}
+              <div className="space-y-4">
+                <div>
+                  <h4 className="font-medium text-slate-700 mb-2">📅 Períodos Académicos</h4>
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {periodos.length > 0 ? (
+                      periodos.map((periodo) => (
+                        <div key={periodo.id} className="flex justify-between items-center py-2 px-3 rounded-lg bg-slate-50 border border-slate-100">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${periodo.activo ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                            <div>
+                              <span className="text-sm font-medium text-slate-800">{periodo.nombre}</span>
+                              <span className="text-xs text-slate-500 ml-2">{periodo.anioLectivo}</span>
+                            </div>
+                          </div>
+                          <span className={`text-xs px-2 py-1 rounded-full ${periodo.activo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                            {periodo.activo ? 'Activo' : 'Inactivo'}
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-4 text-slate-500">
+                        <IconBook className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                        <p className="text-sm">No hay períodos configurados</p>
+                        <p className="text-xs text-slate-400 mt-1">Contacta al administrador para configurar períodos académicos</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Grados Académicos */}
+              <div className="space-y-4">
+                <div>
+                  <h4 className="font-medium text-slate-700 mb-2">🎓 Grados Académicos</h4>
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {grados.length > 0 ? (
+                      grados.map((grado) => (
+                        <div key={grado.id} className="flex justify-between items-center py-2 px-3 rounded-lg bg-slate-50 border border-slate-100">
+                          <div>
+                            <span className="text-sm font-medium text-slate-800">{grado.nombre}</span>
+                            <span className="text-xs text-slate-500 ml-2">{grado.nivel}</span>
+                          </div>
+                          <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700">
+                            {grado.nivel}
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-4 text-slate-500">
+                        <IconGraduationCap className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                        <p className="text-sm">No hay grados configurados</p>
+                        <p className="text-xs text-slate-400 mt-1">Contacta al administrador para configurar los grados académicos</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Resumen */}
+            <div className="mt-6 pt-4 border-t border-slate-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4 text-sm text-slate-600">
+                  <span className="flex items-center gap-1">
+                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                    {periodos.filter(p => p.activo).length} períodos activos
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                    {grados.length} grados configurados
+                  </span>
+                </div>
+                <div className="text-xs text-slate-400">
+                  Última actualización: {new Date().toLocaleDateString()}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
       {/* Guía Rápida */}
         {showGuide && (

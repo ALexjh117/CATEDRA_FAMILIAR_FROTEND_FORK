@@ -12,6 +12,7 @@ export interface Usuario {
   correo: string;
   email?: string; // Alias para compatibilidad
   rol: RolUsuario;
+  rolId?: number; // ID numérico del rol del backend (1-7)
   telefono: string;
   avatar?: string;
   institucionId?: number;

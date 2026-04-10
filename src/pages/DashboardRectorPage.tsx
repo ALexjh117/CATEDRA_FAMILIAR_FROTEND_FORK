@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getSession, getEstadisticasRector, getMiInstitucion, getInstitucionById } from '../api/endpoints';
+import { getSession, getEstadisticasRector, getMiInstitucion, getInstituciones } from '../api/endpoints';
 import apiClient from '../api/apiClient';
 import { type Usuario, type Institucion } from '../mocks/data';
 import DashboardLayout from '../components/DashboardLayout';
@@ -55,14 +55,27 @@ export default function DashboardRectorPage() {
         throw new Error('Sesión no válida o expirada');
       }
 
+      // Debug: Ver qué datos tiene el usuario
+      console.log('[DEBUG] Datos del usuario:', {
+        user,
+        institucionId: user?.institucionId,
+        institucion_id: (user as any)?.institucion_id,
+        rol: user?.rol,
+        rolId: user?.rolId
+      });
+
       // Cargar la institución del rector primero
       let institucionRector: Institucion | null = null;
       
-      if (user?.institucionId) {
+      // Revisar ambos posibles campos que el backend podría enviar
+      const institucionId = user?.institucionId || (user as any)?.institucion_id;
+      
+      if (institucionId) {
         try {
           institucionRector = await getMiInstitucion();
           if (!institucionRector) {
-            institucionRector = await getInstitucionById(user.institucionId);
+            const instituciones = await getInstituciones();
+            institucionRector = instituciones.find(inst => inst.id === institucionId);
           }
           
           // Validar que la institución se cargó correctamente
@@ -72,7 +85,6 @@ export default function DashboardRectorPage() {
           
           setMiInstitucion(institucionRector);
         } catch (instError) {
-          console.error('Error cargando institución:', instError);
           throw new Error('Error al cargar datos de la institución');
         }
       } else {
@@ -155,7 +167,6 @@ export default function DashboardRectorPage() {
         setInstituciones([institucionRector]);
       }
     } catch (error) {
-      console.error('Error loading data:', error);
       setError(error instanceof Error ? error.message : 'Error al cargar datos del panel');
     } finally {
       setLoading(false);
@@ -524,6 +535,19 @@ export default function DashboardRectorPage() {
               })
             )}
           </div>
+        </div>
+
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={() => {
+              // Cerrar sesión
+              localStorage.removeItem('session');
+              window.location.href = '/login';
+            }}
+            className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+          >
+            Cerrar Sesión
+          </button>
         </div>
       </div>
     </DashboardLayout>

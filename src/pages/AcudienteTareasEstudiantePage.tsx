@@ -10,7 +10,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 import Button from '../components/ui/Button';
 
-import { listarTareasEstudiante, type TareaAsignadaMovil } from '../api/acudiente';
+import { listarTareasEstudiante, getMisTareasAcudiente, type TareaAsignadaMovil } from '../api/acudiente';
 
 import { listarPeriodos, type PeriodoBackend } from '../api/docentes';
 
@@ -36,6 +36,8 @@ export default function AcudienteTareasEstudiantePage(){
 
   const [soloEspeciales, setSoloEspeciales] = useState(false);
 
+  const [estudianteNombre, setEstudianteNombre] = useState<string>('');
+
 
 
   const load = async () => {
@@ -47,6 +49,7 @@ export default function AcudienteTareasEstudiantePage(){
         routeId: id,
         estudianteId,
         periodo,
+        soloEspeciales,
         rol: session?.user?.rol,
         sessionUserId: session?.user?.id,
         localPreferredStudentId: localStorage.getItem('acudiente_estudiante_id')
@@ -58,8 +61,24 @@ export default function AcudienteTareasEstudiantePage(){
     setError(null);
 
     try {
+      // Cargar estudiantes para obtener el nombre del estudiante actual
+      const { estudiantes: estudiantesData } = await getMisTareasAcudiente();
+      
+      // Buscar y establecer el nombre del estudiante actual
+      if (estudiantesData) {
+        const estudianteActual = estudiantesData.find((e: any) => Number(e.id) === estudianteId);
+        if (estudianteActual?.nombres) {
+          const nombreCompleto = estudianteActual.apellidos 
+            ? `${estudianteActual.nombres} ${estudianteActual.apellidos}`
+            : estudianteActual.nombres;
+          setEstudianteNombre(nombreCompleto);
+        }
+      }
 
-      const list = await listarTareasEstudiante(estudianteId, { periodo: periodo || undefined });
+      const list = await listarTareasEstudiante(estudianteId, { 
+        periodo: periodo || undefined,
+        soloEspeciales: soloEspeciales
+      });
 
       setItems(Array.isArray(list) ? list : []);
 
@@ -70,6 +89,7 @@ export default function AcudienteTareasEstudiantePage(){
           routeId: id,
           estudianteId,
           periodo,
+          soloEspeciales,
           errorMessage: e?.message,
           errorStatus: e?.status,
           rol: session?.user?.rol,
@@ -114,7 +134,7 @@ export default function AcudienteTareasEstudiantePage(){
 
 
 
-  useEffect(() => { load(); }, [estudianteId, periodo]);
+  useEffect(() => { load(); }, [estudianteId, periodo, soloEspeciales]);
 
   useEffect(() => {
 
@@ -159,7 +179,9 @@ export default function AcudienteTareasEstudiantePage(){
 
         <div className="flex items-center justify-between">
 
-          <h1 className="text-xl font-semibold text-slate-800">Tareas del Estudiante #{estudianteId}</h1>
+          <h1 className="text-xl font-semibold text-slate-800">
+          Tareas de {estudianteNombre || `Estudiante #${estudianteId}`}
+        </h1>
 
           <div className="flex items-center gap-2">
 

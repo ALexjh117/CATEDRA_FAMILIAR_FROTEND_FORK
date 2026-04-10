@@ -87,7 +87,7 @@ export const getCursosOrientador = async () => {
     const data = Array.isArray(body?.data) ? body.data : (Array.isArray(body) ? body : []);
     return data;
   } catch (e) {
-    console.warn('[getCursosOrientador] fallback a getCursosCRUD por error:', e);
+    // Debug removido
     return await getCursosCRUD();
   }
 };
@@ -122,6 +122,21 @@ export const login = async (correo: string, password: string, roleHint?: 'admin'
 
       roleHint = 'admin';
 
+    }
+
+    // Mapear documento y tipoDocumento según contrato del backend
+    if ((data as any)?.documento && !payload.numeroDocumento) {
+      payload.numeroDocumento = (data as any).documento;
+    }
+    if ((data as any)?.tipoDocumento) {
+      const td = String((data as any).tipoDocumento).toUpperCase();
+      // Normalizar alias comunes
+      const mapTD: Record<string, string> = { cc: 'CC', ti: 'TI', ce: 'CE', cedula: 'CC' };
+      payload.tipoDocumento = mapTD[td.toLowerCase()] || td;
+    }
+    // Estado activo
+    if (typeof (data as any)?.activo === 'boolean' && payload.estaActivo === undefined) {
+      payload.estaActivo = (data as any).activo;
     }
 
     // Coordinador: intentar primero (es más común)
@@ -448,7 +463,7 @@ export const crearRector = async (data: {
 
   // Usar API real
 
-  const result = await httpService.crearRector(data);
+  const result = await httpService.post('/usuarios/rector', data);
 
   if (result.success && result.data?.rector) {
 
@@ -689,59 +704,19 @@ export const crearCoordinadorRector = async (data: {
   centroInteres?: string;
 
 }): Promise<{ success: boolean; user?: Usuario; error?: string; institucionNombre?: string }> => {
-
-  console.log('[DEBUG][crearCoordinadorRector] Datos recibidos:', {
-
-    ...data,
-
-    contrasena: `[${data.contrasena.length} caracteres]`
-
-  });
-
-  
-
   if (isBypassValidationsEnabled()) {
-
-    console.log('[DEBUG][crearCoordinadorRector] Usando bypass de validaciones');
-
     return crearCoordinador(data);
 
   }
 
-  
-
-  console.log('[DEBUG][crearCoordinadorRector] Llamando a apiClient.crearCoordinadorRector');
-
   const result = await apiClient.crearCoordinadorRector(data);
-
-  
-
-  console.log('[DEBUG][crearCoordinadorRector] Respuesta de apiClient:', {
-
-    success: result.success,
-
-    status: result.status,
-
-    data: result.data,
-
-    message: result.message
-
-  });
-
-  
-
   // El backend devuelve la respuesta dentro de result.data
 
   const backendResponse = result.data;
 
-  console.log('[DEBUG][crearCoordinadorRector] Respuesta del backend:', backendResponse);
-
   
 
   if (backendResponse?.success && backendResponse.data?.coordinador) {
-
-    console.log('[DEBUG][crearCoordinadorRector] Procesando respuesta exitosa');
-
     const user: Usuario = {
 
       id: backendResponse.data.usuario.id,
@@ -768,24 +743,6 @@ export const crearCoordinadorRector = async (data: {
 
     };
 
-    
-
-    console.log('[DEBUG][crearCoordinadorRector] Usuario creado:', {
-
-      id: user.id,
-
-      nombre: user.nombre,
-
-      correo: user.correo,
-
-      rol: user.rol,
-
-      institucionId: user.institucionId
-
-    });
-
-    
-
     return { 
 
       success: true, 
@@ -797,20 +754,6 @@ export const crearCoordinadorRector = async (data: {
     };
 
   }
-
-  
-
-  console.log('[DEBUG][crearCoordinadorRector] Error en la creación:', {
-
-    success: backendResponse?.success,
-
-    error: backendResponse?.message,
-
-    data: backendResponse?.data
-
-  });
-
-  
 
   return { success: false, error: backendResponse?.message || 'Error desconocido' };
 
@@ -831,8 +774,7 @@ export const getTareas = async (cursoId?: number, busqueda?: string): Promise<Ta
   try {
 
     const result = await httpService.get('/tareas');
-
-    console.log('📋 [endpoints.ts] getTareas result:', result);
+    
 
     
 
@@ -855,11 +797,7 @@ export const getTareas = async (cursoId?: number, busqueda?: string): Promise<Ta
         tareasData = result.data.tareas;
 
       } else {
-
-        console.warn('📋 [endpoints.ts] Estructura de datos no reconocida:', result.data);
-
         tareasData = [];
-
       }
 
     }
@@ -885,6 +823,10 @@ export const getTareas = async (cursoId?: number, busqueda?: string): Promise<Ta
         fechaVencimiento: t.fechaVencimiento || t.fecha_vencimiento || t.fechaLimite || t.fecha_limite || '',
 
         cursoId: t.cursoId || t.curso_id,
+        // Provide optional course name if backend sends it, to be used in dashboards when course catalog is missing
+        cursoNombre: t.cursoNombre || t.curso_nombre || (t.curso && (t.curso.nombre || t.curso.name)) || t.cursoName,
+        // Provide a minimal nested curso object if present in the payload
+        curso: t.curso ? { id: Number(t.curso.id ?? t.curso_id ?? t.cursoId), nombre: t.curso.nombre || t.curso.name } : undefined,
         institucionId: t.institucionId || t.institucion_id,
         institucion: t.institucion ? { id: Number(t.institucion.id), nombre: t.institucion.nombre } : (t.institucionId ? { id: Number(t.institucionId), nombre: t.institucionNombre || t.institucion_nombre || '' } : undefined),
 
@@ -934,9 +876,7 @@ export const getTareas = async (cursoId?: number, busqueda?: string): Promise<Ta
     return [];
 
   } catch (error) {
-
-    console.error('Error al obtener tareas:', error);
-
+    
     return [];
 
   }
@@ -972,11 +912,7 @@ export const getTareaById = async (id: number): Promise<Tarea | null> => {
         tareasData = result.data.tareas;
 
       } else {
-
-        console.warn('📋 [endpoints.ts] Estructura de datos no reconocida:', result.data);
-
         return null;
-
       }
 
     }
@@ -1515,11 +1451,7 @@ export const getInstituciones = async (): Promise<Institucion[]> => {
 
     const result = await httpService.get('/instituciones');
 
-    console.log('🏫 [endpoints.ts] getInstituciones result:', result);
-
-    console.log('🏫 [endpoints.ts] result.data type:', typeof result.data);
-
-    console.log('🏫 [endpoints.ts] result.data:', result.data);
+    // Logs removidos
 
     
 
@@ -1543,7 +1475,7 @@ export const getInstituciones = async (): Promise<Institucion[]> => {
 
       } else {
 
-        console.warn('🏫 [endpoints.ts] Estructura de datos no reconocida:', result.data);
+        // Debug removido
 
         institucionesData = [];
 
@@ -1597,7 +1529,7 @@ export const getInstituciones = async (): Promise<Institucion[]> => {
 
       
 
-      console.log('🏫 [endpoints.ts] Instituciones mapeadas:', mappedData);
+      // Debug removido
 
       return mappedData;
 
@@ -1607,7 +1539,7 @@ export const getInstituciones = async (): Promise<Institucion[]> => {
 
   } catch (error) {
 
-    console.error('Error al obtener instituciones:', error);
+    // Debug removido
 
     return [];
 
@@ -3246,8 +3178,12 @@ export const getAlertasCoordinador = async () => {
 export const getDocentesCoordinador = async () => {
 
   const result = await apiClient.getDocentesCoordinador();
-
-  return result.data || [];
+  const body = result?.data as any;
+  if (Array.isArray(body)) return body;
+  if (Array.isArray(body?.data)) return body.data;
+  if (Array.isArray(body?.items)) return body.items;
+  if (Array.isArray(body?.docentes)) return body.docentes;
+  return [];
 
 };
 
@@ -3264,12 +3200,36 @@ export const getDocentesCoordinador = async () => {
 export const getOrientadoresCoordinador = async () => {
 
   const result = await apiClient.getOrientadoresCoordinador();
-
-  return result.data || [];
+  const body = result?.data as any;
+  if (Array.isArray(body)) return body;
+  if (Array.isArray(body?.data)) return body.data;
+  if (Array.isArray(body?.items)) return body.items;
+  if (Array.isArray(body?.orientadores)) return body.orientadores;
+  return [];
 
 };
 
 
+
+/**
+
+ * Listar todos los estudiantes de la institución (Coordinador)
+
+ * GET /coordinadores/estudiantes
+
+ */
+
+export const getEstudiantesCoordinador = async () => {
+
+  const result = await apiClient.getEstudiantesCoordinador();
+  const body = result?.data as any;
+  if (Array.isArray(body)) return body;
+  if (Array.isArray(body?.data)) return body.data;
+  if (Array.isArray(body?.items)) return body.items;
+  if (Array.isArray(body?.estudiantes)) return body.estudiantes;
+  return [];
+
+};
 
 /**
 
@@ -3466,11 +3426,13 @@ export const desactivarOrientador = async (id: number) => {
  */
 
 export const getAcudientesCoordinador = async () => {
-
   const result = await apiClient.getAcudientesCoordinador();
-
-  return result.data || [];
-
+  const body = result?.data;
+  if (Array.isArray(body)) return body;
+  if (Array.isArray(body?.data)) return body.data;
+  if (Array.isArray(body?.acudientes)) return body.acudientes;
+  if (Array.isArray(body?.items)) return body.items;
+  return [];
 };
 
 
@@ -3486,8 +3448,12 @@ export const getAcudientesCoordinador = async () => {
 export const getGradosCoordinador = async () => {
 
   const result = await apiClient.getGradosCoordinador();
-
-  return result.data || [];
+  const body = result?.data as any;
+  if (Array.isArray(body)) return body;
+  if (Array.isArray(body?.data)) return body.data;
+  if (Array.isArray(body?.items)) return body.items;
+  if (Array.isArray(body?.grados)) return body.grados;
+  return [];
 
 };
 
@@ -3502,11 +3468,13 @@ export const getGradosCoordinador = async () => {
  */
 
 export const getAcudientesOrientador = async () => {
-
   const result = await apiClient.getAcudientesOrientador();
-
-  return result.data || [];
-
+  const body = result?.data;
+  if (Array.isArray(body)) return body;
+  if (Array.isArray(body?.data)) return body.data;
+  if (Array.isArray(body?.acudientes)) return body.acudientes;
+  if (Array.isArray(body?.items)) return body.items;
+  return [];
 };
 
 
@@ -4302,13 +4270,7 @@ export const getUsuarios = async (): Promise<Usuario[]> => {
 
                 : []));
 
-      try {
-
-        console.log('[DEBUG][endpoints.getUsuarios] raw length:', Array.isArray(raw) ? raw.length : 'n/a');
-
-        console.log('[DEBUG][endpoints.getUsuarios] raw sample:', Array.isArray(raw) ? raw.slice(0, 3) : raw);
-
-      } catch {}
+      
 
       // Mapear datos del backend al formato del frontend
 
@@ -4338,11 +4300,7 @@ export const getUsuarios = async (): Promise<Usuario[]> => {
 
       }));
 
-      try {
-
-        console.log('[DEBUG][endpoints.getUsuarios] mapped sample:', mapped.slice(0, 5).map(u => ({ id: u.id, rol: u.rol, institucionId: u.institucionId, tipo: typeof u.institucionId })));
-
-      } catch {}
+      
 
       return mapped;
 
@@ -4351,11 +4309,7 @@ export const getUsuarios = async (): Promise<Usuario[]> => {
     return [];
 
   } catch (error) {
-
-    console.error('Error al obtener usuarios:', error);
-
     return [];
-
   }
 
 };
@@ -4371,8 +4325,7 @@ export const getUsuarios = async (): Promise<Usuario[]> => {
 export const getCursos = async (institucionId?: number): Promise<Curso[]> => {
 
   const result = await httpService.get('/cursos');
-
-  console.log('📚 [endpoints.ts] getCursos result:', result);
+  
 
   
 
@@ -4555,25 +4508,6 @@ export const createInstitucionCompleta = async (data: {
 
     };
 
-    // Logs adicionales para grados y cursos
-    const totalGrados = Array.isArray(data.grados) ? data.grados.length : 0;
-    const totalCursos = Array.isArray(data.grados)
-      ? data.grados.reduce((acc, g) => acc + (Array.isArray(g.cursos) ? g.cursos.length : 0), 0)
-      : 0;
-
-    console.log('🔍 [DEBUG] Resumen antes de enviar:');
-    console.log('   • Grados incluidos:', totalGrados);
-    console.log('   • Cursos totales incluidos:', totalCursos);
-    if (totalGrados === 0) {
-      console.warn('⚠️ [DEBUG] No se incluyeron grados en la solicitud.');
-    }
-    if (totalCursos === 0) {
-      console.warn('⚠️ [DEBUG] No se incluyeron cursos en la solicitud.');
-    }
-
-    console.log('🔍 [DEBUG] Enviando institución completa (convertida):', JSON.stringify(dataParaEnviar, null, 2));
-
-    
 
     const response = await fetch('http://localhost:3333/instituciones/completa', {
 
@@ -4707,44 +4641,43 @@ export const updateUsuario = async (id: number, data: Partial<Usuario>): Promise
 
     if (payload.institucionId && !payload.institucion_id) payload.institucion_id = payload.institucionId;
 
-    // Si viene rolId desde el form externo, preservarlo; si solo viene rol string, enviarlo tal cual
-
+    // Si viene rolId desde el form externo, preservarlo; si solo viene rol string, mapear a rolId
     if ((data as any)?.rolId && !payload.rolId) payload.rolId = (data as any).rolId;
+    if (payload.rol && !payload.rolId) {
+      const ROLES_MAP: Record<string, number> = {
+        admin_sistema: 1,
+        rector: 2,
+        coordinador: 3,
+        orientador: 4,
+        docente_aula: 5,
+        acudiente: 6,
+        admin: 7,
+      };
+      const mapped = ROLES_MAP[String(payload.rol)];
+      if (mapped) payload.rolId = mapped;
+    }
 
     const result = await apiClient.updateUsuario(id, payload);
+    const backend = (result as any)?.data ?? result;
 
-    if (result.success && result.data) {
-
+    if (backend?.success && backend?.data) {
       return { 
-
         success: true, 
-
-        usuario: result.data as Usuario 
-
+        usuario: backend.data as Usuario 
       };
-
     }
 
     return { 
-
       success: false, 
-
-      error: result.message || 'Error al actualizar el usuario' 
-
+      error: (backend && (backend.message || backend.error)) || 'Error al actualizar el usuario' 
     };
 
   } catch (error) {
-
-    console.error('Error al actualizar usuario:', error);
-
+    const message = (error as any)?.message || 'Error al actualizar el usuario';
     return { 
-
       success: false, 
-
-      error: 'Error al actualizar el usuario' 
-
+      error: message 
     };
-
   }
 
 };
@@ -4758,17 +4691,8 @@ export const updateUsuario = async (id: number, data: Partial<Usuario>): Promise
  */
 
 export const deleteUsuario = async (id: number): Promise<{ success: boolean; error?: string }> => {
-
-  console.log('🗑️ [endpoints.ts] deleteUsuario llamado con id:', id);
-
   try {
-
-    console.log('🗑️ [endpoints.ts] Llamando apiClient.deleteUsuario...');
-
     const result = await apiClient.deleteUsuario(id);
-
-    console.log('🗑️ [endpoints.ts] Resultado de apiClient:', result);
-
     return { 
 
       success: result.success, 
@@ -4778,9 +4702,6 @@ export const deleteUsuario = async (id: number): Promise<{ success: boolean; err
     };
 
   } catch (error) {
-
-    console.error('🗑️ [endpoints.ts] Error al eliminar usuario:', error);
-
     return { 
 
       success: false, 
@@ -4923,9 +4844,14 @@ export const getMiInstitucion = async (): Promise<Institucion | null> => {
 
   const session = getSession();
 
-  if (!session?.user?.institucionId) return null;
+  if (!session?.user) return null;
 
-  return getInstitucionById(session.user.institucionId);
+  const user: any = session.user as any;
+  const rawId = user?.institucionId ?? user?.institucion_id ?? user?.institucion?.id ?? (session as any)?.context?.institucionId ?? (session as any)?.context?.institucion_id;
+  const id = Number(rawId);
+  if (!id || Number.isNaN(id)) return null;
+
+  return getInstitucionById(id);
 
 };
 
@@ -5416,6 +5342,106 @@ export const createDocente = crearDocente;
 export const updateDocente = actualizarDocente;
 
 export const deleteDocente = eliminarDocente;
+
+// ============================================
+// SISTEMA DE RECUPERACIÓN DE CONTRASEÑA CON OTP
+// ============================================
+
+export const solicitarCodigoRecuperacion = async (identifier: string): Promise<{ success: boolean; message?: string; error?: string }> => {
+  try {
+    const response = await httpService.post('/password-reset/solicitar', {
+      identifier,
+      tipo: 'email'
+    });
+
+    if (response.data?.success) {
+      return { 
+        success: true, 
+        message: response.data.message 
+      };
+    } else {
+      return { 
+        success: false, 
+        error: response.data?.message || 'No se pudo enviar el código' 
+      };
+    }
+  } catch (error: any) {
+    return { 
+      success: false, 
+      error: error.response?.data?.message || 'Error de conexión' 
+    };
+  }
+};
+
+export const verificarCodigoOTP = async (codigo: string): Promise<{ success: boolean; message?: string; error?: string; data?: any }> => {
+  try {
+    const response = await httpService.post('/password-reset/verificar-codigo', {
+      codigo,
+      tipo: 'email'
+    });
+
+    if (response.data?.success) {
+      return { 
+        success: true, 
+        message: response.data.message,
+        data: response.data.data
+      };
+    } else {
+      return { 
+        success: false, 
+        error: response.data?.message || 'Código inválido o expirado' 
+      };
+    }
+  } catch (error: any) {
+    return { 
+      success: false, 
+      error: error.response?.data?.message || 'Error de conexión' 
+    };
+  }
+};
+
+export const verificarCodigoYCambiarContrasena = async (codigo: string, nuevaContrasena: string): Promise<{ success: boolean; message?: string; error?: string }> => {
+  try {
+    // AGREGADO: Log para debugging del endpoint
+    console.log('[API] ENVIANDO CAMBIO DE CONTRASEÑA:', {
+      codigo: codigo,
+      nuevaContrasena: nuevaContrasena,
+      nuevaContrasenaLength: nuevaContrasena.length,
+      hasSpaces: nuevaContrasena !== nuevaContrasena.trim(),
+      charCodes: Array.from(nuevaContrasena).map(c => c.charCodeAt(0)),
+      endpoint: '/password-reset/verificar'
+    });
+
+    const response = await httpService.post('/password-reset/verificar', {
+      codigo,
+      nuevaContrasena,
+      tipo: 'email'
+    });
+
+    console.log('[API] RESPUESTA CAMBIO DE CONTRASEÑA:', {
+      success: response.data?.success,
+      message: response.data?.message,
+      status: response.status
+    });
+
+    if (response.data?.success) {
+      return { 
+        success: true, 
+        message: response.data.message 
+      };
+    } else {
+      return { 
+        success: false, 
+        error: response.data?.message || 'Error al cambiar contraseña' 
+      };
+    }
+  } catch (error: any) {
+    return { 
+      success: false, 
+      error: error.response?.data?.message || 'Error de conexión' 
+    };
+  }
+};
 
 export const getGrados = getGradosCRUD;
 

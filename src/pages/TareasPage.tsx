@@ -782,9 +782,7 @@ export default function TareasPage() {
                         )}
                       </div>
                     </div>
-                    <span className="px-2 py-1 bg-teal-50 text-teal-700 border border-teal-200 rounded text-xs font-semibold">
-                      {tarea.vecesUtilizada || 0} usos
-                    </span>
+                    {/* Etiqueta de usos eliminada por solicitud */}
                   </div>
 
                   <p className="text-sm text-slate-700 mb-4 line-clamp-3">{tarea.descripcion}</p>
@@ -796,7 +794,6 @@ export default function TareasPage() {
                       <div className="col-span-2">📚 Todos los grados</div>
                     )}
                     <div>Calificación: <span className="font-medium">{tarea.tipoCalificacion}</span></div>
-                    <div>ID: <span className="font-mono">{tarea.id}</span></div>
                   </div>
 
                   <div className="flex items-center gap-2">

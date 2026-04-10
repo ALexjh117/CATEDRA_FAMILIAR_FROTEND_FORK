@@ -1,5 +1,6 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
+import ImageLightbox from '../components/ImageLightbox'
 
 const projectTeam = [
   {
@@ -14,7 +15,7 @@ const projectTeam = [
 const developers = [
   {
     name: 'Alex Jhoan Chaguendo',
-    role: 'Full Stack Developer',
+    role: 'Scrum Master & Full Stack Developer',
     github: 'Alexjh117',
     accent: 'bg-teal-100 text-teal-700',
     initial: 'A',
@@ -22,20 +23,64 @@ const developers = [
   {
     name: 'Brayan Hurtado',
     role: 'Full Stack Developer',
-    github: '',
+    github: 'YARE-CTRL',
     accent: 'bg-sky-100 text-sky-700',
     initial: 'B',
   },
   {
     name: 'Fernanda Gonzalez',
     role: 'Full Stack Developer',
-    github: '',
+    github: 'feeer-28',
     accent: 'bg-rose-100 text-rose-700',
     initial: 'F',
   },
 ]
 
+const collaborators = [
+  {
+    name: 'Maicol Estiven Daza',
+    role: 'Colaborador',
+    github: 'maikol269',
+    accent: 'bg-purple-100 text-purple-700',
+    initial: 'M',
+  },
+  {
+    name: 'Maria Paula Santa Cruz',
+    role: 'Colaboradora',
+    github: 'paulasantacruz',
+    accent: 'bg-pink-100 text-pink-700',
+    initial: 'M',
+  },
+]
+
 export default function EquipoDesarrolloPage(){
+  const [lightboxState, setLightboxState] = useState({
+    isOpen: false,
+    imageSrc: '',
+    imageAlt: '',
+    personName: '',
+    personRole: ''
+  });
+
+  const openLightbox = (imageSrc: string, imageAlt: string, personName: string, personRole: string) => {
+    setLightboxState({
+      isOpen: true,
+      imageSrc,
+      imageAlt,
+      personName,
+      personRole
+    });
+  };
+
+  const closeLightbox = () => {
+    setLightboxState({
+      isOpen: false,
+      imageSrc: '',
+      imageAlt: '',
+      personName: '',
+      personRole: ''
+    });
+  };
   return (
     <div className="min-h-screen bg-[#f6f3ef] text-gray-900">
       <header className="sticky top-0 z-50 border-b border-black/5 bg-white/90 backdrop-blur-lg shadow-sm">
@@ -132,7 +177,25 @@ export default function EquipoDesarrolloPage(){
                   <img 
                     src="/src/assets/img_familias/foto-git-3.png" 
                     alt="Foto de Alex Jhoan"
-                    className="h-20 w-20 shrink-0 rounded-full object-cover border-4 border-teal-200"
+                    className="h-20 w-20 shrink-0 rounded-full object-cover border-4 border-teal-200 cursor-pointer transition-transform hover:scale-105 hover:shadow-lg"
+                    onClick={() => openLightbox(
+                      "/src/assets/img_familias/foto-git-3.png",
+                      "Foto de Alex Jhoan",
+                      member.name,
+                      member.role
+                    )}
+                  />
+                ) : member.name === 'Fernanda Gonzalez' ? (
+                  <img 
+                    src="/src/assets/img_familias/fer-git.png" 
+                    alt="Foto de Fernanda"
+                    className="h-20 w-20 shrink-0 rounded-full object-cover border-4 border-rose-200 cursor-pointer transition-transform hover:scale-105 hover:shadow-lg"
+                    onClick={() => openLightbox(
+                      "/src/assets/img_familias/fer-git.png",
+                      "Foto de Fernanda",
+                      member.name,
+                      member.role
+                    )}
                   />
                 ) : (
                   <div className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-full text-3xl font-bold ${member.accent}`}>
@@ -158,7 +221,74 @@ export default function EquipoDesarrolloPage(){
             ))}
           </div>
         </section>
+
+        <section className="mx-auto mt-10 w-full max-w-6xl pb-8">
+          <h2 className="text-2xl font-display font-bold text-gray-900">Colaboradores</h2>
+          <div className="mt-6 space-y-6">
+            {collaborators.map((member) => (
+              <article key={member.name} className="flex items-center gap-4 border-b border-black/10 py-5 transition">
+                {/* Fotos de colaboradores */}
+                {member.name === 'Maicol Estiven Daza' ? (
+                  <img 
+                    src="/src/assets/img_familias/maicol.jpeg" 
+                    alt="Foto de Maicol Estiven"
+                    className="h-20 w-20 shrink-0 rounded-full object-cover border-4 border-purple-200 cursor-pointer transition-transform hover:scale-105 hover:shadow-lg"
+                    onClick={() => openLightbox(
+                      "/src/assets/img_familias/maicol.jpeg",
+                      "Foto de Maicol Estiven",
+                      member.name,
+                      member.role
+                    )}
+                  />
+                ) : member.name === 'Maria Paula Santa Cruz' ? (
+                  <img 
+                    src="/src/assets/img_familias/paula.jpeg" 
+                    alt="Foto de Maria Paula"
+                    className="h-20 w-20 shrink-0 rounded-full object-cover border-4 border-pink-200 cursor-pointer transition-transform hover:scale-105 hover:shadow-lg"
+                    onClick={() => openLightbox(
+                      "/src/assets/img_familias/paula.jpeg",
+                      "Foto de Maria Paula",
+                      member.name,
+                      member.role
+                    )}
+                  />
+                ) : (
+                  <div className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-full text-3xl font-bold ${member.accent}`}>
+                    {member.initial}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <h3 className="text-xl font-bold text-gray-900">{member.name}</h3>
+                  <p className="text-base text-gray-600">{member.role}</p>
+                  {member.github ? (
+                    <p className="mt-1 text-sm text-gray-500">
+                      GitHub:{' '}
+                      <a
+                        href={`https://github.com/${member.github}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-teal-700 underline hover:text-teal-800"
+                      >
+                        @{member.github}
+                      </a>
+                    </p>
+                  ) : null}
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
       </main>
+
+      {/* Lightbox para imágenes */}
+      <ImageLightbox
+        isOpen={lightboxState.isOpen}
+        onClose={closeLightbox}
+        imageSrc={lightboxState.imageSrc}
+        imageAlt={lightboxState.imageAlt}
+        personName={lightboxState.personName}
+        personRole={lightboxState.personRole}
+      />
     </div>
   )
 }

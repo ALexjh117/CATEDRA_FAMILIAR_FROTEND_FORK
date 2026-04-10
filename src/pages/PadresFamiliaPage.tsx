@@ -31,8 +31,45 @@ export default function PadresFamiliaPage() {
       } else if (userRole === 'orientador') {
         data = await getAcudientesOrientador();
       }
-      
-      setAcudientes(Array.isArray(data) ? data : []);
+      // Filtrar por institución del usuario (por seguridad del lado cliente)
+      const instId = (session as any)?.context?.institucionId || user?.institucionId || (user as any)?.institucion;
+      const pref = instId ? `${String(instId)}_` : '';
+
+      const filtrados = Array.isArray(data) ? (data as any[]).filter((a) => {
+        // Si el acudiente tiene institucionId explícito
+        const aInst = a?.institucionId ?? a?.institucion_id ?? a?.institucion?.id;
+        if (aInst != null && instId != null) {
+          return Number(aInst) === Number(instId);
+        }
+        // Si trae estudiantes vinculados con curso como '58_4A' o estructura similar
+        const estudiantes = a?.estudiantes || a?.estudiantesVinculados || [];
+        if (pref && Array.isArray(estudiantes) && estudiantes.length > 0) {
+          return estudiantes.some((e: any) => {
+            const cursoNombre = e?.cursoNombre || e?.curso || e?.curso_nombre || e?.curso?.nombre;
+            return typeof cursoNombre === 'string' && cursoNombre.startsWith(pref);
+          });
+        }
+        // Si no hay información, por defecto incluir (evitar vaciar en ambientes sin dato)
+        return true;
+      }) : [];
+
+      // Además, normalizar totalEstudiantes si tenemos la lista filtrada
+      const conTotales = filtrados.map((a: any) => {
+        const estudiantes = a?.estudiantes || a?.estudiantesVinculados || [];
+        const estudiantesOk = Array.isArray(estudiantes)
+          ? estudiantes.filter((e: any) => {
+              const cursoNombre = e?.cursoNombre || e?.curso || e?.curso_nombre || e?.curso?.nombre;
+              return !pref || (typeof cursoNombre === 'string' ? cursoNombre.startsWith(pref) : true);
+            })
+          : [];
+        return {
+          ...a,
+          estudiantesVinculados: estudiantesOk,
+          totalEstudiantes: a?.totalEstudiantes != null ? a.totalEstudiantes : estudiantesOk.length,
+        };
+      });
+
+      setAcudientes(conTotales);
     } catch (error) {
       console.error('Error al cargar acudientes:', error);
       setAcudientes([]);

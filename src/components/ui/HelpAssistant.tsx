@@ -5,6 +5,7 @@ type Msg = { id: string; from: 'bot' | 'user'; text: string; actions?: Array<{la
 
 export default function HelpAssistant(){
   const [open, setOpen] = useState(false)
+  const [muted, setMuted] = useState(false)
   const [input, setInput] = useState('')
   const [msgs, setMsgs] = useState<Msg[]>([])
   const scRef = useRef<HTMLDivElement>(null)
@@ -56,6 +57,19 @@ export default function HelpAssistant(){
     scRef.current?.scrollTo({ top: scRef.current.scrollHeight })
   }, [msgs])
 
+  // Atenuar el botón cuando el cursor esté cerca de la esquina inferior derecha
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      const dx = window.innerWidth - (e.clientX || 0)
+      const dy = window.innerHeight - (e.clientY || 0)
+      // Zona de 260x160px desde la esquina inferior derecha
+      const inCorner = dx < 260 && dy < 160
+      setMuted(inCorner)
+    }
+    window.addEventListener('mousemove', onMove)
+    return () => window.removeEventListener('mousemove', onMove)
+  }, [])
+
   const reply = (q: string) => {
     const termN = normalize(q)
 
@@ -106,7 +120,7 @@ export default function HelpAssistant(){
     <>
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-50 inline-flex items-center gap-2 px-4 py-3 rounded-2xl shadow-lg bg-teal-600 hover:bg-teal-700 text-white font-semibold"
+        className={`fixed bottom-6 right-6 z-50 inline-flex items-center gap-2 px-4 py-3 rounded-2xl shadow-lg bg-teal-600 hover:bg-teal-700 text-white font-semibold transition-opacity ${muted ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}
         title="Ayuda rápida"
         aria-label="Abrir ayuda"
       >

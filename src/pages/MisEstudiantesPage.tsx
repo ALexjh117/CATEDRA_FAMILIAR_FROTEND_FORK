@@ -5,6 +5,8 @@ import { getSession } from '../api/endpoints';
 import TeacherLayout from '../components/TeacherLayout';
 import Button from '../components/ui/Button';
 import EmptyState404 from '../components/ui/EmptyState404';
+import { HiOutlineArrowPath, HiOutlineExclamationTriangle, HiOutlineXMark, HiOutlinePhone, HiOutlineEnvelope, HiOutlineXCircle } from 'react-icons/hi2';
+import { PiGenderMaleBold, PiGenderFemaleBold } from 'react-icons/pi';
 
 interface Estudiante {
   id: number;
@@ -52,6 +54,8 @@ export default function MisEstudiantesPage() {
   const [cursoSeleccionado, setCursoSeleccionado] = useState<string>('');
   const [cursosUnicos, setCursosUnicos] = useState<string[]>([]);
   const [estudianteSeleccionado, setEstudianteSeleccionado] = useState<Estudiante | null>(null);
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   // Agregar un error boundary para capturar errores
   const [hasError, setHasError] = useState(false);
@@ -64,15 +68,21 @@ export default function MisEstudiantesPage() {
     try {
       const response = await listarEstudiantesDocente();
       const estudiantesData = response?.data || [];
+      // Filtrar por institución a partir del prefijo en el nombre del curso (p.ej. "58_")
+      const institucionId = (session as any)?.context?.institucionId || (session as any)?.user?.institucionId || (session as any)?.user?.institucion;
+      const prefijo = institucionId ? `${String(institucionId)}_` : '';
+      const estudiantesFiltradosPorInst = prefijo
+        ? (estudiantesData as Estudiante[]).filter(e => e?.curso?.nombre?.startsWith(prefijo))
+        : (estudiantesData as Estudiante[]);
       
-      setEstudiantes(estudiantesData);
+      setEstudiantes(estudiantesFiltradosPorInst);
       
       // Extraer cursos únicos - manejar casos donde curso sea null/undefined
       const cursos = Array.from(new Set(
-        estudiantesData
+        (estudiantesFiltradosPorInst as Estudiante[])
           .filter((e: Estudiante) => e.curso && e.curso.nombre)
           .map((e: Estudiante) => e.curso.nombre)
-      ));
+      )) as string[];
       setCursosUnicos(cursos);
       
     } catch (err: any) {
@@ -93,13 +103,18 @@ export default function MisEstudiantesPage() {
     loadEstudiantes();
   }, [session?.user?.id]); // Solo recargar si cambia el usuario (no en cada render)
 
+  // Resetear página al cambiar filtros o datos
+  useEffect(() => {
+    setPage(1);
+  }, [busqueda, cursoSeleccionado, estudiantes.length]);
+
   // Si hay un error crítico, mostrar pantalla de error
   if (hasError) {
     return (
       <TeacherLayout title="Mis Estudiantes">
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
-            <div className="text-6xl mb-4">⚠️</div>
+            <div className="text-6xl mb-4 text-amber-500 flex items-center justify-center"><HiOutlineExclamationTriangle /></div>
             <h2 className="text-xl font-bold text-red-600 mb-2">Error inesperado</h2>
             <p className="text-slate-600 mb-4">{error}</p>
             <Button onClick={loadEstudiantes} className="bg-red-600 hover:bg-red-700">
@@ -127,6 +142,9 @@ export default function MisEstudiantesPage() {
     return coincideBusqueda && coincideCurso;
   });
 
+  const totalPages = Math.max(1, Math.ceil(estudiantesFiltrados.length / pageSize));
+  const estudiantesPaginados = estudiantesFiltrados.slice((page - 1) * pageSize, page * pageSize);
+
   const getEdad = (fechaNacimiento: string) => {
     try {
       if (!fechaNacimiento) return 'N/A';
@@ -148,7 +166,9 @@ export default function MisEstudiantesPage() {
   };
 
   const getSexoIcon = (sexo: string) => {
-    return sexo === 'M' ? '👦' : '👧';
+    return sexo === 'M'
+      ? <PiGenderMaleBold className="text-teal-600" size={26} />
+      : <PiGenderFemaleBold className="text-pink-600" size={26} />;
   };
 
   const getTipoDocumentoColor = (tipo: string) => {
@@ -158,6 +178,11 @@ export default function MisEstudiantesPage() {
       case 'CE': return 'bg-purple-100 text-purple-800';
       default: return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  const limpiarCurso = (nombre?: string) => {
+    if (!nombre) return '';
+    return nombre.replace(/^\d+_/, '');
   };
 
   if (loading) {
@@ -177,7 +202,7 @@ export default function MisEstudiantesPage() {
     return (
       <TeacherLayout title="Mis Estudiantes">
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
-          <div className="text-red-600 mb-2">❌ Error</div>
+          <div className="text-red-600 mb-2 flex items-center justify-center gap-2"><HiOutlineXCircle /><span>Error</span></div>
           <p className="text-red-800">{error}</p>
           <Button 
             onClick={loadEstudiantes} 
@@ -230,7 +255,7 @@ export default function MisEstudiantesPage() {
               >
                 <option value="">Todos los cursos</option>
                 {cursosUnicos.map(curso => (
-                  <option key={curso} value={curso}>{curso}</option>
+                  <option key={curso} value={curso}>{limpiarCurso(curso)}</option>
                 ))}
               </select>
             </div>
@@ -241,13 +266,13 @@ export default function MisEstudiantesPage() {
                 className="w-full"
                 variant="outline"
               >
-                🔄 Actualizar
+                <span className="inline-flex items-center gap-2"><HiOutlineArrowPath /><span>Actualizar</span></span>
               </Button>
             </div>
           </div>
         </div>
 
-        {/* Lista de estudiantes */}
+        {/* Lista de estudiantes como tabla */}
         {estudiantesFiltrados.length === 0 ? (
           <EmptyState404 
             title="No se encontraron estudiantes"
@@ -263,90 +288,78 @@ export default function MisEstudiantesPage() {
             }}
           />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {estudiantesFiltrados.map(estudiante => (
-              <div 
-                key={estudiante.id}
-                className="bg-white rounded-xl border border-slate-200 p-6 hover:shadow-lg transition-shadow cursor-pointer"
-                onClick={() => setEstudianteSeleccionado(estudiante)}
-              >
-                {/* Header de la tarjeta */}
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="text-3xl">{getSexoIcon(estudiante.sexo)}</div>
-                    <div>
-                      <h3 className="font-semibold text-slate-900">{estudiante.nombreCompleto}</h3>
-                      <p className="text-sm text-slate-600">{estudiante.curso.nombre}</p>
-                    </div>
-                  </div>
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${getTipoDocumentoColor(estudiante.tipoDocumento)}`}>
-                    {estudiante.tipoDocumento}
-                  </span>
-                </div>
-
-                {/* Información básica */}
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Documento:</span>
-                    <span className="font-medium">{estudiante.numeroDocumento}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Edad:</span>
-                    <span className="font-medium">{getEdad(estudiante.fechaNacimiento)} años</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Teléfono:</span>
-                    <span className="font-medium">{estudiante.telefono}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">EPS:</span>
-                    <span className="font-medium">{estudiante.eps}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-600">Grupo Sanguíneo:</span>
-                    <span className="font-medium">{estudiante.grupoSanguineo}{estudiante.rh}</span>
-                  </div>
-                </div>
-
-                {/* Acudientes */}
-                {estudiante.acudientes.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-slate-200">
-                    <p className="text-xs font-medium text-slate-600 mb-2">
-                      Acudientes ({estudiante.acudientes.length})
-                    </p>
-                    <div className="space-y-1">
-                      {estudiante.acudientes.slice(0, 2).map((acudiente, index) => (
-                        <div key={acudiente.id} className="text-xs">
-                          <span className="font-medium">{acudiente.nombres} {acudiente.apellidos}</span>
-                          <span className="text-slate-500 ml-1">({acudiente.parentesco})</span>
-                          {acudiente.esPrincipal && (
-                            <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-xs">Principal</span>
-                          )}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Estudiante</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Documento</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Edad</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Teléfono</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">EPS</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Grupo</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Curso</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Tipo</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-slate-600">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {estudiantesPaginados.map((estudiante) => (
+                    <tr key={estudiante.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-slate-600">
+                            {getSexoIcon(estudiante.sexo)}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="text-sm font-semibold text-slate-900 truncate">{estudiante.nombreCompleto}</div>
+                          </div>
                         </div>
-                      ))}
-                      {estudiante.acudientes.length > 2 && (
-                        <p className="text-xs text-slate-500">+{estudiante.acudientes.length - 2} más</p>
-                      )}
-                    </div>
-                  </div>
-                )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-700">{estudiante.numeroDocumento}</td>
+                      <td className="px-4 py-3 text-sm text-slate-700">{getEdad(estudiante.fechaNacimiento)} años</td>
+                      <td className="px-4 py-3 text-sm text-slate-700"><span className="inline-flex items-center gap-1"><HiOutlinePhone />{estudiante.telefono}</span></td>
+                      <td className="px-4 py-3 text-sm text-slate-700">{estudiante.eps}</td>
+                      <td className="px-4 py-3 text-sm text-slate-700">{estudiante.grupoSanguineo}{estudiante.rh}</td>
+                      <td className="px-4 py-3 text-sm text-slate-700">{limpiarCurso(estudiante.curso?.nombre)}</td>
+                      <td className="px-4 py-3 text-sm">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getTipoDocumentoColor(estudiante.tipoDocumento)}`}>{estudiante.tipoDocumento}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => setEstudianteSeleccionado(estudiante)}
+                          >
+                            Ver detalles
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
-                {/* Botón ver detalles */}
-                <div className="mt-4 pt-4 border-t border-slate-200">
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    className="w-full"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEstudianteSeleccionado(estudiante);
-                    }}
-                  >
-                    Ver detalles
-                  </Button>
-                </div>
-              </div>
-            ))}
+        {/* Controles de paginación */}
+        {estudiantesFiltrados.length > 0 && (
+          <div className="flex items-center justify-between gap-3 bg-white border border-slate-200 rounded-xl px-4 py-3">
+            <div className="text-sm text-slate-600">
+              Mostrando <span className="font-medium">{Math.min((page - 1) * pageSize + 1, estudiantesFiltrados.length)}</span>
+              -<span className="font-medium">{Math.min(page * pageSize, estudiantesFiltrados.length)}</span>
+              
+              
+ de <span className="font-medium">{estudiantesFiltrados.length}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>Anterior</Button>
+              <span className="text-sm text-slate-700">Página {page} de {totalPages}</span>
+              <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>Siguiente</Button>
+            </div>
           </div>
         )}
 
@@ -361,7 +374,7 @@ export default function MisEstudiantesPage() {
                     <div className="text-4xl">{getSexoIcon(estudianteSeleccionado.sexo)}</div>
                     <div>
                       <h2 className="text-xl font-bold text-slate-900">{estudianteSeleccionado.nombreCompleto}</h2>
-                      <p className="text-slate-600">{estudianteSeleccionado.curso.nombre}</p>
+                      <p className="text-slate-600">{limpiarCurso(estudianteSeleccionado.curso.nombre)}</p>
                     </div>
                   </div>
                   <Button 
@@ -369,7 +382,7 @@ export default function MisEstudiantesPage() {
                     size="sm"
                     onClick={() => setEstudianteSeleccionado(null)}
                   >
-                    ✕
+                    <HiOutlineXMark />
                   </Button>
                 </div>
 
@@ -450,8 +463,8 @@ export default function MisEstudiantesPage() {
                             <h4 className="font-medium text-slate-900">{acudiente.nombres} {acudiente.apellidos}</h4>
                             <p className="text-sm text-slate-600">{acudiente.parentesco}</p>
                             <div className="mt-2 space-y-1 text-sm">
-                              <p className="text-slate-600">📞 {acudiente.telefono}</p>
-                              <p className="text-slate-600">📧 {acudiente.correo}</p>
+                              <p className="text-slate-600 flex items-center gap-1"><HiOutlinePhone /> {acudiente.telefono}</p>
+                              <p className="text-slate-600 flex items-center gap-1"><HiOutlineEnvelope /> {acudiente.correo}</p>
                             </div>
                           </div>
                           {acudiente.esPrincipal && (
@@ -472,7 +485,7 @@ export default function MisEstudiantesPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
                       <div>
                         <span className="text-slate-600">Curso: </span>
-                        <span className="font-medium">{estudianteSeleccionado.curso.nombre}</span>
+                        <span className="font-medium">{limpiarCurso(estudianteSeleccionado.curso.nombre)}</span>
                       </div>
                       <div>
                         <span className="text-slate-600">Jornada: </span>
@@ -504,7 +517,7 @@ export default function MisEstudiantesPage() {
       <TeacherLayout title="Mis Estudiantes">
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
-            <div className="text-6xl mb-4">💥</div>
+            <div className="text-6xl mb-4 text-amber-500 flex items-center justify-center"><HiOutlineExclamationTriangle /></div>
             <h2 className="text-xl font-bold text-red-600 mb-2">Error de renderizado</h2>
             <p className="text-slate-600 mb-4">Ocurrió un error al mostrar la página</p>
             <Button onClick={() => window.location.reload()} className="bg-red-600 hover:bg-red-700">

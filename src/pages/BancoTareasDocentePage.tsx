@@ -145,6 +145,11 @@ export default function BancoTareasDocentePage(){
 
   };
 
+  const limpiarCurso = (nombre?: string) => {
+    if (!nombre) return '';
+    return String(nombre).replace(/^\d+_/, '');
+  };
+
 
 
   const normalizeCursos = (raw: any): CursoBackend[] => {
@@ -605,7 +610,18 @@ export default function BancoTareasDocentePage(){
 
       setItems(Array.isArray(tareasRes) ? tareasRes : []);
 
-      setCursos(Array.isArray(cursosRes) ? cursosRes : []);
+      // Filtrar cursos por institución si contamos con el ID o si el nombre tiene prefijo
+      let cursosLista = Array.isArray(cursosRes) ? cursosRes : [];
+      const instIdNum = Number(loadInstId || institucionIdFromCursos || 0) || 0;
+      if (instIdNum) {
+        const pref = `${String(instIdNum)}_`;
+        cursosLista = (cursosLista as any[]).filter((c: any) => (
+          (c?.institucionId && Number(c.institucionId) === instIdNum) ||
+          (typeof c?.nombre === 'string' && c.nombre.startsWith(pref))
+        ));
+      }
+
+      setCursos(cursosLista as any);
 
       setPeriodos(Array.isArray(periodosRes) ? periodosRes : []);
 
@@ -1141,11 +1157,9 @@ export default function BancoTareasDocentePage(){
 
                       <th className="w-[16%] px-4 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Institución</th>
 
-                      <th className="w-[22%] px-4 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Resumen</th>
+                      <th className="w-[28%] px-4 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Resumen</th>
 
-                      <th className="w-[6%] px-4 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Usos</th>
-
-                      <th className="w-[12%] px-4 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Acciones</th>
+                      <th className="w-[16%] px-4 py-4 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Acciones</th>
 
                     </tr>
 
@@ -1215,7 +1229,7 @@ export default function BancoTareasDocentePage(){
 
                           </td>
 
-                          <td className="px-4 py-5 text-sm text-slate-600">
+                          <td className="px-4 py-5 text-sm text-slate-600 md:w-[28%]">
 
                             <div className="max-w-[320px] space-y-2">
 
@@ -1232,12 +1246,6 @@ export default function BancoTareasDocentePage(){
                               ) : null}
 
                             </div>
-
-                          </td>
-
-                          <td className="px-4 py-5">
-
-                            <div className="inline-flex min-w-[56px] items-center justify-center rounded-xl bg-slate-100 px-2.5 py-2 text-sm font-semibold text-slate-700">{usos}</div>
 
                           </td>
 
@@ -1465,7 +1473,7 @@ export default function BancoTareasDocentePage(){
 
                       <input type="checkbox" className="mr-2" checked={cursoIds.includes(c.id)} onChange={()=> toggleCurso(c.id)} />
 
-                      {c.nombre}
+                      {limpiarCurso(c.nombre as any)}
 
                     </label>
 

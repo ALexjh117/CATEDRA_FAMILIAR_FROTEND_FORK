@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import ReCAPTCHA from 'react-google-recaptcha';
 import { useNavigate, Link } from 'react-router-dom';
-import { loginUnicoMultiRol } from '../api/endpointsDocente-orinetador';
+import { loginUnicoMultiRol, getDashboardByRol } from '../api/endpointsDocente-orinetador';
 import FormFieldInput from '../components/ui/FormFieldInput';
 import Button from '../components/ui/Button';
-import ForgotPasswordModal from '../components/ForgotPasswordModal';
+import PasswordRecoveryModal from '../components/PasswordRecoveryModal';
 import ForceChangePasswordModal from '../components/ForceChangePasswordModal';
 import { isBypassValidationsEnabled } from '../utils/dev';
 
@@ -68,7 +68,7 @@ export default function LoginPage() {
     recordar: false,
   });
   const bypassValidations = isBypassValidationsEnabled();
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [showPasswordRecovery, setShowPasswordRecovery] = useState(false);
   const [showForceChange, setShowForceChange] = useState(false);
   const [userToChange, setUserToChange] = useState<{id: number; nombre: string} | null>(null);
   const [isOnline, setIsOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
@@ -86,30 +86,20 @@ export default function LoginPage() {
 
   const domainType = getDomainType(formData.correo);
 
-  const navigateByRole = (rol?: string) => {
-    switch (rol) {
-      case 'admin':
-      case 'admin_sistema':
-        navigate('/dashboard/admin');
-        return;
-      case 'rector':
-        navigate('/dashboard/rector');
-        return;
-      case 'coordinador':
-        navigate('/dashboard/coordinador');
-        return;
-      case 'orientador':
-        navigate('/dashboard/orientador');
-        return;
-      case 'docente_aula':
-      case 'docente':
-        navigate('/dashboard/docente');
-        return;
-      case 'acudiente':
-        navigate('/dashboard/acudiente');
-        return;
-      default:
-        navigate('/dashboard/docente');
+  const navigateByRole = (rolId?: number) => {
+    if (!rolId) {
+      // Debug removido
+      navigate('/dashboard/docente'); // fallback
+      return;
+    }
+    
+    try {
+      const dashboard = getDashboardByRol(rolId);
+      // Debug removido
+      navigate(dashboard);
+    } catch (error) {
+      // Debug removido
+      navigate('/dashboard/docente'); // fallback
     }
   };
 
@@ -153,11 +143,40 @@ export default function LoginPage() {
     const name = target.name;
     const value = target.value;
     const checked = (target as HTMLInputElement).type === 'checkbox' ? (target as HTMLInputElement).checked : false;
+    
+    // Debug removido
+    
     setFormData(prev => ({
       ...prev,
       [name]: (target as HTMLInputElement).type === 'checkbox' ? checked : value,
     }));
     setError('');
+  };
+
+  const resetForm = () => {
+    setFormData({
+      correo: '',
+      password: '',
+      recordar: false,
+    });
+    setError('');
+    setCaptchaToken(null);
+  };
+
+  // Función para manejar el cierre exitoso del modal de recuperación
+  const handlePasswordRecoverySuccess = () => {
+    // Limpiar el formulario para evitar que queden valores residuales
+    resetForm();
+    setShowPasswordRecovery(false);
+    
+    // Forzar un re-render del componente para limpiar cualquier estado residual
+    setTimeout(() => {
+      // Dar focus al campo de correo para que el usuario pueda empezar de nuevo
+      const emailInput = document.querySelector('input[name="correo"]') as HTMLInputElement;
+      if (emailInput) {
+        emailInput.focus();
+      }
+    }, 100);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -176,6 +195,8 @@ export default function LoginPage() {
       try {
         console.log('[UI][LOGIN] Enviando credenciales', {
           correo: formData.correo,
+          password: passwordTrim, // <-- AGREGADO: Log exacto de la contraseña enviada
+          passwordOriginal: formData.password, // <-- AGREGADO: Password original sin trim
           recordar: formData.recordar,
           tieneCaptcha: Boolean(captchaToken),
           captchaLen: captchaToken ? String(captchaToken).length : 0,
@@ -186,16 +207,45 @@ export default function LoginPage() {
       const captchaToSend = bypassValidations ? (captchaToken || 'dev-bypass-token') : captchaToken;
       const correoTrim = (formData.correo || '').trim();
       const passwordTrim = (formData.password || '').trim();
+      
+      // Debug removido
+      
       const result = await loginUnicoMultiRol(correoTrim, passwordTrim, captchaToSend);
 
       if (result.success && result.user) {
         try {
-          console.log('[UI][LOGIN] Login exitoso', {
-            rol: result.user.rol,
-            id: result.user.id,
-            nombre: result.user.nombre
-          });
+          // Debug removido
         } catch {}
+        
+        // Guardar sesión completa con rolId
+        const baseSession: any = {
+          user: result.user,
+          token: result.token,
+          isPreview: false,
+          loginTime: new Date().toISOString(),
+          estudiantes: result.estudiantes || [] // Guardar estudiantes asociados (para acudientes)
+        };
+
+        // Incluir context si viene del backend
+        if ((result as any)?.context) {
+          baseSession.context = (result as any).context;
+        }
+        // Asegurar context.institucionId desde user si no vino
+        if (result.user?.institucionId && !baseSession.context?.institucionId) {
+          baseSession.context = {
+            ...(baseSession.context || {}),
+            institucionId: result.user.institucionId
+          };
+        }
+
+        const sessionData = baseSession;
+        
+        // Debug removido
+        
+        localStorage.setItem('session', JSON.stringify(sessionData));
+        
+        // Debug removido
+        
         // Verificar si debe cambiar contraseña
         if (result.user.debe_cambiar_contrasena) {
           setUserToChange({
@@ -207,8 +257,23 @@ export default function LoginPage() {
           return;
         }
         
-        // Redirigir según el rol
-        navigateByRole(result.user.rol);
+        // Redirigir según el rolId del backend
+        // Si no tenemos rolId, intentar mapear desde el rol string
+        let rolIdToUse = result.user.rolId;
+        if (!rolIdToUse && result.user.rol) {
+          const rolMap: Record<string, number> = {
+            'admin_sistema': 1,
+            'admin': 7,
+            'rector': 2,
+            'coordinador': 3,
+            'orientador': 4,
+            'docente_aula': 5,
+            'acudiente': 6
+          };
+          rolIdToUse = rolMap[result.user.rol];
+        }
+        
+        navigateByRole(rolIdToUse);
       } else {
         try {
           console.warn('[UI][LOGIN] Fallo login', {
@@ -216,7 +281,16 @@ export default function LoginPage() {
             correo: formData.correo
           });
         } catch {}
-        setError(result.error || result.message || 'Error al iniciar sesión');
+        
+        // Manejar específicamente errores de rol no autorizado
+        const errorMessage = result.error || result.message || 'Error al iniciar sesión';
+        if (errorMessage.includes('Acceso denegado') || errorMessage.includes('rol no autorizado')) {
+          setError(`No puedes usar esta opción de login. ${errorMessage}`);
+        } else if (errorMessage.includes('incorrectos') || errorMessage.includes('credenciales')) {
+          setError('Correo o contraseña incorrectos');
+        } else {
+          setError(errorMessage);
+        }
       }
     } catch (err) {
       try {
@@ -315,19 +389,15 @@ export default function LoginPage() {
                 <div>Cargando estado offline...</div>
               ) : offlineSession && !isOfflineSessionExpired(offlineSession) ? (
                 <div className="space-y-2">
-                  <div className="font-semibold text-slate-900">Sesión disponible sin internet</div>
-                  <div>Usuario: <span className="font-medium">{offlineSession.email}</span></div>
-                  <div>Rol: <span className="font-medium">{offlineSession.tipo}</span></div>
-                  <div>Institución: <span className="font-medium">{offlineSession.institucionId ?? offlineSession.datosEspecificos?.institucionId ?? 'No disponible'}</span></div>
-                  <div>Expira: <span className="font-medium">{offlineSession.expiresAt}</span></div>
+                  <div className="font-semibold text-slate-900">Sesión offline disponible</div>
                   <div className="text-xs text-slate-500">
-                    Aquí se guarda quién eres, tu rol y tu institución para soportar entregas y sincronización sin internet.
+                    Tu dispositivo puede funcionar sin internet. Por privacidad no mostramos datos personales en esta vista.
                   </div>
                   <Link
                     to="/lab/offline"
                     className="mt-2 flex w-full items-center justify-center rounded-xl border border-teal-200 bg-teal-50 px-4 py-2.5 text-sm font-semibold text-teal-700 transition hover:bg-teal-100"
                   >
-                    Abrir laboratorio offline
+                    Gestionar modo offline
                   </Link>
                   {!isOnline && (
                     <button
@@ -416,16 +486,12 @@ export default function LoginPage() {
                 />
                 <span className="text-sm text-gray-600">Recordarme</span>
               </label>
-              <a 
-                href="#" 
-                onClick={(e) => {
-                  e.preventDefault();
-                  setShowForgotPassword(true);
-                }}
+              <Link 
+                to="/forgot-password"
                 className="text-sm text-teal-600 hover:text-teal-700 font-medium"
               >
                 ¿Olvidaste tu contraseña?
-              </a>
+              </Link>
             </div>
 
             {error && (
@@ -489,10 +555,10 @@ export default function LoginPage() {
         </div>
       </div>
       
-      {/* Modal Recuperar Contraseña */}
-      <ForgotPasswordModal
-        isOpen={showForgotPassword}
-        onClose={() => setShowForgotPassword(false)}
+      {/* Modal de Recuperación de Contraseña (antiguo) */}
+      <PasswordRecoveryModal
+        isOpen={showPasswordRecovery}
+        onClose={handlePasswordRecoverySuccess}
       />
       
       {/* Modal Cambio Forzado de Contraseña */}

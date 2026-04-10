@@ -95,7 +95,10 @@ export default function FormFieldInput({
           type={inputType}
           placeholder={placeholder}
           value={value}
-          onChange={onChange}
+          onChange={(e) => {
+            // Debug removido
+            onChange(e);
+          }}
           disabled={disabled}
           className={baseClasses}
           required={required}

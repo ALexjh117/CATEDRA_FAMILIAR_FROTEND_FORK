@@ -8,6 +8,7 @@ import {
   getGradosCRUD,
   getDocentesCRUD
 } from '../api/endpoints';
+import httpService from '../api/httpService';
 import DashboardLayout from '../components/DashboardLayout';
 import OrientadorLayout from '../components/orientador-acudiente/OrientadorLayout';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
@@ -28,7 +29,7 @@ import {
 interface Curso {
   id: number;
   nombre: string;
-  jornada: 'Mañana' | 'Tarde' | 'Completa';
+  jornada: 'Mañana' | 'Tarde' | 'Completa' | 'Noche' | 'Única' | 'Sabatina' | 'Dominical' | string;
   gradoId: number;
   grado?: { id: number; nombre: string };
   docenteId?: number;
@@ -73,9 +74,24 @@ export default function CursosPage() {
   const [formCurso, setFormCurso] = useState({
     nombre: '',
     gradoId: 0,
-    jornada: 'Mañana' as 'Mañana' | 'Tarde' | 'Completa',
+    jornada: 'Mañana' as 'Mañana' | 'Tarde' | 'Completa' | 'Noche' | 'Única' | 'Sabatina' | 'Dominical',
     docenteId: undefined as number | undefined
   });
+
+  // Orientador: seleccionar o crear nuevo grado desde el modal
+  const [gradoMode, setGradoMode] = useState<'existente' | 'nuevo'>('existente');
+  const [nuevoGrado, setNuevoGrado] = useState<{ nombre: string; orden: number | '' ; descripcion: string }>({
+    nombre: '',
+    orden: '',
+    descripcion: ''
+  });
+  const [creatingGrado, setCreatingGrado] = useState(false);
+
+  // Utilidad global en el componente: limpiar prefijos como "59_" o "59-" en nombres
+  const sanitizeNombre = (n: any): string => {
+    const s = String(n ?? '').trim();
+    return s.replace(/^\s*\d+\s*[_-]\s*/, '').trim();
+  };
 
   useEffect(() => {
     loadData();
@@ -94,9 +110,20 @@ export default function CursosPage() {
         institucionId: userInstitucionId
       });
 
+      const esOrientador = user?.rol === 'orientador';
       const [cursosData, gradosData, docentesData] = await Promise.all([
         getCursosCRUD(),
-        getGradosCRUD(),
+        (async () => {
+          if (!esOrientador) return await getGradosCRUD();
+          try {
+            const resp = await httpService.get<any>('/orientadores/grados');
+            const body = (resp as any)?.data ?? resp;
+            const list = Array.isArray(body?.data) ? body.data : (Array.isArray(body) ? body : []);
+            return list;
+          } catch {
+            return await getGradosCRUD();
+          }
+        })(),
         getDocentesCRUD()
       ]);
       
@@ -124,8 +151,52 @@ export default function CursosPage() {
         institucionId: userInstitucionId
       });
 
-      setCursos(cursosFiltrados);
-      setGrados(Array.isArray(gradosData) ? gradosData : []);
+      // Normalizar jornada a formato título
+      const normalizeJornada = (j: any): 'Mañana' | 'Tarde' | 'Completa' => {
+        const v = String(j ?? '').toLowerCase();
+        if (v.includes('mañ')) return 'Mañana';
+        if (v.includes('man')) return 'Mañana';
+        if (v.includes('tar')) return 'Tarde';
+        if (v.includes('com')) return 'Completa';
+        return (j as any) || 'Mañana';
+      };
+
+      const gradosLista = Array.isArray(gradosData)
+        ? gradosData.map((g: any) => ({ id: Number(g?.id ?? g?.gradoId ?? g?.grado_id ?? 0), nombre: sanitizeNombre(g?.nombre ?? g?.descripcion ?? g?.grado) }))
+        : [];
+
+      const cursosNorm = cursosFiltrados.map((curso: any) => {
+        const gradoIdRaw = (
+          curso?.gradoId ??
+          curso?.grado_id ??
+          curso?.idGrado ??
+          curso?.id_grado ??
+          curso?.grado?.id ??
+          curso?.grado?.gradoId ??
+          curso?.grado?.grado_id ??
+          0
+        );
+        const gradoId = Number(gradoIdRaw) || 0;
+        const gradoRef = gradosLista.find((g: any) => Number(g?.id) === Number(gradoId));
+        return {
+          ...curso,
+          nombre: sanitizeNombre(curso?.nombre),
+          jornada: normalizeJornada(curso?.jornada),
+          gradoId,
+          grado: gradoRef
+            ? { id: Number(gradoRef.id), nombre: String(gradoRef.nombre) }
+            : (
+                typeof curso?.grado === 'string'
+                  ? { id: Number(gradoId) || 0, nombre: sanitizeNombre(curso.grado) }
+                  : (curso?.grado?.nombre
+                      ? { id: Number(gradoId), nombre: sanitizeNombre(curso.grado.nombre) }
+                      : undefined)
+              ),
+        } as Curso;
+      });
+
+      setCursos(cursosNorm);
+      setGrados(gradosLista);
       setDocentes(Array.isArray(docentesData) ? docentesData : []);
     } catch (error) {
       console.error('Error cargando datos:', error);
@@ -148,6 +219,8 @@ export default function CursosPage() {
       jornada: 'Mañana',
       docenteId: undefined
     });
+    setGradoMode('existente');
+    setNuevoGrado({ nombre: '', orden: '', descripcion: '' });
     setModalCurso(true);
   };
 
@@ -168,9 +241,20 @@ export default function CursosPage() {
       return;
     }
 
-    if (!formCurso.gradoId) {
-      showToast('error', 'Debe seleccionar un grado');
-      return;
+    if (gradoMode === 'existente') {
+      if (!formCurso.gradoId) {
+        showToast('error', 'Debe seleccionar un grado');
+        return;
+      }
+    } else {
+      if (!nuevoGrado.nombre.trim()) {
+        showToast('error', 'El nombre del grado es obligatorio');
+        return;
+      }
+      if (!nuevoGrado.orden || Number(nuevoGrado.orden) <= 0) {
+        showToast('error', 'El orden del grado debe ser un número positivo');
+        return;
+      }
     }
 
     setSaving(true);
@@ -190,19 +274,77 @@ export default function CursosPage() {
           showToast('error', result.error || 'Error al actualizar');
         }
       } else {
-        const result = await crearCurso({
-          nombre: formCurso.nombre,
-          gradoId: formCurso.gradoId,
-          jornada: formCurso.jornada,
-          institucionId: user?.institucionId || 1,
-          docenteId: formCurso.docenteId
-        });
-        if (result.success) {
-          showToast('success', 'Curso creado correctamente');
-          setModalCurso(false);
-          loadData();
+        // Si es orientador, usar endpoint específico /orientadores/cursos con jornadas en minúsculas
+        const esOrientador = user?.rol === 'orientador';
+        const mapJornadaToBackend = (j: string) => {
+          const v = j.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+          // Aceptar variantes
+          if (v.startsWith('man')) return 'mañana';
+          if (v.startsWith('tar')) return 'tarde';
+          if (v.startsWith('noc')) return 'noche';
+          if (v.startsWith('uni')) return 'única';
+          if (v.startsWith('sab')) return 'sabatina';
+          if (v.startsWith('dom')) return 'dominical';
+          return v;
+        };
+
+        if (esOrientador) {
+          // Crear grado si el usuario seleccionó la opción de nuevo grado
+          let gradoIdToUse = formCurso.gradoId;
+          if (gradoMode === 'nuevo') {
+            try {
+              setCreatingGrado(true);
+              const bodyG: any = {
+                nombre: nuevoGrado.nombre.trim(),
+                orden: Number(nuevoGrado.orden),
+                ...(nuevoGrado.descripcion ? { descripcion: nuevoGrado.descripcion.trim() } : {})
+              };
+              const respG = await httpService.post('/orientadores/grados', bodyG);
+              const rawG = (respG as any)?.data ?? respG;
+              const createdG = rawG?.data ?? rawG;
+              const newId = Number(createdG?.id ?? createdG?.gradoId ?? 0);
+              if (!newId) throw new Error('No se pudo crear el grado');
+              gradoIdToUse = newId;
+              // Actualizar lista local de grados y seleccionar automáticamente
+              setGrados(prev => [{ id: newId, nombre: sanitizeNombre(nuevoGrado.nombre) }, ...prev]);
+              setFormCurso(prev => ({ ...prev, gradoId: newId }));
+            } catch (e: any) {
+              showToast('error', e?.message || 'No se pudo crear el grado');
+              return;
+            } finally {
+              setCreatingGrado(false);
+            }
+          }
+          const body = {
+            nombre: formCurso.nombre,
+            gradoId: gradoIdToUse,
+            jornada: mapJornadaToBackend(formCurso.jornada)
+          } as any;
+          const resp = await httpService.post('/orientadores/cursos', body);
+          const ok = (resp as any)?.data?.success !== false && ((resp as any)?.data?.data || (resp as any)?.success);
+          if (ok) {
+            showToast('success', 'Curso creado correctamente');
+            setModalCurso(false);
+            loadData();
+          } else {
+            const msg = (resp as any)?.data?.message || (resp as any)?.data?.error || 'Error al crear curso';
+            showToast('error', msg);
+          }
         } else {
-          showToast('error', result.error || 'Error al crear');
+          const result = await crearCurso({
+            nombre: formCurso.nombre,
+            gradoId: formCurso.gradoId,
+            jornada: formCurso.jornada,
+            institucionId: user?.institucionId || 1,
+            docenteId: formCurso.docenteId
+          });
+          if (result.success) {
+            showToast('success', 'Curso creado correctamente');
+            setModalCurso(false);
+            loadData();
+          } else {
+            showToast('error', result.error || 'Error al crear');
+          }
         }
       }
     } catch (error) {
@@ -363,7 +505,7 @@ export default function CursosPage() {
                   <div>
                     <h3 className="font-semibold text-gray-900 text-lg">{curso.nombre}</h3>
                     <p className="text-sm text-gray-500">
-                      {curso.grado?.nombre || `Grado ID: ${curso.gradoId}`}
+                      {curso.grado?.nombre ? sanitizeNombre(curso.grado.nombre) : 'Grado'}
                     </p>
                   </div>
                   <span className={`px-2 py-1 text-xs font-medium rounded-full ${getJornadaColor(curso.jornada)}`}>
@@ -430,21 +572,74 @@ export default function CursosPage() {
             required
           />
           
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Grado <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={formCurso.gradoId}
-              onChange={(e) => setFormCurso(prev => ({ ...prev, gradoId: Number(e.target.value) }))}
-              className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500"
-            >
-              <option value={0}>Seleccionar grado...</option>
-              {Array.isArray(grados) && grados.map(g => (
-                <option key={g.id} value={g.id}>{g.nombre}</option>
-              ))}
-            </select>
-          </div>
+          {user?.rol === 'orientador' ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <button type="button" className={`px-3 py-1.5 rounded-lg text-sm font-medium border ${gradoMode === 'existente' ? 'bg-teal-50 border-teal-300 text-teal-800' : 'bg-white border-slate-200 text-slate-700'}`} onClick={() => setGradoMode('existente')}>
+                  Seleccionar grado existente
+                </button>
+                <button type="button" className={`px-3 py-1.5 rounded-lg text-sm font-medium border ${gradoMode === 'nuevo' ? 'bg-teal-50 border-teal-300 text-teal-800' : 'bg-white border-slate-200 text-slate-700'}`} onClick={() => setGradoMode('nuevo')}>
+                  Crear nuevo grado
+                </button>
+              </div>
+              {gradoMode === 'existente' ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Grado <span className="text-red-500">*</span></label>
+                  <select
+                    value={formCurso.gradoId}
+                    onChange={(e) => setFormCurso(prev => ({ ...prev, gradoId: Number(e.target.value) }))}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value={0}>Seleccionar grado...</option>
+                    {Array.isArray(grados) && grados.map(g => (
+                      <option key={g.id} value={g.id}>{g.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-3">
+                  <FormFieldInput
+                    name="gradoNombre"
+                    label="Nombre del Grado"
+                    value={nuevoGrado.nombre}
+                    onChange={(e) => setNuevoGrado(prev => ({ ...prev, nombre: e.target.value }))}
+                    placeholder="Ej: Noveno Grado"
+                    required
+                  />
+                  <FormFieldInput
+                    name="gradoOrden"
+                    label="Orden"
+                    type="number"
+                    value={String(nuevoGrado.orden)}
+                    onChange={(e) => setNuevoGrado(prev => ({ ...prev, orden: e.target.value === '' ? '' : Number(e.target.value) }))}
+                    placeholder="Ej: 9"
+                    required
+                  />
+                  <FormFieldInput
+                    name="gradoDescripcion"
+                    label="Descripción (opcional)"
+                    value={nuevoGrado.descripcion}
+                    onChange={(e) => setNuevoGrado(prev => ({ ...prev, descripcion: e.target.value }))}
+                    placeholder="Descripción breve del grado"
+                  />
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Grado <span className="text-red-500">*</span></label>
+              <select
+                value={formCurso.gradoId}
+                onChange={(e) => setFormCurso(prev => ({ ...prev, gradoId: Number(e.target.value) }))}
+                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500"
+              >
+                <option value={0}>Seleccionar grado...</option>
+                {Array.isArray(grados) && grados.map(g => (
+                  <option key={g.id} value={g.id}>{g.nombre}</option>
+                ))}
+              </select>
+            </div>
+          )}
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -454,13 +649,17 @@ export default function CursosPage() {
               value={formCurso.jornada}
               onChange={(e) => setFormCurso(prev => ({ 
                 ...prev, 
-                jornada: e.target.value as 'Mañana' | 'Tarde' | 'Completa' 
+                jornada: e.target.value as any
               }))}
               className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500"
             >
               <option value="Mañana">Mañana</option>
               <option value="Tarde">Tarde</option>
               <option value="Completa">Completa</option>
+              <option value="Noche">Noche</option>
+              <option value="Única">Única</option>
+              <option value="Sabatina">Sabatina</option>
+              <option value="Dominical">Dominical</option>
             </select>
           </div>
           

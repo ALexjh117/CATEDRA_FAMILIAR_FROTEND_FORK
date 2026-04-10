@@ -39,6 +39,13 @@ export default function DashboardDocentePage() {
     images: [], 
     initialIndex: 0 
   });
+  const [tareasActivasCount, setTareasActivasCount] = useState(0);
+  const [porCalificarCount, setPorCalificarCount] = useState(0);
+
+  const limpiarCurso = (nombre?: string) => {
+    if (!nombre) return '';
+    return String(nombre).replace(/^\d+_/, '');
+  };
 
   // Form states removidos: creación de tareas no disponible para docente
 
@@ -50,6 +57,7 @@ export default function DashboardDocentePage() {
     setLoading(true);
     try {
       const docenteId = user?.id || 2;
+      const institucionId = (session as any)?.context?.institucionId || user?.institucionId || (user as any)?.institucion;
       
       const [tareasData, entregasData, cursosData, statsData] = await Promise.all([
         getTareasByDocente(docenteId),
@@ -58,10 +66,83 @@ export default function DashboardDocentePage() {
         getEstadisticasDocente(docenteId),
       ]);
 
-      setTareas(Array.isArray(tareasData) ? tareasData : []);
-      setEntregasPendientes(Array.isArray(entregasData) ? entregasData : []);
-      setCursos(Array.isArray(cursosData) ? cursosData : []);
+      const tareasAll = Array.isArray(tareasData) ? tareasData : [];
+      const entregasOk = Array.isArray(entregasData) ? entregasData : [];
+      setEntregasPendientes(entregasOk);
+
+      // Normalizar cursos y crear mapa por id
+      const cursosAll = Array.isArray(cursosData) ? cursosData : [];
+      const cursoMap: Record<string, any> = {};
+      for (const c of cursosAll as any[]) {
+        if (c && c.id != null) cursoMap[String(c.id)] = c;
+      }
+
+      // Filtro por institución en cursos
+      let cursosFiltrados = cursosAll as any[];
+      if (institucionId) {
+        const pref = `${String(institucionId)}_`;
+        cursosFiltrados = cursosFiltrados.filter((c: any) => (
+          (c?.institucionId && Number(c.institucionId) === Number(institucionId)) ||
+          (typeof c?.nombre === 'string' && c.nombre.startsWith(pref))
+        ));
+      }
+
+      // Filtro por institución en tareas (por curso asociado o por institucionId en la tarea)
+      let tareasOk = tareasAll as any[];
+      if (institucionId) {
+        const pref = `${String(institucionId)}_`;
+        tareasOk = tareasOk.filter((t: any) => {
+          const c = cursoMap[String(t.cursoId)];
+          if (c) {
+            if (c?.institucionId != null) return Number(c.institucionId) === Number(institucionId);
+            return typeof c?.nombre === 'string' && c.nombre.startsWith(pref);
+          }
+          // Si no existe el curso en el catálogo, mantener la tarea si está etiquetada con la misma institución
+          if (t?.institucionId != null) return Number(t.institucionId) === Number(institucionId);
+          return false;
+        });
+      }
+
+      // Limitar cursos a los usados por las tareas filtradas
+      const cursoIdsConTareas = new Set(tareasOk.map((t: any) => t.cursoId).filter(Boolean));
+      let cursosOk = cursosFiltrados.filter((c: any) => cursoIdsConTareas.has(c.id));
+      // Crear cursos sintéticos para ids que no están en el catálogo filtrado
+      const existentes = new Set(cursosOk.map((c: any) => String(c.id)));
+      const tareasPorCurso: Record<string, any> = {};
+      for (const t of tareasOk) {
+        const key = String(t.cursoId);
+        if (!tareasPorCurso[key]) tareasPorCurso[key] = t;
+      }
+      const sinteticos: any[] = [];
+      for (const id of cursoIdsConTareas) {
+        const k = String(id);
+        if (!existentes.has(k)) {
+          const t = tareasPorCurso[k];
+          const nombreCrudo = (t?.curso && (t.curso.nombre || t.curso.name)) || t?.cursoNombre || t?.cursoName || '';
+          sinteticos.push({ id, nombre: nombreCrudo });
+        }
+      }
+      if (sinteticos.length) {
+        cursosOk = [...cursosOk, ...sinteticos];
+      }
+
+      setTareas(tareasOk as any);
+      setCursos(cursosOk as any);
+      
       setEstadisticas(statsData || null);
+
+      // Derivar contadores para las cards
+      try {
+        const hoy = new Date();
+        const activas = tareasOk.filter((t: any) => {
+          const lim = new Date(t.fechaVencimiento || t.fechaLimite || t.fecha_limite || t.fechaLimite);
+          if (!isNaN(lim.getTime())) return lim >= hoy;
+          // Si no hay fecha, usar estado cuando exista
+          return (t.estado || '').toLowerCase() !== 'completada' && (t.estado || '').toLowerCase() !== 'cerrada';
+        }).length;
+        setTareasActivasCount(activas);
+        setPorCalificarCount(entregasOk.length);
+      } catch {}
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -143,7 +224,7 @@ export default function DashboardDocentePage() {
                 <IconClipboard className="text-white" size={22} />
               </div>
               <div>
-                <div className="text-2xl font-bold text-slate-800">{estadisticas?.tareasActivas || 0}</div>
+                <div className="text-2xl font-bold text-slate-800">{tareasActivasCount}</div>
                 <div className="text-sm text-slate-500 font-medium">Tareas Activas</div>
               </div>
             </div>
@@ -155,7 +236,7 @@ export default function DashboardDocentePage() {
                 <IconHourglass className="text-white" size={22} />
               </div>
               <div>
-                <div className="text-2xl font-bold text-slate-800">{entregasPendientes.length}</div>
+                <div className="text-2xl font-bold text-slate-800">{porCalificarCount}</div>
                 <div className="text-sm text-slate-500 font-medium">Por Calificar</div>
               </div>
             </div>
@@ -199,7 +280,7 @@ export default function DashboardDocentePage() {
                 return (
                   <div key={curso.id} className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-700">{curso.nombre}</span>
+                      <span className="text-sm font-medium text-gray-700">{limpiarCurso(curso.nombre as any)}</span>
                       <span className="text-sm text-gray-600">{porcentaje}%</span>
                     </div>
                     <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">

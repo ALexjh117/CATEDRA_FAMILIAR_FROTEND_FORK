@@ -6,6 +6,7 @@ import Button from './ui/Button';
 
 const TIMEOUT_DURATION = 2 * 60 * 60 * 1000; // 2 horas en milisegundos
 const WARNING_BEFORE = 5 * 60 * 1000; // Avisar 5 minutos antes
+const DISABLE_SESSION_TIMEOUT = true; // Deshabilitar expiración automática y modal
 
 export default function SessionTimeoutProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
@@ -14,6 +15,9 @@ export default function SessionTimeoutProvider({ children }: { children: React.R
   const [lastActivity, setLastActivity] = useState(Date.now());
 
   useEffect(() => {
+    if (DISABLE_SESSION_TIMEOUT) {
+      return;
+    }
     const session = getSession();
     if (!session) return;
 
@@ -92,7 +96,7 @@ export default function SessionTimeoutProvider({ children }: { children: React.R
       {children}
       
       <Modal
-        isOpen={showWarning}
+        isOpen={false}
         onClose={() => {}} // No se puede cerrar, debe elegir
         title="⏱️ Sesión por Expirar"
         size="sm"

@@ -18,7 +18,7 @@ import { getCursosPorInstitucion } from '../api/endpointsDocente-orinetador';
 
 import { getGradosPublic } from '../api/endpointsDocente-orinetador';
 
-import { listarBancoTareas, listarCursos, listarPeriodos, crearAsignacion, crearAsignacionOrientador } from '../api/docentes';
+import { listarBancoTareas, listarCursos, listarPeriodos, crearAsignacion, crearAsignacionOrientador, listarBancoTareasDocenteInstitucion } from '../api/docentes';
 
 
 
@@ -270,7 +270,29 @@ export default function AsignacionesPage() {
 
 
 
-        setTareasBanco(Array.isArray(tareas) ? tareas : []);
+        let tareasList = Array.isArray(tareas) ? tareas : [];
+        if (!Array.isArray(tareasList) || tareasList.length === 0) {
+          try {
+            const alt = await listarBancoTareasDocenteInstitucion(Number(instId || 0));
+            const tareasAlt = Array.isArray((alt as any)?.tareas) ? (alt as any).tareas : [];
+            if (tareasAlt.length) {
+              tareasList = tareasAlt
+                .map((t: any) => ({
+                  ...t,
+                  id: Number(t?.id ?? t?.tareaId ?? t?.tarea_id ?? 0),
+                  titulo: t?.titulo || t?.nombre || (t?.id ? `Tarea #${t.id}` : 'Tarea'),
+                }))
+                .filter((x: any) => Number.isFinite(x.id) && x.id > 0);
+            }
+          } catch {}
+        }
+
+        setTareasBanco(Array.isArray(tareasList) ? tareasList : []);
+
+        const sanitizeCursoNombre = (n: any): string => {
+          const s = String(n ?? '').trim();
+          return s.replace(/^\s*\d+\s*[_-]\s*/, '').trim();
+        };
 
         const cursosNorm = Array.isArray(cursosDocenteOrAll)
 
@@ -308,7 +330,9 @@ export default function AsignacionesPage() {
 
                 const nombreDerivado = [gradoNombre, grupo].filter(Boolean).join(' ');
 
-                const nombre = c?.nombre || c?.nombreCurso || c?.nombre_curso || c?.nombreCompleto || c?.nombre_completo || nombreDerivado || (gradoNombre || grupo) || (id ? `Curso #${id}` : 'Curso');
+                const rawNombre = c?.nombre || c?.nombreCurso || c?.nombre_curso || c?.nombreCompleto || c?.nombre_completo || nombreDerivado || (gradoNombre || grupo) || (id ? `Curso #${id}` : 'Curso');
+
+                const nombre = sanitizeCursoNombre(rawNombre);
 
                 return { id, nombre };
 
@@ -332,7 +356,7 @@ export default function AsignacionesPage() {
 
 
 
-        const primeraTareaId = Array.isArray(tareas) && tareas.length > 0 ? tareas[0].id : 0;
+        const primeraTareaId = Array.isArray(tareasList) && tareasList.length > 0 ? tareasList[0].id : 0;
 
         const primerPeriodoId = Array.isArray(periodosData) && periodosData.length > 0 ? periodosData[0].id : 0;
 
@@ -646,7 +670,7 @@ export default function AsignacionesPage() {
 
               className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-teal-500 outline-none"
 
-              value={bancoTareaId}
+              value={String(bancoTareaId || '')}
 
               onChange={(e) => setBancoTareaId(Number(e.target.value))}
 
@@ -654,7 +678,7 @@ export default function AsignacionesPage() {
 
               {tareasBanco.map((t: any) => (
 
-                <option key={t.id} value={t.id}>
+                <option key={t.id} value={String(t.id)}>
 
                   {t.titulo || `Tarea #${t.id}`}
 

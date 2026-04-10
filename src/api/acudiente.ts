@@ -115,9 +115,10 @@ export interface DetalleAsignacionMovil {
   } | null;
 }
 
-export async function listarTareasEstudiante(estudianteId: number, opts: { periodo?: number | string } = {}): Promise<TareaAsignadaMovil[]> {
+export async function listarTareasEstudiante(estudianteId: number, opts: { periodo?: number | string; soloEspeciales?: boolean } = {}): Promise<TareaAsignadaMovil[]> {
   const params: any = {};
   if (opts.periodo) params.periodo = opts.periodo;
+  if (opts.soloEspeciales) params.solo_especiales = true;
   // Contrato móvil con base /api/movil
   try {
     const sessionRaw = typeof localStorage !== 'undefined' ? localStorage.getItem('session') : null;

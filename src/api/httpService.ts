@@ -21,13 +21,26 @@ interface ApiError {
   code?: string;
 }
 
-class HttpService {
+export class HttpService {
   private config: ApiConfig;
+  private requestCount = 0;
+  private lastRequestTime = 0;
+  private readonly MAX_REQUESTS_PER_SECOND = 10; // Límite estricto
+  private activeRequests = 0;
+  private readonly MAX_CONCURRENT_REQUESTS = 5; // Máximo 5 peticiones simultáneas
+  private requestQueue: Array<() => Promise<any>> = [];
+  private notifyBackendDown() {
+    try {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('backend:down'));
+      }
+    } catch {}
+  }
 
   constructor(config: Partial<ApiConfig> = {}) {
     this.config = {
-      // Usar proxy de Vite en desarrollo para evitar problemas CORS
-      baseURL: config.baseURL || (import.meta.env.DEV ? '/api' : 'http://localhost:3333'),
+      // Preferir VITE_API_URL si está definida; de lo contrario usar proxy en DEV
+      baseURL: config.baseURL || (import.meta as any).env?.VITE_API_URL || (import.meta.env.DEV ? '/api' : 'http://localhost:3333'),
       timeout: config.timeout || 30000,
       headers: {
         'Content-Type': 'application/json',
@@ -39,13 +52,32 @@ class HttpService {
 
   private getAuthToken(): string | null {
     try {
-      const session = localStorage.getItem('session');
+      // PRIMERO: Limpiar TODOS los tokens viejos para evitar conflictos
       const directToken = localStorage.getItem('auth_token');
-      if (typeof directToken === 'string' && directToken.trim()) {
-        return directToken.replace(/^Bearer\s+/i, '').trim();
+      const session = localStorage.getItem('session');
+      
+      if (directToken) {
+        localStorage.removeItem('auth_token');
       }
+      
+      // Si hay sesión vieja, limpiarla también
       if (session) {
         const parsedSession = JSON.parse(session);
+        const sessionTime = parsedSession?.loginTime;
+        const now = new Date().toISOString();
+        
+        // Si la sesión es muy vieja (más de 5 minutos), limpiarla
+        if (sessionTime && (new Date(now).getTime() - new Date(sessionTime).getTime()) > 5 * 60 * 1000) {
+          localStorage.removeItem('session');
+          return null;
+        }
+      }
+
+      // SEGUNDO: Usar siempre el token de session (el más reciente)
+      const currentSession = localStorage.getItem('session');
+      if (currentSession) {
+        const parsedSession = JSON.parse(currentSession);
+        
         const rawToken =
           parsedSession?.token ||
           parsedSession?.accessToken ||
@@ -63,11 +95,11 @@ class HttpService {
         if (typeof rawToken === 'string' && rawToken.trim()) {
           return rawToken.replace(/^Bearer\s+/i, '').trim();
         }
-
-        return null;
       }
+
+      return null;
     } catch (e) {
-      console.warn('Error parsing session:', e);
+      // Error parsing session - returning null
     }
     return null;
   }
@@ -81,19 +113,7 @@ class HttpService {
     const token = this.getAuthToken();
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
-      console.log('[DEBUG][HTTP] Token JWT encontrado y agregado a headers:', {
-        token: token.substring(0, 20) + '...',
-        tokenLength: token.length,
-        fullHeader: `Bearer ${token.substring(0, 20)}...`
-      });
-    } else {
-      console.log('[DEBUG][HTTP] No se encontró token JWT en la sesión');
     }
-
-    console.log('[DEBUG][HTTP] Headers finales:', {
-      ...headers,
-      Authorization: headers.Authorization ? `${headers.Authorization.toString().substring(0, 27)}...` : '[No Authorization]'
-    });
 
     return headers;
   }
@@ -107,22 +127,11 @@ class HttpService {
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
         const jsonText = await response.text();
-        console.log('[DEBUG][HTTP] Response body (raw):', jsonText);
         data = JSON.parse(jsonText) as T;
-        console.log('[DEBUG][HTTP] Response body (parsed):', data);
       } else {
         data = await response.text() as unknown as T;
-        console.log('[DEBUG][HTTP] Response body (text):', data);
       }
     }
-
-    console.log('[DEBUG][HTTP] Response completa:', {
-      status: response.status,
-      statusText: response.statusText,
-      ok: response.ok,
-      data: data,
-      contentType: response.headers.get('content-type')
-    });
 
     if (!response.ok) {
       const error: ApiError = {
@@ -130,11 +139,26 @@ class HttpService {
         status: response.status
       };
 
-      // Si hay data con mensaje de error del servidor y no es blob
-      if (responseType !== 'blob' && typeof data === 'object' && data !== null && 'message' in data) {
-        error.message = (data as any).message;
+      if (responseType !== 'blob') {
+        if (typeof data === 'object' && data !== null) {
+          if ('message' in (data as any) && typeof (data as any).message === 'string') {
+            error.message = (data as any).message as string;
+          } else if ('error' in (data as any)) {
+            const e = (data as any).error;
+            error.message = typeof e === 'string' ? e : JSON.stringify(e);
+          } else {
+            try {
+              error.message = JSON.stringify(data);
+            } catch {}
+          }
+        } else if (typeof data === 'string' && data.trim()) {
+          error.message = data;
+        }
       }
 
+      if (response.status >= 500) {
+        this.notifyBackendDown();
+      }
       throw error;
     }
 
@@ -177,7 +201,6 @@ if (params) {
     const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
 
     try {
-      console.log(`[DEBUG][API] GET:`, url.toString());
       const headers = this.getHeaders();
       
       // Si se solicita blob, cambiar el header Accept
@@ -190,12 +213,12 @@ if (params) {
         headers,
         signal: controller.signal
       });
-      console.log(`[DEBUG][API] GET Response:`, response.status, response.statusText);
       return await this.handleResponse<T>(response, params?.responseType);
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         throw new Error(`Request timeout after ${this.config.timeout}ms`);
       }
+      this.notifyBackendDown();
       throw error;
     } finally {
       clearTimeout(timeoutId);
@@ -219,65 +242,90 @@ if (params) {
   }
 
   private async request<T = any>(method: string, endpoint: string, data?: any): Promise<HttpResponse<T>> {
-    // Construir URL correctamente
-    const base = this.config.baseURL.endsWith('/') ? this.config.baseURL.slice(0, -1) : this.config.baseURL;
-    const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-    const url = `${base}${path}`;
-    const controller = new AbortController();
-    
-    console.log('[DEBUG][HTTP] Petición:', {
-      method,
-      url,
-      baseURL: this.config.baseURL,
-      endpoint,
-      path,
-      data: data ? JSON.stringify(data, null, 2) : 'no data'
-    });
-    const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
-
-    const isFormData = typeof FormData !== 'undefined' && data instanceof FormData;
-    const headers = this.getHeaders();
-    if (isFormData) {
-      // Let the browser set the correct multipart boundary
-      delete (headers as any)['Content-Type'];
+    // CONTROL DE CONCURRENCIA: Limitar peticiones simultáneas
+    if (this.activeRequests >= this.MAX_CONCURRENT_REQUESTS) {
+      // Esperar a que alguna petición termine
+      await new Promise(resolve => {
+        const checkInterval = setInterval(() => {
+          if (this.activeRequests < this.MAX_CONCURRENT_REQUESTS) {
+            clearInterval(checkInterval);
+            resolve(void 0);
+          }
+        }, 100);
+      });
     }
 
-    const options: RequestInit = {
-      method,
-      headers,
-      signal: controller.signal
-    };
-
-    if (data && method !== 'GET' && method !== 'DELETE') {
-      options.body = isFormData ? data : JSON.stringify(data);
-    }
+    this.activeRequests++;
 
     try {
-      console.log(`[DEBUG][API] ${method}:`, url.toString());
-      console.log(`[DEBUG][API] Headers:`, headers);
-      console.log(`[DEBUG][API] Body:`, data ? (isFormData ? '[FormData]' : JSON.stringify(data, null, 2)) : '[No body]');
-      console.log(`[DEBUG][API] Options:`, {
-        method,
-        headers: Object.keys(headers),
-        hasBody: !!data,
-        isFormData,
-        bodySize: data ? (isFormData ? 'FormData' : JSON.stringify(data).length) : 0
-      });
-      
-      const response = await fetch(url, options);
-      console.log(`[DEBUG][API] ${method} Response:`, response.status, response.statusText);
-      
-      // Log response headers
-      console.log(`[DEBUG][API] Response Headers:`, Object.fromEntries(response.headers.entries()));
-      
-      return await this.handleResponse<T>(response);
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw new Error(`Request timeout after ${this.config.timeout}ms`);
+      // PRIMERO: Verificar límite de peticiones para prevenir flood
+      const now = Date.now();
+      if (now - this.lastRequestTime < 1000) {
+        this.requestCount++;
+        if (this.requestCount > this.MAX_REQUESTS_PER_SECOND) {
+          throw new Error(`Límite de peticiones excedido. Por favor, espere.`);
+        }
+      } else {
+        this.requestCount = 1;
+        this.lastRequestTime = now;
       }
-      throw error;
+
+      // SEGUNDO: Verificar si tenemos un token válido (PERMITIR login sin token)
+      const isLoginEndpoint = endpoint.includes('/login');
+      const token = this.getAuthToken();
+      
+      if (!token && !isLoginEndpoint) {
+        return {
+          data: { error: 'No hay token de autenticación' } as T,
+          status: 401,
+          statusText: 'Unauthorized',
+          headers: new Headers()
+        };
+      }
+
+      // Construir URL correctamente (permitir endpoints absolutos)
+      let url: string;
+      if (/^https?:\/\//i.test(endpoint)) {
+        url = endpoint;
+      } else {
+        const base = this.config.baseURL.endsWith('/') ? this.config.baseURL.slice(0, -1) : this.config.baseURL;
+        const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+        url = `${base}${path}`;
+      }
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
+
+      const isFormData = typeof FormData !== 'undefined' && data instanceof FormData;
+      const headers = this.getHeaders();
+      if (isFormData) {
+        // Let the browser set the correct multipart boundary
+        delete (headers as any)['Content-Type'];
+      }
+
+      const options: RequestInit = {
+        method,
+        headers,
+        signal: controller.signal
+      };
+
+      if (data && method !== 'GET' && method !== 'DELETE') {
+        options.body = isFormData ? data : JSON.stringify(data);
+      }
+
+      try {
+        const response = await fetch(url, options);
+        return await this.handleResponse<T>(response);
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw new Error(`Request timeout after ${this.config.timeout}ms`);
+        }
+        this.notifyBackendDown();
+        throw error;
+      } finally {
+        clearTimeout(timeoutId);
+      }
     } finally {
-      clearTimeout(timeoutId);
+      this.activeRequests--;
     }
   }
 
@@ -302,8 +350,6 @@ if (params) {
       
       if (response.status === 401 && !isLoginEndpoint) {
         const now = Date.now();
-        console.warn('⚠️ [HTTP] 401 Unauthorized en:', response.url);
-        
         // Si es el mismo segundo que el último 401, incrementar contador
         if (now - lastUnauthorizedTime < 1000) {
           consecutiveUnauthorized++;
@@ -317,10 +363,7 @@ if (params) {
         const isCriticalEndpoint = response.url.includes('/me') || response.url.includes('/estadisticas');
         
         if (consecutiveUnauthorized >= 3 || isCriticalEndpoint) {
-          console.error('💥 [HTTP] Múltiples 401 o endpoint crítico - Sesión expirada, cerrando sesión');
           callback();
-        } else {
-          console.warn(`📊 [HTTP] 401 #${consecutiveUnauthorized} - Permitiendo fallback...`);
         }
       } else if (response.ok) {
         // Reset contador en respuesta exitosa
@@ -336,15 +379,17 @@ if (params) {
 export const httpService = new HttpService();
 
 // Configurar interceptor de 401 para logout automático
+// TEMPORALMENTE DESHABILITADO para limpiar tokens viejos
+/*
 httpService.setupUnauthorizedInterceptor(() => {
   // Solo limpiar sesión si realmente existe una
   const session = localStorage.getItem('session');
   if (session) {
-    console.warn('🚪 [HTTP] Limpiando sesión y redirigiendo a login...');
     localStorage.removeItem('session');
     localStorage.removeItem('previewRole');
     window.location.href = '/login';
   }
 });
+*/
 
 export default httpService;

@@ -1,9 +1,13 @@
 import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { logout, getSession } from '../../api/endpoints';
 import SidebarOrientador from './SidebarOrientador';
 import { IconLogout } from '../ui/Icons';
+import Modal from '../ui/Modal';
+import Button from '../ui/Button';
 
 export default function OrientadorLayout({ children }: { children: React.ReactNode }) {
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const navigate = useNavigate();
   const session = getSession();
   const user = session?.user;
@@ -11,6 +15,19 @@ export default function OrientadorLayout({ children }: { children: React.ReactNo
   const handleLogout = async () => {
     await logout();
     navigate('/');
+  };
+
+  const handleLogoutClick = () => {
+    setShowLogoutModal(true);
+  };
+
+  const confirmLogout = async () => {
+    setShowLogoutModal(false);
+    await handleLogout();
+  };
+
+  const cancelLogout = () => {
+    setShowLogoutModal(false);
   };
 
   return (
@@ -34,7 +51,7 @@ export default function OrientadorLayout({ children }: { children: React.ReactNo
               {user?.nombre?.charAt(0) || 'U'}
             </div>
             <button
-              onClick={handleLogout}
+              onClick={handleLogoutClick}
               className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
               title="Cerrar sesión"
             >
@@ -48,6 +65,34 @@ export default function OrientadorLayout({ children }: { children: React.ReactNo
         <SidebarOrientador />
         <main className="flex-1 p-4 lg:p-8 min-h-[calc(100vh-61px)] bg-slate-50">{children}</main>
       </div>
+
+      {/* Modal de confirmación de logout */}
+      <Modal
+        isOpen={showLogoutModal}
+        onClose={cancelLogout}
+        title="¿Estás seguro de que quieres salir?"
+      >
+        <div className="space-y-4">
+          <p className="text-slate-600">
+            ¿Estás seguro de que quieres cerrar sesión? Si tienes cambios sin guardar, se perderán.
+          </p>
+          <div className="flex gap-3 justify-end">
+            <Button
+              variant="outline"
+              onClick={cancelLogout}
+              className="flex-1 sm:flex-none"
+            >
+              No, cancelar
+            </Button>
+            <Button
+              onClick={confirmLogout}
+              className="flex-1 sm:flex-none bg-red-600 hover:bg-red-700"
+            >
+              Sí, salir
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

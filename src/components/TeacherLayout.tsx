@@ -2,11 +2,14 @@ import { useState, useEffect } from 'react';
 import { getSession, logout } from '../api/endpoints';
 import TeacherSidebar from './TeacherSidebar';
 import HelpAssistant from '../components/ui/HelpAssistant';
+import Modal from '../components/ui/Modal';
+import Button from '../components/ui/Button';
 import { IconMenu, IconLogout } from './ui/Icons';
 import { useNavigate } from 'react-router-dom';
 
 export default function TeacherLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const session = getSession();
   const user = session?.user;
   const navigate = useNavigate();
@@ -14,6 +17,19 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
   const handleLogout = async () => {
     await logout();
     navigate('/');
+  };
+
+  const handleLogoutClick = () => {
+    setShowLogoutModal(true);
+  };
+
+  const confirmLogout = async () => {
+    setShowLogoutModal(false);
+    await handleLogout();
+  };
+
+  const cancelLogout = () => {
+    setShowLogoutModal(false);
   };
 
   useEffect(() => {
@@ -71,7 +87,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
               </div>
             </div>
             <button
-              onClick={handleLogout}
+              onClick={handleLogoutClick}
               className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-100"
             >
               <IconLogout size={18} />
@@ -91,6 +107,34 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
 
       {/* Ayuda flotante para docentes */}
       <HelpAssistant />
+
+      {/* Modal de confirmación de logout */}
+      <Modal
+        isOpen={showLogoutModal}
+        onClose={cancelLogout}
+        title="¿Estás seguro de que quieres salir?"
+      >
+        <div className="space-y-4">
+          <p className="text-slate-600">
+            ¿Estás seguro de que quieres cerrar sesión? Si tienes cambios sin guardar, se perderán.
+          </p>
+          <div className="flex gap-3 justify-end">
+            <Button
+              variant="outline"
+              onClick={cancelLogout}
+              className="flex-1 sm:flex-none"
+            >
+              No, cancelar
+            </Button>
+            <Button
+              onClick={confirmLogout}
+              className="flex-1 sm:flex-none bg-red-600 hover:bg-red-700"
+            >
+              Sí, salir
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

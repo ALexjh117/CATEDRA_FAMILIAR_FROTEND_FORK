@@ -4,15 +4,76 @@
 
 import httpService from './httpService';
 
-const getSessionInstitucionId = (): number | null => {
+// Utilidad local para leer el payload del JWT sin dependencias
+const parseJwtPayload = (token: string): Record<string, any> | null => {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return null;
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
+    const decoded = typeof window !== 'undefined' ? window.atob(padded) : atob(padded);
+    return JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+};
+
+const getSessionRolId = (): number | null => {
   try {
     const sessionRaw = localStorage.getItem('session');
     if (!sessionRaw) return null;
     const session = JSON.parse(sessionRaw);
-    const rawInstitucionId = session?.user?.institucionId ?? session?.context?.institucionId;
-    const institucionId = Number(rawInstitucionId);
-    return institucionId && !Number.isNaN(institucionId) ? institucionId : null;
+    const rolId = session?.user?.rolId;
+    if (typeof rolId === 'number') return rolId;
+    // Mapear desde string si es necesario
+    const rolStr: string | undefined = session?.user?.rol;
+    if (rolStr) {
+      const map: Record<string, number> = {
+        admin_sistema: 1,
+        rector: 2,
+        coordinador: 3,
+        orientador: 4,
+        docente_aula: 5,
+        acudiente: 6,
+        admin: 7,
+      };
+      return map[rolStr] ?? null;
+    }
+    return null;
   } catch {
+    return null;
+  }
+};
+
+const getSessionInstitucionId = (): number | null => {
+  try {
+    const sessionRaw = localStorage.getItem('session');
+    
+    if (!sessionRaw) {
+      return null;
+    }
+    
+    const session = JSON.parse(sessionRaw);
+    
+    // Intentar múltiples fuentes: user, user.institucion, context y, como último recurso, el token JWT
+    let rawInstitucionId = session?.user?.institucionId ?? 
+                           session?.user?.institucion_id ?? 
+                           session?.user?.institucion?.id ??
+                           session?.context?.institucionId ??
+                           session?.context?.institucion_id;
+
+    if (!rawInstitucionId && session?.token) {
+      const payload = parseJwtPayload(session.token);
+      if (payload) {
+        rawInstitucionId = payload.institucionId ?? payload.institucion_id ?? payload['institucion.id'];
+      }
+    }
+    
+    const institucionId = Number(rawInstitucionId);
+    const result = institucionId && !Number.isNaN(institucionId) ? institucionId : null;
+    
+    return result;
+  } catch (error) {
     return null;
   }
 };
@@ -87,6 +148,18 @@ class ApiClient {
     return await httpService.post('/rector/coordinadores', data);
   }
 
+  // Edición completa de usuario (solo admin_sistema)
+  async updateUsuario(id: number, data: any) {
+    // Endpoint documentado: PUT /admin/usuarios/:id/editar
+    return await httpService.put(`/admin/usuarios/${id}/editar`, data);
+  }
+
+  // Eliminar usuario (compatibilidad con llamadas existentes)
+  async deleteUsuario(id: number) {
+    // Si existe un endpoint admin específico, ajústese aquí cuando esté disponible
+    return await httpService.delete(`/usuarios/${id}`);
+  }
+
   // Tareas
   async getTareas() {
     return await httpService.get('/tareas');
@@ -103,20 +176,32 @@ class ApiClient {
 
   // Estadísticas
   async getEstadisticasRector() {
-    return await httpService.get('/rector/estadisticas');
+    const res = await httpService.get<any>('/rector/estadisticas');
+    const raw = (res as any)?.data ?? res;
+    const data = raw?.data ?? raw;
+    return { success: raw?.success !== false, data, message: raw?.message, status: (res as any)?.status };
   }
 
   // Endpoints específicos del rector
   async getCoordinadoresRector() {
-    return await httpService.get('/rector/coordinadores');
+    const res = await httpService.get<any>('/rector/coordinadores');
+    const raw = (res as any)?.data ?? res;
+    const arr = raw?.data ?? raw?.coordinadores ?? (Array.isArray(raw) ? raw : []);
+    return { success: raw?.success !== false, data: Array.isArray(arr) ? arr : [], message: raw?.message, status: (res as any)?.status };
   }
 
   async getOrientadoresRector() {
-    return await httpService.get('/rector/orientadores');
+    const res = await httpService.get<any>('/rector/orientadores');
+    const raw = (res as any)?.data ?? res;
+    const arr = raw?.data ?? raw?.orientadores ?? (Array.isArray(raw) ? raw : []);
+    return { success: raw?.success !== false, data: Array.isArray(arr) ? arr : [], message: raw?.message, status: (res as any)?.status };
   }
 
   async getDocentesRector() {
-    return await httpService.get('/rector/docentes');
+    const res = await httpService.get<any>('/rector/docentes');
+    const raw = (res as any)?.data ?? res;
+    const arr = raw?.data ?? raw?.docentes ?? (Array.isArray(raw) ? raw : []);
+    return { success: raw?.success !== false, data: Array.isArray(arr) ? arr : [], message: raw?.message, status: (res as any)?.status };
   }
 
   async getEstadisticasCoordinador() {
@@ -125,7 +210,23 @@ class ApiClient {
 
   // Directivos
   async getDirectivosInstitucion(institucionId: number) {
-    return await httpService.get(`/instituciones/${institucionId}/directivos`);
+    const res = await httpService.get<any>(`/instituciones/${institucionId}/directivos`);
+    const raw = (res as any)?.data ?? res;
+    const data = raw?.data ?? raw ?? {};
+    // Esperado: { coordinadores: [], orientadores: [] }
+    const normalized = {
+      coordinadores: Array.isArray((data as any)?.coordinadores) ? (data as any).coordinadores : [],
+      orientadores: Array.isArray((data as any)?.orientadores) ? (data as any).orientadores : []
+    };
+    return { success: raw?.success !== false, data: normalized, message: raw?.message, status: (res as any)?.status };
+  }
+
+  // Cursos para rector (usado en algunos paneles)
+  async getCursosRector() {
+    const res = await httpService.get<any>('/rector/cursos');
+    const raw = (res as any)?.data ?? res;
+    const arr = raw?.data ?? raw?.cursos ?? (Array.isArray(raw) ? raw : []);
+    return { success: raw?.success !== false, data: Array.isArray(arr) ? arr : [], message: raw?.message, status: (res as any)?.status };
   }
 
   // Cambiar contraseña
@@ -331,20 +432,90 @@ class ApiClient {
 
   // Periodos
   async getPeriodos(institucionId?: number) {
-    const params = institucionId ? { institucionid: institucionId } : undefined;
-    return await httpService.get('/periodos', params);
+    const rolId = getSessionRolId();
+    const isRector = rolId === 2;
+    const endpoint = isRector ? '/rectores/periodos' : '/periodos';
+    const params = !isRector && institucionId ? { institucionid: institucionId } : undefined;
+    const res = await httpService.get<any>(endpoint, params);
+    const raw = (res as any)?.data ?? res;
+    const data = raw?.data ?? raw?.periodos ?? (Array.isArray(raw) ? raw : []);
+    return { success: raw?.success !== false, data: Array.isArray(data) ? data : [], message: raw?.message, status: (res as any)?.status };
   }
 
   async createPeriodo(data: any) {
-    return await httpService.post('/periodos', data);
+    const rolId = getSessionRolId();
+    const isRector = rolId === 2;
+    const endpoint = isRector ? '/rectores/periodos' : '/periodos';
+    const res = await httpService.post<any>(endpoint, data);
+    const raw = (res as any)?.data ?? res;
+    return { success: raw?.success !== false, data: raw?.data ?? raw, message: raw?.message, status: (res as any)?.status };
   }
 
   async updatePeriodo(id: number, data: any) {
-    return await httpService.put(`/periodos/${id}`, data);
+    const rolId = getSessionRolId();
+    const isRector = rolId === 2;
+    const endpoint = isRector ? `/rectores/periodos/${id}` : `/periodos/${id}`;
+    const res = await httpService.put<any>(endpoint, data);
+    const raw = (res as any)?.data ?? res;
+    return { success: raw?.success !== false, data: raw?.data ?? raw, message: raw?.message, status: (res as any)?.status };
   }
 
   async deletePeriodo(id: number) {
-    return await httpService.delete(`/periodos/${id}`);
+    const rolId = getSessionRolId();
+    const isRector = rolId === 2;
+    const endpoint = isRector ? `/rectores/periodos/${id}` : `/periodos/${id}`;
+    const res = await httpService.delete<any>(endpoint);
+    const raw = (res as any)?.data ?? res;
+    return { success: raw?.success !== false, data: raw?.data ?? raw, message: raw?.message, status: (res as any)?.status };
+  }
+
+  // Coordinadores - Personal y datos institucionales
+  async getDocentesCoordinador() {
+    return await httpService.get('/coordinadores/docentes');
+  }
+
+  async getOrientadoresCoordinador() {
+    return await httpService.get('/coordinadores/orientadores');
+  }
+
+  async getAcudientesCoordinador() {
+    return await httpService.get('/coordinadores/acudientes');
+  }
+
+  async getCursosCoordinador() {
+    return await httpService.get('/coordinadores/cursos');
+  }
+
+  async getEstadisticasCoordinador() {
+    return await httpService.get('/coordinadores/estadisticas');
+  }
+
+  async getAlertasCoordinador() {
+    return await httpService.get('/coordinadores/alertas');
+  }
+
+  async getMiInstitucion() {
+    return await httpService.get('/coordinadores/mi-institucion');
+  }
+
+  async getInstitucionCompleta() {
+    try {
+      const sessionStr = typeof window !== 'undefined' ? localStorage.getItem('session') : null;
+      const session = sessionStr ? JSON.parse(sessionStr) : null;
+      const rawId = session?.user?.institucionId ?? session?.user?.institucion_id ?? session?.user?.institucion?.id ?? session?.context?.institucionId ?? session?.context?.institucion_id;
+      const institucionId = Number(rawId);
+      if (!institucionId || Number.isNaN(institucionId)) {
+        throw new Error('No se encontró institucionId válido en la sesión');
+      }
+      return await httpService.get(`/instituciones/${institucionId}`);
+    } catch (e) {
+      // Fallback a endpoint específico de coordinador si existe
+      return await httpService.get('/coordinadores/mi-institucion');
+    }
+  }
+
+  async getEstudiantesCoordinador() {
+    return await httpService.get('/coordinadores/estudiantes');
   }
 }
 

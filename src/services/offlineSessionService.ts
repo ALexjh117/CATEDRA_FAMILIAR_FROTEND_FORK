@@ -255,22 +255,29 @@ export function isOfflineSessionAvailable(): boolean {
 
 export async function fetchOfflineSession(): Promise<OfflineSessionData> {
   try {
-    let lastError: any;
-    for (const endpoint of ['/auth/get-offline-session', '/offline/session']) {
-      try {
-        const response = await httpService.post(endpoint);
-        const raw = response.data as any;
-        const data = raw?.data ?? raw;
-        if (!data?.sessionToken) {
-          throw new Error(raw?.message || 'La sesión offline no fue retornada por el backend');
-        }
-        saveOfflineSession(data as OfflineSessionData);
-        return data as OfflineSessionData;
-      } catch (error) {
-        lastError = error;
-      }
-    }
-    throw lastError;
+    // Desactivado temporalmente - endpoints no existen en backend
+    // let lastError: any;
+    // for (const endpoint of ['/auth/get-offline-session', '/offline/session']) {
+    //   try {
+    //     const response = await httpService.post(endpoint);
+    //     const raw = response.data as any;
+    //     const data = raw?.data ?? raw;
+    //     if (!data?.sessionToken) {
+    //       throw new Error(raw?.message || 'La sesión offline no fue retornada por el backend');
+    //     }
+    //     saveOfflineSession(data as OfflineSessionData);
+    //     return data as OfflineSessionData;
+    //   } catch (error) {
+    //     lastError = error;
+    //   }
+    // }
+    // throw lastError;
+    
+    // Usar directamente fallback
+    const fallback = buildFallbackSession();
+    if (!fallback) throw new Error('No se pudo crear sesión offline');
+    saveOfflineSession(fallback);
+    return fallback;
   } catch (error) {
     const fallback = buildFallbackSession();
     if (!fallback) throw error;
@@ -284,20 +291,27 @@ export async function refreshOfflineSession(): Promise<OfflineSessionData | null
   if (!current?.sessionToken) return null;
 
   try {
-    for (const endpoint of ['/offline/refresh-session', '/auth/get-offline-session']) {
-      try {
-        const response = endpoint === '/auth/get-offline-session'
-          ? await httpService.post(endpoint)
-          : await httpService.post(endpoint, { sessionToken: current.sessionToken });
-        const raw = response.data as any;
-        const data = raw?.data ?? raw;
-        if (!data?.sessionToken) throw new Error(raw?.message || 'No se pudo refrescar la sesión offline');
-        saveOfflineSession(data as OfflineSessionData);
-        return data as OfflineSessionData;
-      } catch {
-      }
+    // Desactivado temporalmente - endpoints no existen en backend
+    // for (const endpoint of ['/offline/refresh-session', '/auth/get-offline-session']) {
+    //   try {
+    //     const response = endpoint === '/auth/get-offline-session'
+    //       ? await httpService.post(endpoint)
+    //       : await httpService.post(endpoint, { sessionToken: current.sessionToken });
+    //     const raw = response.data as any;
+    //     const data = raw?.data ?? raw;
+    //     if (!data?.sessionToken) throw new Error(raw?.message || 'No se pudo refrescar la sesión offline');
+    //     saveOfflineSession(data as OfflineSessionData);
+    //     return data as OfflineSessionData;
+    //   } catch {
+    //   }
+    // }
+    // throw new Error('No se pudo refrescar la sesión offline');
+    
+    // Si no está expirada, retornar la actual
+    if (!isOfflineSessionExpired(current)) {
+      return current;
     }
-    throw new Error('No se pudo refrescar la sesión offline');
+    return null;
   } catch {
     if (!isOfflineSessionExpired(current)) {
       return current;
@@ -310,15 +324,17 @@ export async function validateOfflineSession(): Promise<boolean> {
   const current = getOfflineSession();
   if (!current?.sessionToken || isOfflineSessionExpired(current)) return false;
 
+  // Si no hay conexión o el endpoint no existe, solo validar localmente
   try {
-    for (const endpoint of ['/auth/validate-offline-session', '/offline/validate-session']) {
-      try {
-        const response = await httpService.post(endpoint, { sessionToken: current.sessionToken });
-        const raw = response.data as any;
-        return Boolean(raw?.success ?? true);
-      } catch {
-      }
-    }
+    // Desactivado temporalmente - endpoint no existe en backend
+    // for (const endpoint of ['/auth/validate-offline-session']) {
+    //   try {
+    //     const response = await httpService.post(endpoint, { sessionToken: current.sessionToken });
+    //     const raw = response.data as any;
+    //     return Boolean(raw?.success ?? true);
+    //   } catch {
+    //   }
+    // }
     return !isOfflineSessionExpired(current);
   } catch {
     return !isOfflineSessionExpired(current);
@@ -330,32 +346,21 @@ export async function loginWithOfflineSession(correo?: string): Promise<{ user: 
   if (!current || isOfflineSessionExpired(current)) return null;
 
   try {
-    const response = await httpService.post('/auth/login-offline', {
-      sessionToken: current.sessionToken,
-      correo: correo || current.email,
-    });
-    const raw = (response.data ?? {}) as OfflineLoginResponse;
-    const data = raw?.data;
-    if (!data?.token) {
-      throw new Error(raw?.message || 'No se recibió token de login offline');
-    }
+    // Desactivado temporalmente - endpoint no existe en backend
+    // const response = await httpService.post('/auth/login-offline', {
+    //   sessionToken: current.sessionToken,
+    //   correo: correo || current.email,
+    // });
+    // const raw = (response.data ?? {}) as OfflineLoginResponse;
+    // const data = raw?.data;
+    // if (!data?.token) {
+    //   throw new Error(raw?.message || 'No se pudo iniciar sesión offline');
+    // }
 
-    const { normalizedSession, appSession } = buildAppSessionFromOffline(data.session ?? current, {
-      token: data.token,
-      usuario: data.usuario,
-    });
-
-    saveOfflineSession(normalizedSession);
-    localStorage.setItem('session', JSON.stringify(appSession));
-    localStorage.setItem('auth_token', appSession.token);
-
-    try {
-      httpService.setAuthToken(appSession.token);
-    } catch {}
-
-    return { user: appSession.user, isPreview: false, token: appSession.token };
+    // Retornar null ya que no se puede validar con el backend
+    return null;
   } catch {
-    return activateOfflineSession(current);
+    return null;
   }
 }
 

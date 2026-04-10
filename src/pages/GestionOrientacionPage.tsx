@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
   getSession, 
-  getDocentesCRUD,
+  getDocentesCoordinador,
   getOrientadoresCoordinador,
   crearOrientador,
   actualizarOrientador,
@@ -70,7 +70,7 @@ const GestionOrientacionPage = () => {
     try {
       setLoading(true);
       const [docentesData, orientadoresData] = await Promise.all([
-        getDocentesCRUD(),
+        getDocentesCoordinador(),
         getOrientadoresCoordinador()
       ]);
       setDocentes(docentesData || []);
@@ -275,35 +275,38 @@ const GestionOrientacionPage = () => {
                         </td>
                       </tr>
                     ) : (
-                      docentes.map((docente: any) => (
-                        <tr key={docente.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                          <td className="py-4 px-5">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
-                                {docente.nombre?.[0] || '?'}{docente.apellido?.[0] || ''}
+                      docentes.map((docente: any) => {
+                        const activo = docente?.estaActivo ?? docente?.activo ?? true;
+                        return (
+                          <tr key={docente.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                            <td className="py-4 px-5">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-400 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
+                                  {docente.nombre?.[0] || '?'}{docente.apellido?.[0] || ''}
+                                </div>
+                                <div>
+                                  <div className="font-medium text-slate-800">{docente.nombre} {docente.apellido}</div>
+                                </div>
                               </div>
-                              <div>
-                                <div className="font-medium text-slate-800">{docente.nombre} {docente.apellido}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="text-center py-4 px-4 text-slate-600 text-sm">
-                            {docente.correo}
-                          </td>
-                          <td className="text-center py-4 px-4 text-slate-600">
-                            {docente.telefono || '-'}
-                          </td>
-                          <td className="text-center py-4 px-4">
-                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                              docente.activo 
-                                ? 'bg-emerald-100 text-emerald-700' 
-                                : 'bg-slate-100 text-slate-600'
-                            }`}>
-                              {docente.activo ? 'Activo' : 'Inactivo'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))
+                            </td>
+                            <td className="text-center py-4 px-4 text-slate-600 text-sm">
+                              {docente.correo}
+                            </td>
+                            <td className="text-center py-4 px-4 text-slate-600">
+                              {docente.telefono || '-'}
+                            </td>
+                            <td className="text-center py-4 px-4">
+                              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                activo 
+                                  ? 'bg-emerald-100 text-emerald-700' 
+                                  : 'bg-slate-100 text-slate-600'
+                              }`}>
+                                {activo ? 'Activo' : 'Inactivo'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>

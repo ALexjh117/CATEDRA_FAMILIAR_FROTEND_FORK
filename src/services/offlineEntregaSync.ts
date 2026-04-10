@@ -178,9 +178,41 @@ export async function saveEntregaOffline(input: {
   archivos?: File[];
   archivosUrl?: string[];
   createdAt?: string;
+  // Nuevos campos para archivo en base64
+  archivoBase64?: string;
+  archivoNombre?: string;
+  archivoTipo?: string;
 }): Promise<OfflineEntregaRecord> {
   const existing = await getPendingEntregaOffline(input.asignacionId, input.estudianteId);
   if (existing) return existing;
+
+  // Convertir base64 a File si se proporciona
+  let archivos: File[] = input.archivos || [];
+  
+  if (input.archivoBase64 && input.archivoNombre && input.archivoTipo) {
+    try {
+      // Convertir base64 a blob
+      const base64Data = input.archivoBase64;
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: input.archivoTipo });
+      
+      // Crear File desde el blob
+      const file = new File([blob], input.archivoNombre, { 
+        type: input.archivoTipo,
+        lastModified: Date.now()
+      });
+      
+      archivos = [...archivos, file];
+    } catch (error) {
+      console.error('Error al convertir base64 a File:', error);
+      throw new Error('No se pudo procesar el archivo para guardarlo offline');
+    }
+  }
 
   const record: OfflineEntregaRecord = {
     id: createOfflineId(input.asignacionId, input.estudianteId),
@@ -189,7 +221,7 @@ export async function saveEntregaOffline(input: {
     descripcion: input.descripcion,
     nombreEnvio: input.nombreEnvio,
     archivosUrl: input.archivosUrl || [],
-    archivos: await toOfflineFiles(input.archivos || []),
+    archivos: await toOfflineFiles(archivos),
     createdAt: input.createdAt || new Date().toISOString(),
     status: 'pending',
   };

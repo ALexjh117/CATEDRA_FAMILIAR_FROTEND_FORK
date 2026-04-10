@@ -18,6 +18,16 @@ import NotFoundPage from './pages/NotFoundPage'
 
 import LoginPage from './pages/LoginPage'
 
+import TestPasswordRecoveryPage from './pages/TestPasswordRecoveryPage'
+
+import TestPasswordDebugPage from './pages/TestPasswordDebugPage'
+
+import TestPasswordConfirmPage from './pages/TestPasswordConfirmPage'
+
+import TestOTPPage from './pages/TestOTPPage'
+
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
+
 import DashboardDocentePage from './pages/DashboardDocentePage'
 
 import DashboardSupervisorPage from './pages/DashboardSupervisorPage'
@@ -105,8 +115,6 @@ import OrientadorLayout from './components/orientador-acudiente/OrientadorLayout
 import AcudienteTareasAutoPage from './pages/AcudienteTareasAutoPage'
 
 import AcudienteEspecialesPage from './pages/AcudienteEspecialesPage'
-
-
 
 // Legacy
 
@@ -321,6 +329,16 @@ export default function App(){
           <Route path="/equipo-desarrollo" element={<EquipoDesarrolloPage/>} />
 
           <Route path="/login" element={<LoginPage/>} />
+
+          <Route path="/test-password-recovery" element={<TestPasswordRecoveryPage/>} />
+
+          <Route path="/test-password-debug" element={<TestPasswordDebugPage/>} />
+
+          <Route path="/test-password-confirm" element={<TestPasswordConfirmPage/>} />
+
+          <Route path="/test-otp" element={<TestOTPPage/>} />
+
+          <Route path="/forgot-password" element={<ForgotPasswordPage/>} />
 
           <Route path="/acceso-denegado" element={<AccesoDenegado/>} />
 

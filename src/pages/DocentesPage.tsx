@@ -166,28 +166,14 @@ export default function DocentesPage() {
         tipo: typeof docentesData
       });
 
-      // Para orientadores, no filtrar ya que /orientadores/docentes ya filtra por institución
-      // Para otros roles, mantener el filtrado existente
+      // Siempre filtrar por institución del usuario, incluso para orientador (por seguridad del lado cliente)
       const userInstitucionId = user?.institucionId || (session as any)?.context?.institucionId;
-      const filtrados = user?.rol === 'orientador' 
-        ? docentesData  // Ya filtrados por el endpoint
-        : userInstitucionId
-          ? docentesData.filter((d: any) => {
-              const docenteInstitucionId = d?.institucionId || d?.institucion_id || d?.institucion?.id;
-              const pasa = Number(docenteInstitucionId) === Number(userInstitucionId);
-              
-              console.log('[DEBUG][DocentesPage] Filtrando docente (no orientador):', {
-                id: d.id,
-                nombre: d.nombre || d.nombres,
-                apellido: d.apellido || d.apellidos,
-                docenteInstitucionId,
-                userInstitucionId,
-                pasa
-              });
-              
-              return pasa;
-            })
-          : docentesData;
+      const filtrados = userInstitucionId
+        ? docentesData.filter((d: any) => {
+            const docenteInstitucionId = d?.institucionId || d?.institucion_id || d?.institucion?.id;
+            return Number(docenteInstitucionId) === Number(userInstitucionId);
+          })
+        : docentesData;
 
       console.log('[DEBUG][DocentesPage] Resultados:', {
         recibidos: Array.isArray(docentesData) ? docentesData.length : 'no-array',

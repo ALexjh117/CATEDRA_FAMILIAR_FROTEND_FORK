@@ -26,6 +26,8 @@ import {
 
   getAcudientesCoordinador,
 
+  getEstudiantesCoordinador,
+
   getGradosCoordinador,
 
   getOrientadoresCRUD,
@@ -463,9 +465,7 @@ export default function DashboardCoordinadorPage() {
 
 
   useEffect(() => {
-
     loadData();
-
   }, []);
 
 
@@ -508,6 +508,8 @@ export default function DashboardCoordinadorPage() {
 
         getAcudientesCoordinador(),
 
+        getEstudiantesCoordinador(),
+
         getTareas(),
 
         getCursosCoordinador() // Para cursos con detalles adicionales
@@ -530,18 +532,21 @@ export default function DashboardCoordinadorPage() {
 
       const acudientesData = results[5].status === 'fulfilled' ? results[5].value : [];
 
-      const tareasResult = results[6];
+      const estudiantesResult = results[6];
+      const estudiantesData = estudiantesResult.status === 'fulfilled' ? (estudiantesResult as PromiseFulfilledResult<any>).value : [];
+
+      const tareasResult = results[7];
       const tareasData = tareasResult.status === 'fulfilled' ? (tareasResult as PromiseFulfilledResult<any>).value : [];
 
       console.log('📦 [DashboardCoordinador] Cantidad de resultados:', Array.isArray(results) ? results.length : 'N/A');
-      console.log('🧪 [DashboardCoordinador] Estado getTareas (index 6):', tareasResult.status);
+      console.log('🧪 [DashboardCoordinador] Estado getTareas (index 7):', tareasResult.status);
       if (tareasResult.status === 'rejected') {
         console.warn('⚠️ [DashboardCoordinador] getTareas rechazado. Es posible que el rol no tenga permisos (solo docente/orientador) o haya un error de backend.');
       }
-      const cursosResponse = (Array.isArray(results) && results[7] && (results[7] as any).status === 'fulfilled')
-        ? (results[7] as any).value
+      const cursosResponse = (Array.isArray(results) && results[8] && (results[8] as any).status === 'fulfilled')
+        ? (results[8] as any).value
         : []; // Cursos con detalles
-      // No hay índice 8 en results: Promise.allSettled tiene 0..7. Los grados se derivan de institucionCompletaData
+      // Los grados se derivan de institucionCompletaData
       let gradosDesdeEstructura: any[] = [];
 
       
@@ -725,7 +730,7 @@ export default function DashboardCoordinadorPage() {
 
       // Logging específico para cursos y grados
 
-      console.log('📚 [DashboardCoordinador] Respuesta de cursos (index 7):', results[7]);
+      console.log('📚 [DashboardCoordinador] Respuesta de cursos (index 8):', results[8]);
       console.log('📋 [DashboardCoordinador] Grados desde estructura (sin índice 8):', gradosDesdeEstructura?.length);
 
       console.log('📚 [DashboardCoordinador] cursosResponse:', cursosResponse);
@@ -748,7 +753,10 @@ export default function DashboardCoordinadorPage() {
 
       setOrientadoresCoord(Array.isArray(orientadoresData) ? orientadoresData : []);
 
-      setEstudiantes(Array.isArray(acudientesData?.data) ? acudientesData.data : []);
+      const estudiantesLista = Array.isArray((estudiantesData as any)?.data)
+        ? (estudiantesData as any).data
+        : (Array.isArray(estudiantesData) ? estudiantesData : []);
+      setEstudiantes(estudiantesLista);
 
       
 
@@ -758,9 +766,9 @@ export default function DashboardCoordinadorPage() {
 
       
 
-      console.log('✅ [DashboardCoordinador] Estado de estudiantes actualizado:', Array.isArray(acudientesData?.data) ? acudientesData.data.length : 0, 'estudiantes');
+      console.log('✅ [DashboardCoordinador] Estado de estudiantes actualizado:', Array.isArray(estudiantesLista) ? estudiantesLista.length : 0, 'estudiantes');
 
-      console.log('🔍 [DashboardCoordinador] Primer estudiante (estructura):', Array.isArray(acudientesData?.data) ? acudientesData.data?.[0] : null);
+      console.log('🔍 [DashboardCoordinador] Primer estudiante (estructura):', Array.isArray(estudiantesLista) ? estudiantesLista?.[0] : null);
 
       // Usar docentesCoordData como fuente de docentes (ya viene de getDocentesCoordinador)
 

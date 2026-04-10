@@ -38,9 +38,16 @@ export default function ReportesRector() {
   const [directivos, setDirectivos] = useState<{ coordinadores: any[]; orientadores: any[] }>({ coordinadores: [], orientadores: [] });
   const [docentes, setDocentes] = useState<any[]>([]);
   
-  const [periodoSeleccionado, setPeriodoSeleccionado] = useState('2026-1');
-  const [fechaInicio, setFechaInicio] = useState('2026-01-01');
-  const [fechaFin, setFechaFin] = useState('2026-12-31');
+  const [fechaInicio, setFechaInicio] = useState(() => {
+    const y = new Date().getFullYear();
+    const d = new Date(y, 0, 1);
+    return d.toISOString().slice(0, 10);
+  });
+  const [fechaFin, setFechaFin] = useState(() => {
+    const y = new Date().getFullYear();
+    const d = new Date(y, 11, 31);
+    return d.toISOString().slice(0, 10);
+  });
   const [reporteSeleccionado, setReporteSeleccionado] = useState<TipoReporte | null>(null);
 
   const tiposReporte: ReporteConfig[] = [
@@ -123,7 +130,7 @@ export default function ReportesRector() {
     try {
       const stats = {
         'Institución': institucion?.nombre || 'N/A',
-        'Período': periodoSeleccionado,
+        'Rango del Reporte': `${fechaInicio} a ${fechaFin}`,
         'Fecha del Reporte': new Date().toLocaleDateString('es-CO'),
         '': '',
         'PERSONAL DIRECTIVO': '',
@@ -146,7 +153,7 @@ export default function ReportesRector() {
 
       exportEstadisticasToPDF(
         stats,
-        `Reporte_Ejecutivo_Rector_${institucion?.nombre?.replace(/\s+/g, '_') || 'Institucion'}_${periodoSeleccionado}`,
+        `Reporte_Ejecutivo_Rector_${institucion?.nombre?.replace(/\s+/g, '_') || 'Institucion'}_${fechaInicio}_a_${fechaFin}`,
         `Reporte Ejecutivo - ${institucion?.nombre || 'Institución'}`
       );
     } finally {
@@ -187,7 +194,7 @@ export default function ReportesRector() {
 
       exportToExcel(
         data,
-        `Reporte_Directivos_Rector_${institucion?.nombre?.replace(/\s+/g, '_') || 'Institucion'}_${periodoSeleccionado}`,
+        `Reporte_Directivos_Rector_${institucion?.nombre?.replace(/\s+/g, '_') || 'Institucion'}_${fechaInicio}_a_${fechaFin}`,
         'Directivos'
       );
     } finally {
@@ -218,7 +225,7 @@ export default function ReportesRector() {
 
       exportToExcel(
         data,
-        `Reporte_Docentes_Rector_${institucion?.nombre?.replace(/\s+/g, '_') || 'Institucion'}_${periodoSeleccionado}`,
+        `Reporte_Docentes_Rector_${institucion?.nombre?.replace(/\s+/g, '_') || 'Institucion'}_${fechaInicio}_a_${fechaFin}`,
         'Docentes'
       );
     } finally {
@@ -247,7 +254,7 @@ export default function ReportesRector() {
 
       exportEstadisticasToPDF(
         stats,
-        `Reporte_Academico_Rector_${institucion?.nombre?.replace(/\s+/g, '_') || 'Institucion'}_${periodoSeleccionado}`,
+        `Reporte_Academico_Rector_${institucion?.nombre?.replace(/\s+/g, '_') || 'Institucion'}_${fechaInicio}_a_${fechaFin}`,
         `Reporte Académico - ${institucion?.nombre || 'Institución'}`
       );
     } finally {
@@ -277,7 +284,7 @@ export default function ReportesRector() {
 
       exportEstadisticasToPDF(
         stats,
-        `Reporte_Participacion_Rector_${institucion?.nombre?.replace(/\s+/g, '_') || 'Institucion'}_${periodoSeleccionado}`,
+        `Reporte_Participacion_Rector_${institucion?.nombre?.replace(/\s+/g, '_') || 'Institucion'}_${fechaInicio}_a_${fechaFin}`,
         `Reporte de Participación Familiar - ${institucion?.nombre || 'Institución'}`
       );
     } finally {
@@ -351,17 +358,7 @@ export default function ReportesRector() {
               </div>
             </div>
             
-            <div className="flex flex-wrap gap-3">
-              <select
-                value={periodoSeleccionado}
-                onChange={(e) => setPeriodoSeleccionado(e.target.value)}
-                className="px-4 py-2.5 bg-white/10 text-white rounded-xl font-medium border border-white/10 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
-              >
-                <option value="2026-1" className="text-gray-900">Período 2026-1</option>
-                <option value="2025-2" className="text-gray-900">Período 2025-2</option>
-                <option value="2025-1" className="text-gray-900">Período 2025-1</option>
-              </select>
-            </div>
+            
           </div>
         </div>
 

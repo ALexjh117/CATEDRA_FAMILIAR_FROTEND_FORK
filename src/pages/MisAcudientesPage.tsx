@@ -5,6 +5,8 @@ import { getSession } from '../api/endpoints';
 import TeacherLayout from '../components/TeacherLayout';
 import Button from '../components/ui/Button';
 import EmptyState404 from '../components/ui/EmptyState404';
+import { HiOutlineArrowPath, HiOutlineExclamationTriangle, HiOutlineXCircle, HiOutlineXMark, HiOutlinePhone, HiOutlineEnvelope, HiOutlineBookOpen, HiOutlineAcademicCap, HiOutlineUserCircle } from 'react-icons/hi2';
+import { PiGenderMaleBold, PiGenderFemaleBold } from 'react-icons/pi';
 
 interface EstudianteAsociado {
   id: number;
@@ -46,6 +48,8 @@ export default function MisAcudientesPage() {
   const [busqueda, setBusqueda] = useState('');
   const [acudienteSeleccionado, setAcudienteSeleccionado] = useState<Acudiente | null>(null);
   const [hasError, setHasError] = useState(false);
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   const loadAcudientes = async () => {
     setLoading(true);
@@ -57,8 +61,18 @@ export default function MisAcudientesPage() {
       const response = await listarAcudientesDocente();
       const acudientesData = response?.data || [];
       console.log('MisAcudientesPage - Se cargaron', acudientesData.length, 'acudientes');
-      
-      setAcudientes(acudientesData);
+      // Filtrar por institución a partir del prefijo en el nombre de curso de los estudiantes asociados
+      const institucionId = (session as any)?.context?.institucionId || (session as any)?.user?.institucionId || (session as any)?.user?.institucion;
+      const prefijo = institucionId ? `${String(institucionId)}_` : '';
+
+      const filtrados = (acudientesData as Acudiente[])
+        .map((a) => {
+          const estudiantesInst = (a.estudiantes || []).filter(e => e?.cursoNombre?.startsWith(prefijo));
+          return { ...a, estudiantes: estudiantesInst, totalEstudiantes: estudiantesInst.length } as Acudiente;
+        })
+        .filter(a => a.estudiantes.length > 0);
+
+      setAcudientes(filtrados);
       
     } catch (err: any) {
       console.error('MisAcudientesPage - Error:', err);
@@ -79,13 +93,18 @@ export default function MisAcudientesPage() {
     loadAcudientes();
   }, [session?.user?.id]);
 
+  // Resetear página al cambiar filtros o cantidad
+  useEffect(() => {
+    setPage(1);
+  }, [busqueda, acudientes.length]);
+
   // Si hay un error crítico, mostrar pantalla de error
   if (hasError) {
     return (
       <TeacherLayout title="Acudientes de Mis Estudiantes">
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
-            <div className="text-6xl mb-4">⚠️</div>
+            <div className="text-6xl mb-4 text-amber-500 flex items-center justify-center"><HiOutlineExclamationTriangle /></div>
             <h2 className="text-xl font-bold text-red-600 mb-2">Error inesperado</h2>
             <p className="text-slate-600 mb-4">{error}</p>
             <Button onClick={loadAcudientes} className="bg-red-600 hover:bg-red-700">
@@ -108,6 +127,9 @@ export default function MisAcudientesPage() {
     return coincideBusqueda;
   });
 
+  const totalPages = Math.max(1, Math.ceil(acudientesFiltrados.length / pageSize));
+  const acudientesPaginados = acudientesFiltrados.slice((page - 1) * pageSize, page * pageSize);
+
   const getTipoDocumentoColor = (tipo: string) => {
     switch (tipo) {
       case 'TI': return 'bg-blue-100 text-blue-800';
@@ -118,17 +140,16 @@ export default function MisAcudientesPage() {
   };
 
   const getParentescoIcon = (parentesco: string) => {
-    const icons: { [key: string]: string } = {
-      'MADRE': '👩',
-      'PADRE': '👨',
-      'ABUELA': '👵',
-      'ABUELO': '👴',
-      'TÍA': '👱‍♀️',
-      'TÍO': '👱‍♂️',
-      'HERMANA': '👧',
-      'HERMANO': '👦',
-    };
-    return icons[parentesco.toUpperCase()] || '👤';
+    const p = (parentesco || '').toUpperCase();
+    const isFemale = ['MADRE','ABUELA','TÍA','HERMANA'].includes(p);
+    return isFemale 
+      ? <PiGenderFemaleBold className="text-pink-600" size={22} />
+      : <PiGenderMaleBold className="text-teal-600" size={22} />;
+  };
+
+  const limpiarCurso = (nombre?: string) => {
+    if (!nombre) return '';
+    return nombre.replace(/^\d+_/, '');
   };
 
   // Error boundary para capturar errores de renderizado
@@ -150,7 +171,7 @@ export default function MisAcudientesPage() {
       return (
         <TeacherLayout title="Acudientes de Mis Estudiantes">
           <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
-            <div className="text-red-600 mb-2">❌ Error</div>
+            <div className="text-red-600 mb-2 flex items-center justify-center gap-2"><HiOutlineXCircle /><span>Error</span></div>
             <p className="text-red-800">{error}</p>
             <Button 
               onClick={loadAcudientes} 
@@ -198,13 +219,13 @@ export default function MisAcudientesPage() {
                   className="w-full"
                   variant="outline"
                 >
-                  🔄 Actualizar
+                  <span className="inline-flex items-center gap-2"><HiOutlineArrowPath /><span>Actualizar</span></span>
                 </Button>
               </div>
             </div>
           </div>
 
-          {/* Lista de acudientes */}
+          {/* Tabla de acudientes */}
           {acudientesFiltrados.length === 0 ? (
             <EmptyState404 
               title="No se encontraron acudientes"
@@ -217,84 +238,91 @@ export default function MisAcudientesPage() {
               onAction={() => setBusqueda('')}
             />
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {acudientesFiltrados.map(acudiente => (
-                <div 
-                  key={acudiente.id}
-                  className="bg-white rounded-xl border border-slate-200 p-6 hover:shadow-lg transition-shadow cursor-pointer"
-                  onClick={() => setAcudienteSeleccionado(acudiente)}
-                >
-                  {/* Header de la tarjeta */}
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="text-3xl">{getParentescoIcon(acudiente.parentesco)}</div>
-                      <div>
-                        <h3 className="font-semibold text-slate-900">{acudiente.nombreCompleto}</h3>
-                        <p className="text-sm text-slate-600">{acudiente.parentesco}</p>
-                      </div>
-                    </div>
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getTipoDocumentoColor(acudiente.tipoDocumento)}`}>
-                      {acudiente.tipoDocumento}
-                    </span>
-                  </div>
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Acudiente</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Documento</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Parentesco</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Teléfono</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Correo</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Estudiantes</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Tipo</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-600">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {acudientesPaginados.map((acudiente) => (
+                      <tr key={acudiente.id} className="hover:bg-slate-50">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-slate-600">
+                              <HiOutlineUserCircle />
+                            </span>
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold text-slate-900 truncate">{acudiente.nombreCompleto}</div>
+                              <div className="text-xs text-slate-500 truncate">{acudiente.ocupacion || 'Sin ocupación'}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-700">{acudiente.numeroDocumento}</td>
+                        <td className="px-4 py-3 text-sm text-slate-700 flex items-center gap-1">{getParentescoIcon(acudiente.parentesco)}<span>{acudiente.parentesco}</span></td>
+                        <td className="px-4 py-3 text-sm text-slate-700"><span className="inline-flex items-center gap-1"><HiOutlinePhone />{acudiente.telefono}</span></td>
+                        <td className="px-4 py-3 text-sm text-blue-600 truncate max-w-[220px]"><span className="inline-flex items-center gap-1"><HiOutlineEnvelope />{acudiente.correo}</span></td>
+                        <td className="px-4 py-3 text-sm text-slate-700">
+                          <div className="flex flex-col gap-1">
+                            {acudiente.estudiantes.slice(0,2).map((e) => (
+                              <div key={e.id} className="flex items-center gap-1 text-xs text-slate-700">
+                                <HiOutlineBookOpen className="text-teal-600" />
+                                <span className="truncate">{e.nombreCompleto}</span>
+                                <span className="text-slate-500">- {limpiarCurso(e.cursoNombre)}</span>
+                                {e.esPrincipal && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px]">Principal</span>}
+                              </div>
+                            ))}
+                            {acudiente.estudiantes.length > 2 && (
+                              <div className="text-xs text-slate-500">+{acudiente.estudiantes.length - 2} más</div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${getTipoDocumentoColor(acudiente.tipoDocumento)}`}>{acudiente.tipoDocumento}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => setAcudienteSeleccionado(acudiente)}
+                            >
+                              Ver detalles
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
-                  {/* Información básica */}
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">Documento:</span>
-                      <span className="font-medium">{acudiente.numeroDocumento}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">Teléfono:</span>
-                      <span className="font-medium">{acudiente.telefono}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">Correo:</span>
-                      <span className="font-medium text-blue-600 text-xs truncate">{acudiente.correo}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">Ocupación:</span>
-                      <span className="font-medium">{acudiente.ocupacion || 'N/A'}</span>
-                    </div>
-                  </div>
-
-                  {/* Estudiantes asociados */}
-                  <div className="mt-4 pt-4 border-t border-slate-200">
-                    <p className="text-xs font-medium text-slate-600 mb-2">
-                      Estudiantes ({acudiente.totalEstudiantes})
-                    </p>
-                    <div className="space-y-1">
-                      {acudiente.estudiantes.slice(0, 2).map((estudiante) => (
-                        <div key={estudiante.id} className="text-xs">
-                          <span className="font-medium">{estudiante.nombreCompleto}</span>
-                          <span className="text-slate-500 ml-1">({estudiante.cursoNombre})</span>
-                          {estudiante.esPrincipal && (
-                            <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-xs">Principal</span>
-                          )}
-                        </div>
-                      ))}
-                      {acudiente.estudiantes.length > 2 && (
-                        <p className="text-xs text-slate-500">+{acudiente.estudiantes.length - 2} más</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Botón ver detalles */}
-                  <div className="mt-4 pt-4 border-t border-slate-200">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      className="w-full"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setAcudienteSeleccionado(acudiente);
-                      }}
-                    >
-                      Ver detalles
-                    </Button>
-                  </div>
-                </div>
-              ))}
+          {/* Controles de paginación */}
+          {acudientesFiltrados.length > 0 && (
+            <div className="flex items-center justify-between gap-3 bg-white border border-slate-200 rounded-xl px-4 py-3">
+              <div className="text-sm text-slate-600">
+                Mostrando <span className="font-medium">{Math.min((page - 1) * pageSize + 1, acudientesFiltrados.length)}</span>
+                -<span className="font-medium">{Math.min(page * pageSize, acudientesFiltrados.length)}</span>
+                
+                
+ de <span className="font-medium">{acudientesFiltrados.length}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>Anterior</Button>
+                <span className="text-sm text-slate-700">Página {page} de {totalPages}</span>
+                <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>Siguiente</Button>
+              </div>
             </div>
           )}
 
@@ -317,7 +345,7 @@ export default function MisAcudientesPage() {
                       size="sm"
                       onClick={() => setAcudienteSeleccionado(null)}
                     >
-                      ✕
+                      <HiOutlineXMark />
                     </Button>
                   </div>
 
@@ -380,8 +408,8 @@ export default function MisAcudientesPage() {
                               <h4 className="font-medium text-slate-900">{estudiante.nombreCompleto}</h4>
                               <p className="text-sm text-slate-600">Documento: {estudiante.numeroDocumento}</p>
                               <div className="mt-2 space-y-1 text-sm">
-                                <p className="text-slate-600">📚 Curso: {estudiante.cursoNombre}</p>
-                                <p className="text-slate-600">📖 Grado: {estudiante.gradoId}</p>
+                                <p className="text-slate-600 flex items-center gap-1"><HiOutlineBookOpen /> Curso: {limpiarCurso(estudiante.cursoNombre)}</p>
+                                <p className="text-slate-600 flex items-center gap-1"><HiOutlineAcademicCap /> Grado: {estudiante.gradoId}</p>
                               </div>
                             </div>
                             {estudiante.esPrincipal && (

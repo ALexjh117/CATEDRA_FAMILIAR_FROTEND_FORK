@@ -58,6 +58,68 @@ type SyncNotice = {
   message: string;
 };
 
+// ===== Redact helpers to avoid exposing sensitive data =====
+function maskEmail(email?: string) {
+  if (!email || typeof email !== 'string') return undefined;
+  const [user, domain] = email.split('@');
+  if (!domain) return '***';
+  const visible = user.slice(0, 2);
+  return `${visible}***@${domain}`;
+}
+
+function maskToken(token?: string) {
+  if (!token || typeof token !== 'string') return undefined;
+  if (token.length <= 10) return '***';
+  return `${token.slice(0, 6)}...${token.slice(-4)}`;
+}
+
+function maskString(val?: string) {
+  if (!val) return undefined;
+  return val.length <= 4 ? '***' : `${val.slice(0, 2)}***${val.slice(-1)}`;
+}
+
+function redactWebSession(session: any) {
+  if (!session || typeof session !== 'object') return session;
+  const user = session.user || {};
+  return {
+    user: {
+      id: user.id,
+      nombre: user.nombre,
+      apellidos: user.apellidos ? '***' : '',
+      correo: maskEmail(user.correo),
+      rol: user.rol,
+      rolId: user.rolId,
+      institucionId: user.institucionId ?? user.institucion_id ?? user?.institucion?.id,
+      // No exponer teléfono/documento
+      telefono: user.telefono ? '***' : undefined,
+      documento: user.documento ? '***' : undefined,
+      activo: user.activo,
+      debe_cambiar_contrasena: Boolean(user.debe_cambiar_contrasena),
+    },
+    isPreview: Boolean(session.isPreview),
+    token: maskToken(session.token),
+    loginTime: session.loginTime,
+    estudiantes: Array.isArray(session.estudiantes) ? session.estudiantes.length : 0,
+    context: session.context?.institucionId ? { institucionId: session.context.institucionId } : undefined,
+  };
+}
+
+function redactOfflineSession(os: any) {
+  if (!os || typeof os !== 'object') return os;
+  return {
+    userId: os.userId,
+    email: maskEmail(os.email),
+    rolId: os.rolId,
+    institucionId: os.institucionId ?? os?.datosEspecificos?.institucionId,
+    tipo: os.tipo,
+    // Enmascarar tokens
+    sessionToken: maskToken(os.sessionToken),
+    createdAt: os.createdAt,
+    expiresAt: os.expiresAt,
+    datosEspecificos: os.datosEspecificos?.institucionId ? { institucionId: os.datosEspecificos.institucionId } : undefined,
+  };
+}
+
 function formatStudentLabel(student: { id: number; nombres?: string; apellidos?: string; cursoId?: number }) {
   const fullName = `${student.nombres || ''} ${student.apellidos || ''}`.trim();
   return fullName ? `${fullName} · ID ${student.id}` : `Estudiante #${student.id}`;
@@ -174,6 +236,8 @@ export default function OfflineFlowLabPage() {
   const [nombreEnvio, setNombreEnvio] = useState('Prueba offline desde lab');
   const [descripcion, setDescripcion] = useState('Entrega creada para probar el flujo offline completo');
   const [archivoUrl, setArchivoUrl] = useState('https://ejemplo.com/evidencia-offline');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
   const [statusResponse, setStatusResponse] = useState<unknown>(null);
   const [syncNotice, setSyncNotice] = useState<SyncNotice | null>(null);
   const [activeStep, setActiveStep] = useState(1);
@@ -181,6 +245,61 @@ export default function OfflineFlowLabPage() {
 
   const appendLog = (level: LabLog['level'], message: string, details?: unknown) => {
     setLogs((prev) => [createLog(level, message, details), ...prev].slice(0, 20));
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      // Validar tamaño máximo (10MB)
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      if (file.size > maxSize) {
+        appendLog('error', `El archivo ${file.name} es demasiado grande. Máximo permitido: 10MB`);
+        event.target.value = ''; // Limpiar input
+        return;
+      }
+
+      // Validar tipo de archivo
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
+      if (!allowedTypes.includes(file.type)) {
+        appendLog('error', `Tipo de archivo no permitido: ${file.type}. Tipos permitidos: imágenes, PDF, Word, texto`);
+        event.target.value = ''; // Limpiar input
+        return;
+      }
+
+      setSelectedFile(file);
+      appendLog('info', `Archivo seleccionado: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+
+      // Crear preview para imágenes
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setFilePreview(e.target?.result as string);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        setFilePreview(null);
+      }
+    }
+  };
+
+  const removeFile = () => {
+    setSelectedFile(null);
+    setFilePreview(null);
+    appendLog('info', 'Archivo eliminado');
+  };
+
+  const convertFileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        // Quitar el prefijo data:image/...;base64,
+        const base64 = result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
   };
 
   const loadOfflineState = async () => {
@@ -193,32 +312,46 @@ export default function OfflineFlowLabPage() {
   };
 
   const loadCatalog = async () => {
+    if (catalogLoading) {
+      appendLog('info', 'loadCatalog: Ya está cargando, evitando llamada duplicada');
+      return;
+    }
+    
     setCatalogLoading(true);
+    appendLog('info', 'loadCatalog: Iniciando carga de catálogo');
+    
     try {
       let normalizedStudents: LabStudent[] = [];
       let flattenedAssignments: LabAssignment[] = [];
 
       try {
+        appendLog('info', 'loadCatalog: Obteniendo tareas y estudiantes de acudiente');
         const combined = await getMisTareasAcudiente();
         const combinedStudents = Array.isArray(combined?.estudiantes) ? combined.estudiantes : [];
         normalizedStudents = combinedStudents.map(normalizeStudentFromAny).filter((item) => item.id);
+        appendLog('info', `loadCatalog: ${normalizedStudents.length} estudiantes obtenidos de tareas`);
 
         const studentMap = buildStudentMap(normalizedStudents);
         const combinedAssignments = Array.isArray(combined?.asignaciones) ? combined.asignaciones : [];
         flattenedAssignments = combinedAssignments
           .flatMap((task) => normalizeAssignmentFromAny(task, normalizedStudents, studentMap))
           .filter((item) => item.id);
-      } catch {
+        appendLog('info', `loadCatalog: ${flattenedAssignments.length} asignaciones obtenidas de tareas`);
+      } catch (error) {
+        appendLog('error', 'loadCatalog: Error obteniendo tareas de acudiente', error);
       }
 
       if (normalizedStudents.length === 0) {
+        appendLog('info', 'loadCatalog: No hay estudiantes, intentando getMisEstudiantesAcudiente');
         const misEstudiantes = await getMisEstudiantesAcudiente();
         normalizedStudents = (Array.isArray(misEstudiantes) ? misEstudiantes : [])
           .map(normalizeStudentFromAny)
           .filter((item) => item.id);
+        appendLog('info', `loadCatalog: ${normalizedStudents.length} estudiantes obtenidos de getMisEstudiantesAcudiente`);
       }
 
       if (flattenedAssignments.length === 0 && normalizedStudents.length > 0) {
+        appendLog('info', 'loadCatalog: No hay asignaciones, obteniendo tareas por estudiante');
         const assignmentResults = await Promise.all(
           normalizedStudents.map(async (student) => {
             try {
@@ -232,23 +365,28 @@ export default function OfflineFlowLabPage() {
                 status: task.estado,
                 raw: task,
               } satisfies LabAssignment));
-            } catch {
+            } catch (error) {
+              appendLog('error', `loadCatalog: Error obteniendo tareas del estudiante ${student.id}`, error);
               return [] as LabAssignment[];
             }
           })
         );
         flattenedAssignments = assignmentResults.flat();
+        appendLog('info', `loadCatalog: ${flattenedAssignments.length} asignaciones obtenidas por estudiante`);
       }
 
       setStudents(normalizedStudents);
       setAssignments(flattenedAssignments);
+      appendLog('success', `loadCatalog: Carga completada - ${normalizedStudents.length} estudiantes, ${flattenedAssignments.length} asignaciones`);
 
       if (!selectedStudentId && normalizedStudents.length > 0) {
         setSelectedStudentId(String(normalizedStudents[0].id));
+        appendLog('info', `loadCatalog: Estudiante seleccionado automáticamente: ${normalizedStudents[0].id}`);
       }
 
       if (!selectedAssignmentId && flattenedAssignments.length > 0) {
         setSelectedAssignmentId(String(flattenedAssignments[0].id));
+        appendLog('info', `loadCatalog: Asignación seleccionada automáticamente: ${flattenedAssignments[0].id}`);
       }
     } catch (error) {
       appendLog('error', 'No se pudieron cargar estudiantes y asignaciones para el laboratorio offline', {
@@ -259,6 +397,7 @@ export default function OfflineFlowLabPage() {
       setAssignments([]);
     } finally {
       setCatalogLoading(false);
+      appendLog('info', 'loadCatalog: Carga finalizada');
     }
   };
 
@@ -271,18 +410,16 @@ export default function OfflineFlowLabPage() {
     const handleOnline = () => {
       setIsOnline(true);
       loadOfflineState();
-      loadCatalog();
+      // Solo cargar catálogo si no está cargando actualmente
+      if (!catalogLoading) {
+        loadCatalog();
+      }
       const hasPending = offlineEntregas.some((item) => item.status === 'pending' || item.status === 'error' || item.status === 'syncing');
       if (hasPending) {
         handleAction('sync', async () => {
           await runSyncFlow(true);
         });
-        return;
       }
-      setSyncNotice({
-        type: 'info',
-        message: 'Ya tienes conexión de nuevo. No tienes tareas pendientes.',
-      });
     };
 
     const handleOffline = () => {
@@ -298,7 +435,7 @@ export default function OfflineFlowLabPage() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [offlineEntregas]);
+  }, []); // Solo ejecutar al montar
 
   const sessionLabel = useMemo(() => {
     if (!offlineSession) return 'Sin sesión offline';
@@ -323,26 +460,30 @@ export default function OfflineFlowLabPage() {
   );
 
   useEffect(() => {
+    // Solo auto-seleccionar si no hay nada seleccionado
     if (!selectedStudentId && students.length > 0) {
       setSelectedStudentId(String(students[0].id));
       return;
     }
 
+    // Si el estudiante seleccionado ya no existe, limpiar selección
     if (selectedStudentId && !students.some((item) => String(item.id) === selectedStudentId)) {
-      setSelectedStudentId(students[0] ? String(students[0].id) : '');
+      setSelectedStudentId('');
     }
-  }, [students, selectedStudentId]);
+  }, [students.length]); // Solo cuando cambia la cantidad de estudiantes
 
   useEffect(() => {
+    // Solo auto-seleccionar asignación si no hay nada seleccionado
     if (!selectedAssignmentId && filteredAssignments.length > 0) {
       setSelectedAssignmentId(String(filteredAssignments[0].id));
       return;
     }
 
+    // Si la asignación seleccionada ya no existe en el filtro actual, limpiar
     if (selectedAssignmentId && !filteredAssignments.some((item) => String(item.id) === selectedAssignmentId)) {
-      setSelectedAssignmentId(filteredAssignments[0] ? String(filteredAssignments[0].id) : '');
+      setSelectedAssignmentId('');
     }
-  }, [filteredAssignments, selectedAssignmentId]);
+  }, [filteredAssignments.length]); // Solo cuando cambia la cantidad de asignaciones filtradas
 
   const handleAction = async (key: string, action: () => Promise<void>) => {
     setWorking(key);
@@ -357,7 +498,7 @@ export default function OfflineFlowLabPage() {
     await handleAction('generate-session', async () => {
       const sessionData = await ensureOfflineSession();
       setOfflineSession(sessionData);
-      appendLog('success', 'Sesión offline generada/actualizada', sessionData);
+      appendLog('success', 'Sesión offline generada/actualizada');
     });
   };
 
@@ -365,7 +506,7 @@ export default function OfflineFlowLabPage() {
     await handleAction('refresh-session', async () => {
       const sessionData = await refreshOfflineSession();
       setOfflineSession(sessionData);
-      appendLog(sessionData ? 'success' : 'error', sessionData ? 'Sesión offline refrescada' : 'No se pudo refrescar la sesión offline', sessionData);
+      appendLog(sessionData ? 'success' : 'error', sessionData ? 'Sesión offline refrescada' : 'No se pudo refrescar la sesión offline');
     });
   };
 
@@ -376,7 +517,7 @@ export default function OfflineFlowLabPage() {
         appendLog('error', 'El login offline no devolvió sesión');
         return;
       }
-      appendLog('success', 'Login offline ejecutado', result);
+      appendLog('success', 'Login offline ejecutado');
       await loadOfflineState();
     });
   };
@@ -388,14 +529,47 @@ export default function OfflineFlowLabPage() {
         return;
       }
 
+      let archivoBase64: string | undefined;
+      let archivoNombre: string | undefined;
+      let archivoTipo: string | undefined;
+
+      // Convertir archivo a base64 si hay uno seleccionado
+      if (selectedFile) {
+        try {
+          archivoBase64 = await convertFileToBase64(selectedFile);
+          archivoNombre = selectedFile.name;
+          archivoTipo = selectedFile.type;
+          appendLog('info', `Archivo convertido a base64: ${selectedFile.name}`);
+        } catch (error) {
+          appendLog('error', 'Error al convertir archivo a base64', error);
+          return;
+        }
+      }
+
       const record = await saveEntregaOffline({
         asignacionId: selectedAssignment.id,
         estudianteId: selectedStudent.id,
         nombreEnvio,
         descripcion,
         archivosUrl: archivoUrl ? [archivoUrl] : [],
+        // Agregar información del archivo
+        archivoBase64,
+        archivoNombre,
+        archivoTipo,
       });
-      appendLog('success', 'Entrega guardada en cola offline', record);
+      
+      appendLog('success', 'Entrega guardada en cola offline', {
+        ...record,
+        tieneArchivo: !!selectedFile,
+        nombreArchivo: selectedFile?.name,
+      });
+      
+      // Limpiar archivo después de guardar
+      if (selectedFile) {
+        setSelectedFile(null);
+        setFilePreview(null);
+      }
+      
       await loadOfflineState();
     });
   };
@@ -634,16 +808,7 @@ export default function OfflineFlowLabPage() {
                 </Button>
               </div>
 
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                  <div className="font-semibold text-slate-900">Sesión web actual</div>
-                  <pre className="mt-2 overflow-auto whitespace-pre-wrap break-all text-xs text-slate-600">{JSON.stringify(session, null, 2)}</pre>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                  <div className="font-semibold text-slate-900">Offline session actual</div>
-                  <pre className="mt-2 overflow-auto whitespace-pre-wrap break-all text-xs text-slate-600">{JSON.stringify(offlineSession, null, 2)}</pre>
-                </div>
-              </div>
+              {/* Ocultamos detalles de sesión para evitar exposición de datos sensibles */}
             </section>
           )}
 
@@ -711,9 +876,66 @@ export default function OfflineFlowLabPage() {
                   <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} rows={4} className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none transition focus:border-teal-500" />
                 </label>
                 <label className="space-y-2 text-sm font-medium text-slate-700 md:col-span-2">
-                  URL de evidencia
-                  <input value={archivoUrl} onChange={(e) => setArchivoUrl(e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none transition focus:border-teal-500" />
+                  URL de evidencia (opcional)
+                  <input value={archivoUrl} onChange={(e) => setArchivoUrl(e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none transition focus:border-teal-500" placeholder="https://ejemplo.com/evidencia" />
                 </label>
+                
+                {/* Upload de archivos */}
+                <label className="space-y-2 text-sm font-medium text-slate-700 md:col-span-2">
+                  Archivo adjunto (opcional)
+                  <div className="relative">
+                    <input
+                      type="file"
+                      onChange={handleFileSelect}
+                      accept="image/*,.pdf,.doc,.docx,.txt"
+                      className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none transition focus:border-teal-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100"
+                    />
+                    <div className="mt-2 text-xs text-slate-500">
+                      Tipos permitidos: imágenes (JPG, PNG, GIF, WebP), PDF, Word, TXT. Máximo 10MB.
+                    </div>
+                  </div>
+                </label>
+
+                {/* Preview del archivo */}
+                {selectedFile && (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="font-medium text-slate-900">{selectedFile.name}</div>
+                        <div className="text-sm text-slate-600">
+                          {(selectedFile.size / 1024 / 1024).toFixed(2)} MB · {selectedFile.type}
+                        </div>
+                      </div>
+                      <button
+                        onClick={removeFile}
+                        className="rounded-lg bg-red-50 px-3 py-1 text-sm font-medium text-red-700 transition hover:bg-red-100"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                    
+                    {/* Preview para imágenes */}
+                    {filePreview && (
+                      <div className="mt-3 rounded-lg border border-slate-200 overflow-hidden">
+                        <img 
+                          src={filePreview} 
+                          alt="Preview" 
+                          className="max-h-48 w-full object-contain bg-white"
+                        />
+                      </div>
+                    )}
+                    
+                    {/* Icono para documentos */}
+                    {!filePreview && (
+                      <div className="mt-3 flex items-center gap-2 text-sm text-slate-600">
+                        <svg className="h-8 w-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span>Documento listo para enviar</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="mt-5 flex flex-wrap gap-3">
