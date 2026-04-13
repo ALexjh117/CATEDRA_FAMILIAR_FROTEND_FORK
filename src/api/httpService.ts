@@ -13,6 +13,10 @@ interface HttpResponse<T = any> {
   status: number;
   statusText: string;
   headers: Headers;
+  url?: string;
+  success?: boolean;
+  message?: string;
+  meta?: any;
 }
 
 interface ApiError {
@@ -60,18 +64,9 @@ export class HttpService {
         localStorage.removeItem('auth_token');
       }
       
-      // Si hay sesión vieja, limpiarla también
-      if (session) {
-        const parsedSession = JSON.parse(session);
-        const sessionTime = parsedSession?.loginTime;
-        const now = new Date().toISOString();
-        
-        // Si la sesión es muy vieja (más de 5 minutos), limpiarla
-        if (sessionTime && (new Date(now).getTime() - new Date(sessionTime).getTime()) > 5 * 60 * 1000) {
-          localStorage.removeItem('session');
-          return null;
-        }
-      }
+      // Si hay sesión vieja, NO limpiarla aquí. Dejar que el backend/401 gestione expiración.
+      // Esto evita romper la UI tras períodos largos de inactividad.
+      // if (session) { /* previously auto-cleared after 5 minutes */ }
 
       // SEGUNDO: Usar siempre el token de session (el más reciente)
       const currentSession = localStorage.getItem('session');
@@ -275,12 +270,8 @@ if (params) {
       const token = this.getAuthToken();
       
       if (!token && !isLoginEndpoint) {
-        return {
-          data: { error: 'No hay token de autenticación' } as T,
-          status: 401,
-          statusText: 'Unauthorized',
-          headers: new Headers()
-        };
+        const err: ApiError = { message: 'No hay token de autenticación', status: 401 };
+        throw err;
       }
 
       // Construir URL correctamente (permitir endpoints absolutos)
@@ -342,6 +333,7 @@ if (params) {
   setupUnauthorizedInterceptor(callback: () => void) {
     let consecutiveUnauthorized = 0;
     let lastUnauthorizedTime = 0;
+    let hasRedirected = false;
     
     const originalHandleResponse = this.handleResponse.bind(this);
     this.handleResponse = async function<T>(this: HttpService, response: Response, responseType?: 'blob'): Promise<HttpResponse<T>> {
@@ -362,7 +354,8 @@ if (params) {
         // O si es un endpoint crítico que no debería fallar nunca
         const isCriticalEndpoint = response.url.includes('/me') || response.url.includes('/estadisticas');
         
-        if (consecutiveUnauthorized >= 3 || isCriticalEndpoint) {
+        if ((consecutiveUnauthorized >= 3 || isCriticalEndpoint) && !hasRedirected) {
+          hasRedirected = true;
           callback();
         }
       } else if (response.ok) {
@@ -378,11 +371,8 @@ if (params) {
 // Instancia singleton del servicio HTTP
 export const httpService = new HttpService();
 
-// Configurar interceptor de 401 para logout automático
-// TEMPORALMENTE DESHABILITADO para limpiar tokens viejos
-/*
+// Configurar interceptor de 401 para logout automático (re-habilitado)
 httpService.setupUnauthorizedInterceptor(() => {
-  // Solo limpiar sesión si realmente existe una
   const session = localStorage.getItem('session');
   if (session) {
     localStorage.removeItem('session');
@@ -390,6 +380,5 @@ httpService.setupUnauthorizedInterceptor(() => {
     window.location.href = '/login';
   }
 });
-*/
 
 export default httpService;

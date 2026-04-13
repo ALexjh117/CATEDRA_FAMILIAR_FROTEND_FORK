@@ -264,9 +264,15 @@ class ApiClient {
     return await httpService.get('/coordinadores/cursos');
   }
 
+  async getCursosConEstudiantesCoordinador() {
+    return await httpService.get('/coordinadores/cursos-con-estudiantes');
+  }
+
   // Orientadores
   async crearOrientador(data: any) {
-    return await httpService.post('/orientadores', data);
+    const res = await httpService.post<any>('/orientadores', data);
+    const raw = (res as any)?.data ?? res;
+    return { success: raw?.success !== false, data: raw?.data ?? raw, message: raw?.message, passwordTemporal: (raw as any)?.passwordTemporal, status: (res as any)?.status };
   }
 
   async getAlertasCoordinador() {
@@ -295,15 +301,21 @@ class ApiClient {
   }
 
   async crearOrientadorCoordinador(data: any) {
-    return await httpService.post('/coordinadores/orientadores', data);
+    const res = await httpService.post<any>('/coordinadores/orientadores', data);
+    const raw = (res as any)?.data ?? res;
+    return { success: raw?.success !== false, data: raw?.data ?? raw, message: raw?.message, passwordTemporal: (raw as any)?.passwordTemporal, status: (res as any)?.status };
   }
 
   async actualizarOrientadorCoordinador(id: number, data: any) {
-    return await httpService.put(`/coordinadores/orientadores/${id}`, data);
+    const res = await httpService.put<any>(`/coordinadores/orientadores/${id}`, data);
+    const raw = (res as any)?.data ?? res;
+    return { success: raw?.success !== false, data: raw?.data ?? raw, message: raw?.message, status: (res as any)?.status };
   }
 
   async eliminarOrientadorCoordinador(id: number) {
-    return await httpService.delete(`/coordinadores/orientadores/${id}`);
+    const res = await httpService.delete<any>(`/coordinadores/orientadores/${id}`);
+    const raw = (res as any)?.data ?? res;
+    return { success: raw?.success !== false, data: raw?.data ?? raw, message: raw?.message, status: (res as any)?.status };
   }
 
   async getAcudientesCoordinador() {
@@ -319,6 +331,24 @@ class ApiClient {
   }
 
   // Estudiantes
+  async createEstudiante(data: any) {
+    const res = await httpService.post<any>('/estudiantes', data);
+    const raw = (res as any)?.data ?? res;
+    return { success: raw?.success !== false, data: raw?.data ?? raw, message: raw?.message, status: (res as any)?.status };
+  }
+
+  async updateEstudiante(id: number, data: any) {
+    const res = await httpService.put<any>(`/estudiantes/${id}`, data);
+    const raw = (res as any)?.data ?? res;
+    return { success: raw?.success !== false, data: raw?.data ?? raw, message: raw?.message, status: (res as any)?.status };
+  }
+
+  async deleteEstudiante(id: number) {
+    const res = await httpService.delete<any>(`/estudiantes/${id}`);
+    const raw = (res as any)?.data ?? res;
+    return { success: raw?.success !== false, data: raw?.data ?? raw, message: raw?.message, status: (res as any)?.status };
+  }
+
   async cambiarCursoEstudiante(estudianteId: number, data: any) {
     return await httpService.post(`/estudiantes/${estudianteId}/cambiar-curso`, data);
   }
@@ -406,15 +436,21 @@ class ApiClient {
   }
 
   async createGrado(data: any) {
-    return await httpService.post('/grados', data);
+    const res = await httpService.post<any>('/grados', data);
+    const raw = (res as any)?.data ?? res;
+    return { success: raw?.success !== false, data: raw?.data ?? raw, message: raw?.message, status: (res as any)?.status };
   }
 
   async updateGrado(id: number, data: any) {
-    return await httpService.put(`/grados/${id}`, data);
+    const res = await httpService.put<any>(`/grados/${id}`, data);
+    const raw = (res as any)?.data ?? res;
+    return { success: raw?.success !== false, data: raw?.data ?? raw, message: raw?.message, status: (res as any)?.status };
   }
 
   async deleteGrado(id: number) {
-    return await httpService.delete(`/grados/${id}`);
+    const res = await httpService.delete<any>(`/grados/${id}`);
+    const raw = (res as any)?.data ?? res;
+    return { success: raw?.success !== false, data: raw?.data ?? raw, message: raw?.message, status: (res as any)?.status };
   }
 
   // Vincular acudiente
@@ -470,52 +506,13 @@ class ApiClient {
   }
 
   // Coordinadores - Personal y datos institucionales
-  async getDocentesCoordinador() {
-    return await httpService.get('/coordinadores/docentes');
-  }
-
-  async getOrientadoresCoordinador() {
-    return await httpService.get('/coordinadores/orientadores');
-  }
-
-  async getAcudientesCoordinador() {
-    return await httpService.get('/coordinadores/acudientes');
-  }
-
-  async getCursosCoordinador() {
-    return await httpService.get('/coordinadores/cursos');
-  }
-
-  async getEstadisticasCoordinador() {
-    return await httpService.get('/coordinadores/estadisticas');
-  }
-
-  async getAlertasCoordinador() {
-    return await httpService.get('/coordinadores/alertas');
-  }
-
   async getMiInstitucion() {
     return await httpService.get('/coordinadores/mi-institucion');
   }
 
-  async getInstitucionCompleta() {
-    try {
-      const sessionStr = typeof window !== 'undefined' ? localStorage.getItem('session') : null;
-      const session = sessionStr ? JSON.parse(sessionStr) : null;
-      const rawId = session?.user?.institucionId ?? session?.user?.institucion_id ?? session?.user?.institucion?.id ?? session?.context?.institucionId ?? session?.context?.institucion_id;
-      const institucionId = Number(rawId);
-      if (!institucionId || Number.isNaN(institucionId)) {
-        throw new Error('No se encontró institucionId válido en la sesión');
-      }
-      return await httpService.get(`/instituciones/${institucionId}`);
-    } catch (e) {
-      // Fallback a endpoint específico de coordinador si existe
-      return await httpService.get('/coordinadores/mi-institucion');
-    }
-  }
 
-  async getEstudiantesCoordinador() {
-    return await httpService.get('/coordinadores/estudiantes');
+  async getEstudiantesCoordinador(params?: { page?: number; perPage?: number; gradoId?: number; cursoId?: number; search?: string }) {
+    return await httpService.get('/coordinadores/estudiantes', params as any);
   }
 }
 

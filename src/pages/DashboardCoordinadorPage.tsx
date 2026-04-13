@@ -36,7 +36,8 @@ import {
 
   actualizarOrientador,
 
-  desactivarOrientador
+  desactivarOrientador,
+  getCursosConEstudiantesCoordinador
 
 } from '../api/endpoints';
 
@@ -71,6 +72,15 @@ interface CursoCoordinador {
   tareasCreadas: number;
 
   tieneAlertas: boolean;
+
+  estudiantes?: {
+    id: number;
+    nombres: string;
+    apellidos: string;
+    numeroDocumento?: string;
+    correo?: string;
+    telefono?: string;
+  }[];
 
 }
 
@@ -347,6 +357,7 @@ export default function DashboardCoordinadorPage() {
   const [grados, setGrados] = useState<GradoCoordinador[]>([]); // Usar nueva interfaz
 
   const [institucion, setInstitucion] = useState<any>(null);
+  const [estudiantesMeta, setEstudiantesMeta] = useState<any>(null);
 
   const [activeTab, setActiveTab] = useState<'resumen' | 'grados' | 'cursos' | 'orientacion' | 'estudiantes' | 'carga-masiva'>('resumen');
 
@@ -361,6 +372,22 @@ export default function DashboardCoordinadorPage() {
   const [filtroCurso, setFiltroCurso] = useState<number | ''>('');
 
   const [filtroGrado, setFiltroGrado] = useState<number | ''>('');
+
+  // Paginación estudiantes (coordinador)
+  const [page, setPage] = useState<number>(1);
+  const [perPage, setPerPage] = useState<number>(50); // Máximo 200
+
+  // Recargar datos al cambiar filtros/búsqueda/paginación (usa endpoint de coordinador con filtros)
+  useEffect(() => {
+    loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busqueda, filtroCurso, filtroGrado, page, perPage]);
+
+  // Cuando cambian filtros/búsqueda, volver a la primera página
+  useEffect(() => {
+    setPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busqueda, filtroCurso, filtroGrado]);
 
   
 
@@ -389,6 +416,8 @@ export default function DashboardCoordinadorPage() {
   const [estudianteVincular, setEstudianteVincular] = useState<Estudiante | null>(null);
 
   const [editingOrientador, setEditingOrientador] = useState<any>(null);
+
+  const [saving, setSaving] = useState(false);
 
   const [acudientesEstudiante, setAcudientesEstudiante] = useState<any[]>([]);
 
@@ -482,6 +511,21 @@ export default function DashboardCoordinadorPage() {
 
     
 
+    // Precargar desde caché local para evitar pantallas vacías si el backend no responde
+    try {
+      const cached = localStorage.getItem('coordinador_snapshot');
+      if (cached) {
+        const snap = JSON.parse(cached);
+        if (Array.isArray(snap?.grados)) setGrados(snap.grados);
+        if (Array.isArray(snap?.cursos)) setCursos(snap.cursos);
+        if (Array.isArray(snap?.docentes)) setDocentes(snap.docentes);
+        if (Array.isArray(snap?.estudiantes)) setEstudiantes(snap.estudiantes);
+        if (Array.isArray(snap?.tareas)) setTareas(snap.tareas);
+      }
+    } catch {}
+
+    
+
     try {
 
       const institucionId = user?.institucionId;
@@ -508,11 +552,19 @@ export default function DashboardCoordinadorPage() {
 
         getAcudientesCoordinador(),
 
-        getEstudiantesCoordinador(),
+        getEstudiantesCoordinador({
+          page,
+          perPage,
+          gradoId: typeof filtroGrado === 'number' ? filtroGrado : undefined,
+          cursoId: typeof filtroCurso === 'number' ? filtroCurso : undefined,
+          search: busqueda && busqueda.trim() ? busqueda.trim() : undefined
+        }),
 
         getTareas(),
 
-        getCursosCoordinador() // Para cursos con detalles adicionales
+        getCursosCoordinador(), // Para cursos con detalles adicionales
+
+        getCursosConEstudiantesCoordinador() // Cursos con lista de estudiantes
 
       ]);
 
@@ -543,9 +595,17 @@ export default function DashboardCoordinadorPage() {
       if (tareasResult.status === 'rejected') {
         console.warn('⚠️ [DashboardCoordinador] getTareas rechazado. Es posible que el rol no tenga permisos (solo docente/orientador) o haya un error de backend.');
       }
-      const cursosResponse = (Array.isArray(results) && results[8] && (results[8] as any).status === 'fulfilled')
+      const cursosResponseBase = (Array.isArray(results) && results[8] && (results[8] as any).status === 'fulfilled')
         ? (results[8] as any).value
         : []; // Cursos con detalles
+
+      // Preferir cursos con estudiantes si el endpoint respondió OK
+      const cursosConEstudiantesResult = results[9];
+      const cursosConEstudiantesOk = cursosConEstudiantesResult && (cursosConEstudiantesResult as any).status === 'fulfilled';
+      const cursosConEstudiantesResp = cursosConEstudiantesOk ? (cursosConEstudiantesResult as any).value : [];
+      const cursosResponse = cursosConEstudiantesOk && Array.isArray((cursosConEstudiantesResp as any)?.data)
+        ? (cursosConEstudiantesResp as any)
+        : cursosResponseBase;
       // Los grados se derivan de institucionCompletaData
       let gradosDesdeEstructura: any[] = [];
 
@@ -601,6 +661,21 @@ export default function DashboardCoordinadorPage() {
 
         console.log('🎯 [DashboardCoordinador] Cursos desde estructura:', cursosDesdeEstructura.length);
 
+      }
+
+      
+
+      if (!Array.isArray(gradosDesdeEstructura) || gradosDesdeEstructura.length === 0) {
+        try {
+          const gradosCoord = await getGradosCoordinador();
+          const normalizados = Array.isArray(gradosCoord)
+            ? gradosCoord
+            : (Array.isArray((gradosCoord as any)?.data) ? (gradosCoord as any).data : []);
+          if (Array.isArray(normalizados) && normalizados.length > 0) {
+            gradosDesdeEstructura = normalizados;
+          }
+        } catch (e) {
+        }
       }
 
       
@@ -749,13 +824,25 @@ export default function DashboardCoordinadorPage() {
 
       setAlertasCoord(alertasData || null);
 
-      setDocentesCoord(Array.isArray(docentesCoordData) ? docentesCoordData : []);
+      // Normalizar respuesta de docentes coordinador
+      const docentesCoordLista = Array.isArray(docentesCoordData)
+        ? docentesCoordData
+        : (Array.isArray((docentesCoordData as any)?.data)
+            ? (docentesCoordData as any).data
+            : (Array.isArray((docentesCoordData as any)?.items)
+                ? (docentesCoordData as any).items
+                : []));
+
+      setDocentesCoord(docentesCoordLista);
 
       setOrientadoresCoord(Array.isArray(orientadoresData) ? orientadoresData : []);
 
       const estudiantesLista = Array.isArray((estudiantesData as any)?.data)
         ? (estudiantesData as any).data
         : (Array.isArray(estudiantesData) ? estudiantesData : []);
+      // Guardar meta si viene del endpoint de coordinador
+      try { setEstudiantesMeta((estudiantesData as any)?.meta || null); } catch {}
+      // El backend ya filtra por institución; evitar filtros adicionales que puedan dejar vacío
       setEstudiantes(estudiantesLista);
 
       
@@ -770,9 +857,8 @@ export default function DashboardCoordinadorPage() {
 
       console.log('🔍 [DashboardCoordinador] Primer estudiante (estructura):', Array.isArray(estudiantesLista) ? estudiantesLista?.[0] : null);
 
-      // Usar docentesCoordData como fuente de docentes (ya viene de getDocentesCoordinador)
-
-      setDocentes(Array.isArray(docentesCoordData) ? docentesCoordData : []);
+      // Usar lista normalizada de docentes coordinador como fuente de docentes
+      setDocentes(docentesCoordLista);
 
       const tareasLista = Array.isArray((tareasData as any)?.data)
         ? (tareasData as any).data
@@ -804,6 +890,21 @@ export default function DashboardCoordinadorPage() {
 
       
 
+      // Guardar snapshot en caché local (no sensible) para mejorar UX offline/errores
+      try {
+        const snapshot = {
+          grados: Array.isArray(gradosDeMiInstitucion) ? gradosDeMiInstitucion : [],
+          cursos: Array.isArray(cursosDeMiInstitucion) ? cursosDeMiInstitucion : [],
+          docentes: Array.isArray(docentesCoordLista) ? docentesCoordLista : [],
+          estudiantes: Array.isArray(estudiantesLista) ? estudiantesLista : [],
+          tareas: Array.isArray(tareasLista) ? tareasLista : [],
+          ts: Date.now()
+        };
+        localStorage.setItem('coordinador_snapshot', JSON.stringify(snapshot));
+      } catch {}
+
+      
+
       // Verificar si hubo errores críticos (backend caído)
 
       const failedRequests = results.filter(r => r.status === 'rejected').length;
@@ -812,15 +913,11 @@ export default function DashboardCoordinadorPage() {
 
         console.error('❌ [DashboardCoordinador] Backend no responde. Múltiples peticiones fallaron.');
 
-        setError('⚠️ El backend parece estar caído. Algunos datos pueden no estar disponibles. Verifica tu conexión o contacta al administrador.');
-
       }
 
     } catch (err) {
 
       console.error('Error loading data:', err);
-
-      setError('Error al cargar los datos');
 
     } finally {
 
@@ -1002,11 +1099,13 @@ export default function DashboardCoordinadorPage() {
 
         totalGrados: grados.length,
 
-        tareasActivas: estadisticasCoord.tareasCreadas || tareas.filter(t => t.estado !== 'archivada').length,
+        // Considerar activas como: activa, borrador o pendiente
+        tareasActivas: estadisticasCoord.tareasCreadas || tareas.filter(t => t.estado === 'activa' || t.estado === 'borrador' || t.estado === 'pendiente').length,
 
         tareasCompletadas: estadisticasCoord.tareasCalificadas || tareas.filter(t => t.estado === 'completada').length,
 
-        tareasPendientes: estadisticasCoord.tareasPendientes || tareas.filter(t => t.estado === 'pendiente' || t.estado === 'en_progreso').length,
+        // Pendientes: solo 'pendiente' (evitar estados fuera del tipo)
+        tareasPendientes: estadisticasCoord.tareasPendientes || tareas.filter(t => t.estado === 'pendiente').length,
 
         tareasVencidas: tareas.filter(t => {
 
@@ -1030,11 +1129,13 @@ export default function DashboardCoordinadorPage() {
 
     // Fallback: calcular localmente
 
-    const tareasActivas = tareas.filter(t => t.estado !== 'archivada');
+    // Actividad: activa, borrador o pendiente
+    const tareasActivas = tareas.filter(t => t.estado === 'activa' || t.estado === 'borrador' || t.estado === 'pendiente');
 
     const tareasCompletadas = tareas.filter(t => t.estado === 'completada');
 
-    const tareasPendientes = tareas.filter(t => t.estado === 'pendiente' || t.estado === 'en_progreso');
+    // Pendientes: solo 'pendiente'
+    const tareasPendientes = tareas.filter(t => t.estado === 'pendiente');
 
     const tareasVencidas = tareas.filter(t => {
 
@@ -1344,9 +1445,11 @@ export default function DashboardCoordinadorPage() {
 
     if (result.success) {
 
-      const msg = result.passwordTemporal 
+      const pwd = (result as any).passwordTemporal ?? (result as any)?.data?.passwordTemporal;
 
-        ? `✅ Orientador creado. Contraseña temporal: ${result.passwordTemporal}`
+      const msg = pwd
+
+        ? `✅ Orientador creado. Contraseña temporal: ${pwd}`
 
         : '✅ Orientador creado correctamente';
 
@@ -1364,7 +1467,7 @@ export default function DashboardCoordinadorPage() {
 
     } else {
 
-      setError(result.error || 'Error al crear orientador');
+      setError((result as any)?.message || 'Error al crear orientador');
 
     }
 
@@ -1386,9 +1489,7 @@ export default function DashboardCoordinadorPage() {
 
       lastName: formOrientador.lastName,
 
-      phone: formOrientador.phone,
-
-      address: formOrientador.address
+      phone: formOrientador.phone
 
     });
 
@@ -1504,11 +1605,11 @@ export default function DashboardCoordinadorPage() {
 
   const estudiantesFiltrados = estudiantes.filter(est => {
 
-    const nombre = est.nombres || est.nombre || '';
+    const nombre = (est as any)?.nombres || est.nombre || '';
 
-    const apellidos = est.apellidos || '';
+    const apellidos = (est as any)?.apellidos || '';
 
-    const documento = est.numeroDocumento || est.numero_documento || est.documento || '';
+    const documento = (est as any)?.numeroDocumento || (est as any)?.numero_documento || (est as any)?.documento || '';
 
     
 
@@ -1522,7 +1623,7 @@ export default function DashboardCoordinadorPage() {
 
     
 
-    const cursoId = est.cursoId || est.curso_id;
+    const cursoId = est.cursoId || (est as any)?.curso_id;
 
     const matchCurso = filtroCurso === '' || cursoId === filtroCurso;
 
@@ -1530,7 +1631,7 @@ export default function DashboardCoordinadorPage() {
 
     const curso = cursos.find(c => c.id === cursoId);
 
-    const matchGrado = filtroGrado === '' || curso?.gradoId === filtroGrado;
+    const matchGrado = filtroGrado === '' || (curso?.grado?.id === filtroGrado);
 
     
 
@@ -2144,11 +2245,11 @@ export default function DashboardCoordinadorPage() {
 
                       const estudiantesGrado = estudiantes.filter(e => {
 
-                        const cursoId = e.cursoId || e.curso_id;
+                        const cursoId = e.cursoId || (e as any)?.curso_id;
 
                         const curso = cursos.find(c => c.id === cursoId);
 
-                        return curso?.gradoId === grado.id;
+                        return (curso as any)?.grado?.id === grado.id;
 
                       }).length;
 
@@ -2178,7 +2279,7 @@ export default function DashboardCoordinadorPage() {
 
                   <button 
 
-                    onClick={() => setActiveTab('docentes')}
+                    onClick={() => { setActiveTab('orientacion'); setSubTab('docentes'); }}
 
                     className="p-4 bg-indigo-50 hover:bg-indigo-100 rounded-xl border border-indigo-200 text-left transition-colors"
 
@@ -2394,11 +2495,7 @@ export default function DashboardCoordinadorPage() {
 
                                     </div>
 
-                                    <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded">
-
-                                      ID: {curso.id}
-
-                                    </span>
+                                    <span className="hidden" aria-hidden="true"></span>
 
                                   </div>
 
@@ -2520,7 +2617,7 @@ export default function DashboardCoordinadorPage() {
 
                       // Datos del curso (del backend o calculados localmente) - con protección contra null
 
-                      const totalEst = curso?.totalEstudiantes ?? estudiantes.filter(e => (e.cursoId || e.curso_id) === curso?.id).length;
+                      const totalEst = curso?.totalEstudiantes ?? estudiantes.filter(e => (e.cursoId || (e as any)?.curso_id) === curso?.id).length;
 
                       const promedio = Number(curso?.promedioGeneral) || 0;
 
@@ -2532,7 +2629,7 @@ export default function DashboardCoordinadorPage() {
 
                       const entregasPendientes = curso?.entregasPendientes ?? 0;
 
-                      const gradoNombre = curso?.grado?.nombre || grados.find(g => g.id === curso?.gradoId)?.nombre || '';
+                      const gradoNombre = curso?.grado?.nombre || '';
 
                       const docenteNombre = curso?.docenteTitular ? `${curso.docenteTitular.nombre || ''} ${curso.docenteTitular.apellido || ''}` : '-';
 
@@ -2896,7 +2993,7 @@ export default function DashboardCoordinadorPage() {
 
                             <tr>
 
-                              <td colSpan={5} className="py-12 text-center text-slate-500">
+                              <td colSpan={4} className="py-12 text-center text-slate-500">
 
                                 <IconUsers className="mx-auto mb-3 text-slate-400" size={48} />
 
@@ -3422,8 +3519,6 @@ export default function DashboardCoordinadorPage() {
 
                         <th className="text-center py-3.5 px-4 font-semibold text-slate-600 text-sm">Curso</th>
 
-                        <th className="text-center py-3.5 px-4 font-semibold text-slate-600 text-sm">Edad</th>
-
                         <th className="text-center py-3.5 px-4 font-semibold text-slate-600 text-sm">Acciones</th>
 
                       </tr>
@@ -3452,17 +3547,13 @@ export default function DashboardCoordinadorPage() {
 
                         estudiantesFiltrados.map(est => {
 
-                          const cursoId = est.cursoId || est.curso_id;
+                          const cursoId = est.cursoId || (est as any)?.curso_id;
 
                           const curso = cursos.find(c => c.id === cursoId);
 
-                          const fechaNac = est.fechaNacimiento || est.fecha_nacimiento;
+                          const fechaNac = est.fechaNacimiento || (est as any)?.fecha_nacimiento;
 
-                          const edad = fechaNac 
-
-                            ? new Date().getFullYear() - new Date(fechaNac).getFullYear()
-
-                            : '-';
+                          // Edad eliminada de la vista por solicitud
 
                           
 
@@ -3476,15 +3567,15 @@ export default function DashboardCoordinadorPage() {
 
                                   <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
 
-                                    {(est.nombres || est.nombre)?.[0] || '?'}{est.apellidos?.[0] || ''}
+                                    {(((est as any)?.nombres || est.nombre) as string | undefined)?.[0] || '?'}{(((est as any)?.apellidos) as string | undefined)?.[0] || ''}
 
                                   </div>
 
                                   <div>
 
-                                    <div className="font-medium text-slate-800">{est.nombres || est.nombre || 'Sin nombre'} {est.apellidos || ''}</div>
+                                    <div className="font-medium text-slate-800">{(est as any)?.nombres || est.nombre || 'Sin nombre'} {(est as any)?.apellidos || ''}</div>
 
-                                    <div className="text-sm text-slate-500">{(est.tipoDocumento || est.tipo_documento)?.toUpperCase() || 'TI'}: {est.numeroDocumento || est.numero_documento || est.documento}</div>
+                                    <div className="text-sm text-slate-500">{((est as any)?.tipoDocumento || (est as any)?.tipo_documento || 'ti').toUpperCase()}: {(est as any)?.numeroDocumento || (est as any)?.numero_documento || (est as any)?.documento || ''}</div>
 
                                   </div>
 
@@ -3494,7 +3585,7 @@ export default function DashboardCoordinadorPage() {
 
                               <td className="text-center py-4 px-4 text-slate-600 font-medium">
 
-                                {est.numeroDocumento || est.numero_documento || est.documento}
+                                {(est as any)?.numeroDocumento || (est as any)?.numero_documento || (est as any)?.documento}
 
                               </td>
 
@@ -3502,17 +3593,13 @@ export default function DashboardCoordinadorPage() {
 
                                 <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-semibold">
 
-                                  {curso?.nombre || 'Sin curso'}
+                                  {curso?.nombre || (est as any)?.curso?.nombre || 'Sin curso'}
 
                                 </span>
 
                               </td>
 
-                              <td className="text-center py-4 px-4 text-slate-600 font-medium">
-
-                                {edad} años
-
-                              </td>
+                              {/* Columna Edad eliminada */}
 
                               <td className="text-center py-4 px-4">
 
@@ -3573,14 +3660,46 @@ export default function DashboardCoordinadorPage() {
                   </table>
 
                 </div>
-
-
+                {/* Paginación Estudiantes */}
+                {estudiantesMeta && (
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 py-3">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                        disabled={page <= 1}
+                        className={`px-3 py-1 rounded border ${page <= 1 ? 'text-slate-300 border-slate-200' : 'text-slate-700 border-slate-300 hover:bg-slate-50'}`}
+                      >
+                        Anterior
+                      </button>
+                      <span className="text-sm text-slate-600">Página {page} de {estudiantesMeta?.lastPage || 1}</span>
+                      <button
+                        onClick={() => setPage(p => Math.min((estudiantesMeta?.lastPage || 1), p + 1))}
+                        disabled={page >= (estudiantesMeta?.lastPage || 1)}
+                        className={`px-3 py-1 rounded border ${page >= (estudiantesMeta?.lastPage || 1) ? 'text-slate-300 border-slate-200' : 'text-slate-700 border-slate-300 hover:bg-slate-50'}`}
+                      >
+                        Siguiente
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm text-slate-500">Por página</label>
+                      <select
+                        value={perPage}
+                        onChange={(e) => setPerPage(Math.min(200, Math.max(1, parseInt(e.target.value) || 50)))}
+                        className="px-2 py-1 border border-slate-200 rounded bg-white text-slate-700"
+                      >
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                        <option value={200}>200</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
 
                 {/* Resumen */}
 
                 <div className="text-sm text-slate-600">
 
-                  Mostrando <span className="font-semibold text-indigo-600">{estudiantesFiltrados.length}</span> de <span className="font-semibold">{estudiantes.length}</span> estudiantes
+                  Mostrando <span className="font-semibold text-indigo-600">{estudiantesFiltrados.length}</span> de <span className="font-semibold">{(estudiantesMeta?.total ?? estudiantes.length)}</span> estudiantes
 
                 </div>
 

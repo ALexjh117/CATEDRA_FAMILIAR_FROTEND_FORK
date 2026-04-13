@@ -3141,6 +3141,15 @@ export const getCursosCoordinador = async () => {
 
 };
 
+/**
+ * Obtener cursos con sus estudiantes (filtrados por institución del coordinador)
+ * GET /coordinadores/cursos-con-estudiantes
+ */
+export const getCursosConEstudiantesCoordinador = async () => {
+  const result = await apiClient.getCursosConEstudiantesCoordinador();
+  return (result as any)?.data || [];
+};
+
 
 
 /**
@@ -3219,15 +3228,17 @@ export const getOrientadoresCoordinador = async () => {
 
  */
 
-export const getEstudiantesCoordinador = async () => {
+export const getEstudiantesCoordinador = async (params?: { page?: number; perPage?: number; gradoId?: number; cursoId?: number; search?: string }) => {
 
-  const result = await apiClient.getEstudiantesCoordinador();
-  const body = result?.data as any;
-  if (Array.isArray(body)) return body;
-  if (Array.isArray(body?.data)) return body.data;
-  if (Array.isArray(body?.items)) return body.items;
-  if (Array.isArray(body?.estudiantes)) return body.estudiantes;
-  return [];
+  const result = await apiClient.getEstudiantesCoordinador(params);
+  const raw = (result as any)?.data ?? result;
+  const data = Array.isArray(raw) ? raw
+    : Array.isArray(raw?.data) ? raw.data
+    : Array.isArray(raw?.items) ? raw.items
+    : Array.isArray(raw?.estudiantes) ? raw.estudiantes
+    : [];
+  const meta = raw?.meta || null;
+  return { data, meta } as { data: any[]; meta: any };
 
 };
 
